@@ -1,0 +1,4327 @@
+{
+  "machines": [
+    {
+      "Location": "College Gate",
+      "Machine_ID": "VM001",
+      "Status": "Active"
+    },
+    {
+      "Location": "Hostel Block",
+      "Machine_ID": "VM002",
+      "Status": "Active"
+    },
+    {
+      "Location": "Library",
+      "Machine_ID": "VM003",
+      "Status": "Active"
+    }
+  ],
+  "metrics": {
+    "activeMachines": 3,
+    "outOfStock": 9,
+    "totalStockValue": 140227.83000000005,
+    "totalUnits": 9084
+  },
+  "products": [
+    {
+      "CATEGORY": "CHIPS ",
+      "GST": 0.05,
+      "HSN_Code": "HSN100002",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LSWPW001",
+      "PRODUCT_NAME": "LAYS SALT WITH PEPPER WAFER CHIPS",
+      "QUANTITY": 90,
+      "UAN_Code": "UAN900002"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100003",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LCS001",
+      "PRODUCT_NAME": "LAYS CLASSIC SALT",
+      "QUANTITY": 90,
+      "UAN_Code": "UAN900003"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100004",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LMM001",
+      "PRODUCT_NAME": "LAYS MAGIC MASALA",
+      "QUANTITY": 90,
+      "UAN_Code": "UAN900004"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100005",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LASCO001",
+      "PRODUCT_NAME": "LAYS AMERICAN STYLE CREAM ONION",
+      "QUANTITY": 90,
+      "UAN_Code": "UAN900005"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100006",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LSTT001",
+      "PRODUCT_NAME": "LAYS SPANISH TOMATO TANGY",
+      "QUANTITY": 90,
+      "UAN_Code": "UAN900006"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100007",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LHNSC001",
+      "PRODUCT_NAME": "LAYS HOT N SWEET CHILLI",
+      "QUANTITY": 90,
+      "UAN_Code": "UAN900007"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100008",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LWRC001",
+      "PRODUCT_NAME": "LAYS WAFER RED CHILLI",
+      "QUANTITY": 90,
+      "UAN_Code": "UAN900008"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100009",
+      "MRP": 20.0,
+      "PO": 18.3,
+      "PRODUCT_ID": "LSH001",
+      "PRODUCT_NAME": "LAYS SIZZLIN HOT",
+      "QUANTITY": null,
+      "UAN_Code": "UAN900009"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100010",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYS001",
+      "PRODUCT_NAME": "TOO YUMM SALTED",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900010"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100011",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYKCA001",
+      "PRODUCT_NAME": "TOO YUMM KARARE CHILLI ACHARI",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900011"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100012",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYCC001",
+      "PRODUCT_NAME": "TOO YUMM CHILI CHATAKA",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900012"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100013",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYWSC001",
+      "PRODUCT_NAME": "TOO YUMM WAFER SPICY CHILLI",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900013"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100014",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYPST001",
+      "PRODUCT_NAME": "TOO YUMM POTATO SPANISH TOMATO",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900014"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100015",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYASC001",
+      "PRODUCT_NAME": "TOO YUMM AMERICAN STYLE CREAM ONION",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900015"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100016",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYBK001",
+      "PRODUCT_NAME": "TOO YUMM BHOOT KARARE",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900016"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100017",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYKNM001",
+      "PRODUCT_NAME": "TOO YUMM KARARE NOODLES MASALA",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900017"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100018",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYKT001",
+      "PRODUCT_NAME": "TOO YUMM KARARE TWISTIES",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900018"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100019",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYKMM001",
+      "PRODUCT_NAME": "TOO YUMM KARARE MUNCH MASALA",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900019"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100020",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYKC001",
+      "PRODUCT_NAME": "TOO YUMM KASHMIRI CHILLI",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900020"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100021",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYIM001",
+      "PRODUCT_NAME": "TOO YUMM INDIAN MASALA",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900021"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100022",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYN001",
+      "PRODUCT_NAME": "TOO YUMM NAGIN",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900022"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100023",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TYSC001",
+      "PRODUCT_NAME": "TOO YUMM SOUR CREAM",
+      "QUANTITY": 70,
+      "UAN_Code": "UAN900023"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100024",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "KSC001",
+      "PRODUCT_NAME": "KURKURE SCHEZWAN CHUTNEY",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900024"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100025",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "KP001",
+      "PRODUCT_NAME": "KURKURE PUFFCORN",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900025"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100026",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "KCC001",
+      "PRODUCT_NAME": "KURKURE CHILLI CHITAKA",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900026"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100027",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "KGC001",
+      "PRODUCT_NAME": "KURKURE GREEN CHILLI",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900027"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100028",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "KNT001",
+      "PRODUCT_NAME": "KURKURE NAUGHTY TOMATO",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900028"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100029",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "KGC002",
+      "PRODUCT_NAME": "KURKURE GREEN CHUTNEY",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900029"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100030",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "KMM001",
+      "PRODUCT_NAME": "KURKURE MUNCH MASALA",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900030"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100031",
+      "MRP": 49.0,
+      "PO": 40.57,
+      "PRODUCT_ID": "KSSC001",
+      "PRODUCT_NAME": "KETTLE STUDIO SWEET CHILLI",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900031"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100032",
+      "MRP": 49.0,
+      "PO": 40.57,
+      "PRODUCT_ID": "KSMC001",
+      "PRODUCT_NAME": "KETTLE STUDIO MATURE CHEDDAR",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900032"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100033",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BNC001",
+      "PRODUCT_NAME": "BINGO NACHOS CHEESE",
+      "QUANTITY": 60,
+      "UAN_Code": "UAN900033"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100034",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BOSPS001",
+      "PRODUCT_NAME": "BINGO ORGINAL STYLE PINK SALT",
+      "QUANTITY": 60,
+      "UAN_Code": "UAN900034"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100035",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BMM001",
+      "PRODUCT_NAME": "BINGO MM MASALA",
+      "QUANTITY": 60,
+      "UAN_Code": "UAN900035"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100036",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BMAPP001",
+      "PRODUCT_NAME": "BINGO MAD ANGLES PERI PERI",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900036"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100037",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BMC001",
+      "PRODUCT_NAME": "BINGO MASTI CHILLI",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900037"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100038",
+      "MRP": 30.0,
+      "PO": 15,
+      "PRODUCT_ID": "BTM001",
+      "PRODUCT_NAME": "BINGO TEDHE MEDHE",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900038"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100039",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BNC002",
+      "PRODUCT_NAME": "BINGO NACHOS CHILLI",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900039"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100040",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BMAT001",
+      "PRODUCT_NAME": "BINGO MAD ANGLES TOMATO",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900040"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100041",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BMAMA001",
+      "PRODUCT_NAME": "BINGO MAD ANGLE MASALA ACHARI",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900041"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100042",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BC&O001",
+      "PRODUCT_NAME": "BINGO CREAM & ONION",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900042"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100043",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BTPC001",
+      "PRODUCT_NAME": "BINGO TOMATO POTATO CHIPS",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900043"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100044",
+      "MRP": 20.0,
+      "PO": 15,
+      "PRODUCT_ID": "BCS001",
+      "PRODUCT_NAME": "BINGO CLASSIC SALT",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900044"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100045",
+      "MRP": 25.0,
+      "PO": 15,
+      "PRODUCT_ID": "PBP001",
+      "PRODUCT_NAME": "PVR BUTTER POPCORN",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900045"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100046",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "DNSC001",
+      "PRODUCT_NAME": "DORITOD NACHOS SWEET CHILLI",
+      "QUANTITY": 120,
+      "UAN_Code": "UAN900046"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100047",
+      "MRP": 20.0,
+      "PO": 16.35,
+      "PRODUCT_ID": "DNC001",
+      "PRODUCT_NAME": "DORITOS NACHOS CHEESE",
+      "QUANTITY": 120,
+      "UAN_Code": "UAN900047"
+    },
+    {
+      "CATEGORY": "BEVERAGE",
+      "GST": 0.05,
+      "HSN_Code": "HSN100048",
+      "MRP": 35.0,
+      "PO": 22.75,
+      "PRODUCT_ID": "RPM001",
+      "PRODUCT_NAME": "RUBY PISTA MILK",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900048"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100049",
+      "MRP": 35.0,
+      "PO": 22.75,
+      "PRODUCT_ID": "RBM001",
+      "PRODUCT_NAME": "RUBY BADAM MILK",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900049"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100050",
+      "MRP": 35.0,
+      "PO": 22.75,
+      "PRODUCT_ID": "RRM001",
+      "PRODUCT_NAME": "RUBY ROSE MILK",
+      "QUANTITY": 56,
+      "UAN_Code": "UAN900050"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100051",
+      "MRP": 37.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CB001",
+      "PRODUCT_NAME": "CAVINS BUTTERSCOTCH",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900051"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100052",
+      "MRP": 37.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CC001",
+      "PRODUCT_NAME": "CAVINS CHOCOLATE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900052"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100053",
+      "MRP": 40.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CPMM001",
+      "PRODUCT_NAME": "CAVINS PREMIUM MALT MILKSHAKE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900053"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100054",
+      "MRP": 40.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CO001",
+      "PRODUCT_NAME": "CAVINS ORANGE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900054"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100055",
+      "MRP": 37.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CBC001",
+      "PRODUCT_NAME": "CAVINS BELGIAN CHOCOLATE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900055"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100056",
+      "MRP": 40.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CCC001",
+      "PRODUCT_NAME": "CAVINS COLD COFFEE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900056"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100057",
+      "MRP": 37.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CS001",
+      "PRODUCT_NAME": "CAVINS STRAWBERRY",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900057"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100058",
+      "MRP": 37.0,
+      "PO": 28.5,
+      "PRODUCT_ID": "CV001",
+      "PRODUCT_NAME": "CAVINS VANILLA",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900058"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100059",
+      "MRP": 37.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "HBM001",
+      "PRODUCT_NAME": "HERSHEY\u2019S BUTTERSCOTCH MILKSHAKE",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900059"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100060",
+      "MRP": 37.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "HVM001",
+      "PRODUCT_NAME": "HERSHEY\u2019S VANILLA MILKSHAKE",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900060"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100061",
+      "MRP": 37.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "HCAC001",
+      "PRODUCT_NAME": "HERSHEY'S COOKIES AND CREAM",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900061"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100062",
+      "MRP": 37.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "HAF001",
+      "PRODUCT_NAME": "HERSHEY'S ALMOND FLAVOR",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900062"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100063",
+      "MRP": 40.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "HCF001",
+      "PRODUCT_NAME": "HERSHEY'S CHOCOLATE FLAVOR",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900063"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100064",
+      "MRP": 40.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "SSCF001",
+      "PRODUCT_NAME": "SOFIT SOYA CHOCOLATE FLAVOR",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900064"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100065",
+      "MRP": 40.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "HSF001",
+      "PRODUCT_NAME": "HERSHEY'S STRAWBERRY FLAVOR",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900065"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100066",
+      "MRP": 37.0,
+      "PO": 28.9,
+      "PRODUCT_ID": "HCMF001",
+      "PRODUCT_NAME": "HERSHEY'S COFFEE MOCHA FLAVOR",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900066"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100067",
+      "MRP": 30.0,
+      "PO": 22.9,
+      "PRODUCT_ID": "CBRM001",
+      "PRODUCT_NAME": "CREAM BELL ROSE MILK",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900067"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100068",
+      "MRP": 35.0,
+      "PO": 22.29,
+      "PRODUCT_ID": "CBBM001",
+      "PRODUCT_NAME": "CREAM BELL BADAM MILKSHAKE",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900068"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100069",
+      "MRP": 30.0,
+      "PO": 22.29,
+      "PRODUCT_ID": "CBV001",
+      "PRODUCT_NAME": "CREAM BELL VANNILA",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900069"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100070",
+      "MRP": 35.0,
+      "PO": 21.67,
+      "PRODUCT_ID": "CBC002",
+      "PRODUCT_NAME": "CREAM BELL COFFEE",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900070"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100071",
+      "MRP": 35.0,
+      "PO": 28,
+      "PRODUCT_ID": "CBC003",
+      "PRODUCT_NAME": "CREAM BELL CHOCO",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900071"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100072",
+      "MRP": 35.0,
+      "PO": 26,
+      "PRODUCT_ID": "CBBS001",
+      "PRODUCT_NAME": "CREAM BELL BUTTER SCOTCH",
+      "QUANTITY": 1,
+      "UAN_Code": "UAN900072"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100073",
+      "MRP": 40.0,
+      "PO": 36.5,
+      "PRODUCT_ID": "DC001",
+      "PRODUCT_NAME": "DIET COKE",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900073"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100074",
+      "MRP": 70.0,
+      "PO": 36.5,
+      "PRODUCT_ID": "CTZS001",
+      "PRODUCT_NAME": "COKE TIN ZERO SUGAR",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900074"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100075",
+      "MRP": 70.0,
+      "PO": 13.3,
+      "PRODUCT_ID": "CT001",
+      "PRODUCT_NAME": "COKE TIN",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900075"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100076",
+      "MRP": 20.0,
+      "PO": 14.71,
+      "PRODUCT_ID": "COKE001",
+      "PRODUCT_NAME": "COKE",
+      "QUANTITY": 28,
+      "UAN_Code": "UAN900076"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100077",
+      "MRP": 70.0,
+      "PO": null,
+      "PRODUCT_ID": "MD001",
+      "PRODUCT_NAME": "MOUNTAIN DEW",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900077"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100078",
+      "MRP": 70.0,
+      "PO": null,
+      "PRODUCT_ID": "TUT001",
+      "PRODUCT_NAME": "THUMBS UP TIN",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900078"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100079",
+      "MRP": 20.0,
+      "PO": null,
+      "PRODUCT_ID": "THUM001",
+      "PRODUCT_NAME": "THUMBS",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900079"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100080",
+      "MRP": 70.0,
+      "PO": 36.25,
+      "PRODUCT_ID": "PT001",
+      "PRODUCT_NAME": "PEPSI TIN",
+      "QUANTITY": 28,
+      "UAN_Code": "UAN900080"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100081",
+      "MRP": 70.0,
+      "PO": 36.25,
+      "PRODUCT_ID": "PZST001",
+      "PRODUCT_NAME": "PEPSI ZERO SUGAR TIN",
+      "QUANTITY": 28,
+      "UAN_Code": "UAN900081"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100082",
+      "MRP": 125.0,
+      "PO": 75,
+      "PRODUCT_ID": "MZSED001",
+      "PRODUCT_NAME": "MONSTER ZERO SUGAR ENERGY DRINK TIN",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900082"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100083",
+      "MRP": 125.0,
+      "PO": 75,
+      "PRODUCT_ID": "MEDT001",
+      "PRODUCT_NAME": "MONSTER ENERGY DRINK TIN",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900083"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100084",
+      "MRP": 20.0,
+      "PO": 16,
+      "PRODUCT_ID": "MAAZ001",
+      "PRODUCT_NAME": "MAAZA",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900084"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100085",
+      "MRP": 19.0,
+      "PO": 17.5,
+      "PRODUCT_ID": "MPB001",
+      "PRODUCT_NAME": "MAAZA PET BOTTLE",
+      "QUANTITY": 28,
+      "UAN_Code": "UAN900085"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100086",
+      "MRP": 38.0,
+      "PO": 29.5,
+      "PRODUCT_ID": "OA001",
+      "PRODUCT_NAME": "OCEAN APPLE",
+      "QUANTITY": 36,
+      "UAN_Code": "UAN900086"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100087",
+      "MRP": 38.0,
+      "PO": 29.5,
+      "PRODUCT_ID": "ODGA001",
+      "PRODUCT_NAME": "OCEAN DRINK GREEN APPLE",
+      "QUANTITY": 36,
+      "UAN_Code": "UAN900087"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100088",
+      "MRP": 40.0,
+      "PO": 29.5,
+      "PRODUCT_ID": "ODP&P001",
+      "PRODUCT_NAME": "OCEAN DRINK PEACH & PASSION",
+      "QUANTITY": 36,
+      "UAN_Code": "UAN900088"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100089",
+      "MRP": 40.0,
+      "PO": 29.5,
+      "PRODUCT_ID": "ODM&P001",
+      "PRODUCT_NAME": "OCEAN DRINK MANGO & PASSION",
+      "QUANTITY": 36,
+      "UAN_Code": "UAN900089"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100090",
+      "MRP": 38.0,
+      "PO": 29.5,
+      "PRODUCT_ID": "OPG001",
+      "PRODUCT_NAME": "OCEAN PINK GUVA",
+      "QUANTITY": 36,
+      "UAN_Code": "UAN900090"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100091",
+      "MRP": 24.0,
+      "PO": 22.61,
+      "PRODUCT_ID": "MPO001",
+      "PRODUCT_NAME": "MM PULPY ORANGE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900091"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100092",
+      "MRP": 20.0,
+      "PO": 14.71,
+      "PRODUCT_ID": "FANT001",
+      "PRODUCT_NAME": "FANTA",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900092"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100093",
+      "MRP": 19.0,
+      "PO": 14,
+      "PRODUCT_ID": "TMF001",
+      "PRODUCT_NAME": "TROPICANA MIXED FRUIT",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900093"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100094",
+      "MRP": 19.0,
+      "PO": 14,
+      "PRODUCT_ID": "TA001",
+      "PRODUCT_NAME": "TROPICANA APPLE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900094"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100095",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TS001",
+      "PRODUCT_NAME": "TROPICANA SLICE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900095"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100096",
+      "MRP": 19.0,
+      "PO": 14,
+      "PRODUCT_ID": "TO001",
+      "PRODUCT_NAME": "TROPICANA ORANGE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900096"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100097",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TP001",
+      "PRODUCT_NAME": "TROPICANA POMEGRANATE",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900097"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100098",
+      "MRP": 20.0,
+      "PO": 14,
+      "PRODUCT_ID": "TG001",
+      "PRODUCT_NAME": "TROPICANA GUVA",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900098"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100099",
+      "MRP": 19.0,
+      "PO": 14,
+      "PRODUCT_ID": "TLD001",
+      "PRODUCT_NAME": "TROPICANA LITCHI DELIGHT",
+      "QUANTITY": 30,
+      "UAN_Code": "UAN900099"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100100",
+      "MRP": 70.0,
+      "PO": 37.14,
+      "PRODUCT_ID": "MT001",
+      "PRODUCT_NAME": "MIRINDA TIN",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900100"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100101",
+      "MRP": 70.0,
+      "PO": 45,
+      "PRODUCT_ID": "7T001",
+      "PRODUCT_NAME": "7UP TIN",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900101"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100102",
+      "MRP": 70.0,
+      "PO": 36.47,
+      "PRODUCT_ID": "ST001",
+      "PRODUCT_NAME": "SPRITE TIN",
+      "QUANTITY": 28,
+      "UAN_Code": "UAN900102"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100103",
+      "MRP": 20.0,
+      "PO": 36.25,
+      "PRODUCT_ID": "SPRI001",
+      "PRODUCT_NAME": "SPRITE",
+      "QUANTITY": 28,
+      "UAN_Code": "UAN900103"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.4,
+      "HSN_Code": "HSN100104",
+      "MRP": 20.0,
+      "PO": 14.71,
+      "PRODUCT_ID": "PBSG001",
+      "PRODUCT_NAME": "PAPER BOAT SWING GUVA",
+      "QUANTITY": 24,
+      "UAN_Code": "UAN900104"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100105",
+      "MRP": 40.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBNDC001",
+      "PRODUCT_NAME": "PAPER BOAT NATA DE COCO LYCHEE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900105"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100106",
+      "MRP": 40.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBNDC002",
+      "PRODUCT_NAME": "PAPER BOAT NATA DE COCO ORANGE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900106"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100107",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBSO001",
+      "PRODUCT_NAME": "PAPER BOAT SWING ORANGE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900107"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100108",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBSM001",
+      "PRODUCT_NAME": "PAPER BOAT SWING MANGO",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900108"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100109",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBA001",
+      "PRODUCT_NAME": "PAPER BOAT APPLE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900109"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100110",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBO001",
+      "PRODUCT_NAME": "PAPER BOAT ORANGE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900110"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100111",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBCG001",
+      "PRODUCT_NAME": "PAPER BOAT CHILLI GUVA",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900111"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100112",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBMF001",
+      "PRODUCT_NAME": "PAPER BOAT MIXED FRUIT",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900112"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100113",
+      "MRP": 25.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBM001",
+      "PRODUCT_NAME": "PAPER BOAT MANGO",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900113"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100114",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PBL001",
+      "PRODUCT_NAME": "PAPER BOAT LYCHEE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900114"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100115",
+      "MRP": 30.0,
+      "PO": "-",
+      "PRODUCT_ID": "RJMF001",
+      "PRODUCT_NAME": "REAL JUICE MIXED FRUIT",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900115"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100116",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PSL001",
+      "PRODUCT_NAME": "PARLE SMOODH LAASI",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900116"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100117",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PSTC001",
+      "PRODUCT_NAME": "PARLE SMOODH TOFFEE CARAMEL",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900117"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100118",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "PSC001",
+      "PRODUCT_NAME": "PARLE SMOODH CHOCOLATE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900118"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100119",
+      "MRP": 30.0,
+      "PO": "-",
+      "PRODUCT_ID": "PF001",
+      "PRODUCT_NAME": "PARLE FROOTI",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900119"
+    },
+    {
+      "CATEGORY": "BISCUITS",
+      "GST": 0.05,
+      "HSN_Code": "HSN100120",
+      "MRP": 30.0,
+      "PO": "-",
+      "PRODUCT_ID": "PHAS001",
+      "PRODUCT_NAME": "PARLE HIDE AND SEEK",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900120"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100121",
+      "MRP": 30.0,
+      "PO": "-",
+      "PRODUCT_ID": "BLH001",
+      "PRODUCT_NAME": "BRITANNIA LITTLE HEART",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900121"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100122",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "NWPL001",
+      "PRODUCT_NAME": "NABATI WAFER PINK LAVA",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900122"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100123",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "NWR001",
+      "PRODUCT_NAME": "NABATI WAFER RICHESSE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900123"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100124",
+      "MRP": 25.0,
+      "PO": "-",
+      "PRODUCT_ID": "ECC001",
+      "PRODUCT_NAME": "ELITE CHOCO COOKIES",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900124"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100125",
+      "MRP": 25.0,
+      "PO": "-",
+      "PRODUCT_ID": "BJJ001",
+      "PRODUCT_NAME": "BRITANNIA JIM JAM",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900125"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100126",
+      "MRP": 35.0,
+      "PO": 18,
+      "PRODUCT_ID": "DFC001",
+      "PRODUCT_NAME": "DARK FANTACY CHOCOLATE",
+      "QUANTITY": 60,
+      "UAN_Code": "UAN900126"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100127",
+      "MRP": 35.0,
+      "PO": 18,
+      "PRODUCT_ID": "DFV001",
+      "PRODUCT_NAME": "DARK FANTACY VANILLA",
+      "QUANTITY": 72,
+      "UAN_Code": "UAN900127"
+    },
+    {
+      "CATEGORY": "SWEETS",
+      "GST": 0.05,
+      "HSN_Code": "HSN100128",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "BTCMF001",
+      "PRODUCT_NAME": "BRITANNIA TREAT CROISSANT MIXED FRUIT",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900128"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100129",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "BTCV001",
+      "PRODUCT_NAME": "BRITANNIA TRAT CROISSANT VANILLA",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900129"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100130",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "BTCCC001",
+      "PRODUCT_NAME": "BRIRANNIA TREA CROISSANT CHOCO CREME",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900130"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100131",
+      "MRP": 25.0,
+      "PO": "-",
+      "PRODUCT_ID": "BMS001",
+      "PRODUCT_NAME": "BAULI MOONFILLS STRAWBERRY",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900131"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100132",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "EB001",
+      "PRODUCT_NAME": "ELITE BROWINE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900132"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100133",
+      "MRP": 25.0,
+      "PO": "-",
+      "PRODUCT_ID": "BMC002",
+      "PRODUCT_NAME": "BAULI MOONFILLS CHOCO",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900133"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100134",
+      "MRP": 30.0,
+      "PO": "-",
+      "PRODUCT_ID": "BTTC001",
+      "PRODUCT_NAME": "BRITANNIA TREAT TRIPLE CHOCOLATE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900134"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100135",
+      "MRP": 25.0,
+      "PO": "-",
+      "PRODUCT_ID": "BMV001",
+      "PRODUCT_NAME": "BAULI MOONFILL VANILLA",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900135"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100136",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "RFMB001",
+      "PRODUCT_NAME": "RAAJALI FILLED MUFFIN BANANA",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900136"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100137",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "RFMS001",
+      "PRODUCT_NAME": "RAAJALI FILLED MUFFIN STRAWBERRY",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900137"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100138",
+      "MRP": 20.0,
+      "PO": "-",
+      "PRODUCT_ID": "RFMV001",
+      "PRODUCT_NAME": "RAAJALI FILLED MUFFIN VANILLA",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900138"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100139",
+      "MRP": 30.0,
+      "PO": "-",
+      "PRODUCT_ID": "GSGBC001",
+      "PRODUCT_NAME": "GAIA SPORT GRAOLA BAR CHOCOLATE",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900139"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100140",
+      "MRP": 50.0,
+      "PO": "-",
+      "PRODUCT_ID": "DMFAN001",
+      "PRODUCT_NAME": "DAIRY MILK FRUIT AND NUT",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900140"
+    },
+    {
+      "CATEGORY": null,
+      "GST": 0.05,
+      "HSN_Code": "HSN100141",
+      "MRP": 25.0,
+      "PO": "-",
+      "PRODUCT_ID": "KITK001",
+      "PRODUCT_NAME": "KITKAT",
+      "QUANTITY": "-",
+      "UAN_Code": "UAN900141"
+    },
+    {
+      "CATEGORY": null,
+      "GST": null,
+      "HSN_Code": null,
+      "MRP": null,
+      "PO": null,
+      "PRODUCT_ID": "None",
+      "PRODUCT_NAME": null,
+      "QUANTITY": "-",
+      "UAN_Code": null
+    },
+    {
+      "CATEGORY": null,
+      "GST": null,
+      "HSN_Code": null,
+      "MRP": null,
+      "PO": "-",
+      "PRODUCT_ID": "None",
+      "PRODUCT_NAME": null,
+      "QUANTITY": "-",
+      "UAN_Code": null
+    },
+    {
+      "CATEGORY": null,
+      "GST": null,
+      "HSN_Code": null,
+      "MRP": null,
+      "PO": "-",
+      "PRODUCT_ID": "None",
+      "PRODUCT_NAME": null,
+      "QUANTITY": "-",
+      "UAN_Code": null
+    }
+  ],
+  "sales": [
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM002",
+      "Product_ID": "DFV001",
+      "Qty": 2,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM001",
+      "Product_ID": "BMC002",
+      "Qty": 2,
+      "Selling_Price": 25
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM003",
+      "Product_ID": "TYS001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM001",
+      "Product_ID": "BTTC001",
+      "Qty": 3,
+      "Selling_Price": 30
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM003",
+      "Product_ID": "PBSG001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM001",
+      "Product_ID": "HCAC001",
+      "Qty": 2,
+      "Selling_Price": 37
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM002",
+      "Product_ID": "DFC001",
+      "Qty": 1,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM001",
+      "Product_ID": "CBC003",
+      "Qty": 2,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM001",
+      "Product_ID": "HSF001",
+      "Qty": 1,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM003",
+      "Product_ID": "DMFAN001",
+      "Qty": 1,
+      "Selling_Price": 50
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM003",
+      "Product_ID": "TYN001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM003",
+      "Product_ID": "TUT001",
+      "Qty": 1,
+      "Selling_Price": 70
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM003",
+      "Product_ID": "BTM001",
+      "Qty": 2,
+      "Selling_Price": 30
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM002",
+      "Product_ID": "PBCG001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM001",
+      "Product_ID": "TYIM001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM001",
+      "Product_ID": "BMV001",
+      "Qty": 3,
+      "Selling_Price": 25
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM002",
+      "Product_ID": "TYKNM001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM002",
+      "Product_ID": "BMM001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM002",
+      "Product_ID": "ECC001",
+      "Qty": 3,
+      "Selling_Price": 25
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM001",
+      "Product_ID": "CBC002",
+      "Qty": 3,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM001",
+      "Product_ID": "GSGBC001",
+      "Qty": 3,
+      "Selling_Price": 30
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM001",
+      "Product_ID": "MEDT001",
+      "Qty": 2,
+      "Selling_Price": 125
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM001",
+      "Product_ID": "BTCMF001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM003",
+      "Product_ID": "TO001",
+      "Qty": 1,
+      "Selling_Price": 19
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM002",
+      "Product_ID": "CBC003",
+      "Qty": 2,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM003",
+      "Product_ID": "PBSG001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM001",
+      "Product_ID": "TYKC001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-16",
+      "Machine_ID": "VM001",
+      "Product_ID": "MEDT001",
+      "Qty": 3,
+      "Selling_Price": 125
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM003",
+      "Product_ID": "BJJ001",
+      "Qty": 1,
+      "Selling_Price": 25
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM001",
+      "Product_ID": "BMAPP001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM001",
+      "Product_ID": "RJMF001",
+      "Qty": 1,
+      "Selling_Price": 30
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM003",
+      "Product_ID": "CO001",
+      "Qty": 2,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM001",
+      "Product_ID": "CCC001",
+      "Qty": 1,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM001",
+      "Product_ID": "LHNSC001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM002",
+      "Product_ID": "LWRC001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM002",
+      "Product_ID": "BJJ001",
+      "Qty": 2,
+      "Selling_Price": 25
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKT001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-15",
+      "Machine_ID": "VM001",
+      "Product_ID": "OA001",
+      "Qty": 1,
+      "Selling_Price": 38
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM001",
+      "Product_ID": "DNSC001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM001",
+      "Product_ID": "MAAZ001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM002",
+      "Product_ID": "LSWPW001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM003",
+      "Product_ID": "BMAT001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM001",
+      "Product_ID": "CV001",
+      "Qty": 1,
+      "Selling_Price": 37
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM002",
+      "Product_ID": "LCS001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM003",
+      "Product_ID": "MPO001",
+      "Qty": 1,
+      "Selling_Price": 24
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM003",
+      "Product_ID": "HCAC001",
+      "Qty": 2,
+      "Selling_Price": 37
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM003",
+      "Product_ID": "KP001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM002",
+      "Product_ID": "BMC001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-14",
+      "Machine_ID": "VM001",
+      "Product_ID": "LSTT001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM002",
+      "Product_ID": "ODM&P001",
+      "Qty": 2,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM002",
+      "Product_ID": "TYASC001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "MAAZ001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "CCC001",
+      "Qty": 3,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM001",
+      "Product_ID": "CPMM001",
+      "Qty": 1,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM001",
+      "Product_ID": "TA001",
+      "Qty": 1,
+      "Selling_Price": 19
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "PT001",
+      "Qty": 3,
+      "Selling_Price": 70
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM001",
+      "Product_ID": "RJMF001",
+      "Qty": 3,
+      "Selling_Price": 30
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "ODP&P001",
+      "Qty": 1,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "CBV001",
+      "Qty": 2,
+      "Selling_Price": 30
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM001",
+      "Product_ID": "KNT001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM001",
+      "Product_ID": "CV001",
+      "Qty": 1,
+      "Selling_Price": 37
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM001",
+      "Product_ID": "DC001",
+      "Qty": 1,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM002",
+      "Product_ID": "RRM001",
+      "Qty": 2,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "LWRC001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM002",
+      "Product_ID": "BNC001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "LWRC001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM002",
+      "Product_ID": "CBC002",
+      "Qty": 2,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM002",
+      "Product_ID": "DMFAN001",
+      "Qty": 3,
+      "Selling_Price": 50
+    },
+    {
+      "Date": "2026-01-13",
+      "Machine_ID": "VM003",
+      "Product_ID": "TP001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM001",
+      "Product_ID": "KSMC001",
+      "Qty": 2,
+      "Selling_Price": 49
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKMM001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM001",
+      "Product_ID": "HSF001",
+      "Qty": 1,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM002",
+      "Product_ID": "KP001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM003",
+      "Product_ID": "CC001",
+      "Qty": 2,
+      "Selling_Price": 37
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM001",
+      "Product_ID": "KSC001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM001",
+      "Product_ID": "TYS001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM003",
+      "Product_ID": "PF001",
+      "Qty": 1,
+      "Selling_Price": 30
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM003",
+      "Product_ID": "HSF001",
+      "Qty": 2,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM001",
+      "Product_ID": "TMF001",
+      "Qty": 1,
+      "Selling_Price": 19
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM002",
+      "Product_ID": "BMC001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM003",
+      "Product_ID": "RRM001",
+      "Qty": 1,
+      "Selling_Price": 35
+    },
+    {
+      "Date": "2026-01-12",
+      "Machine_ID": "VM002",
+      "Product_ID": "PSTC001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-11",
+      "Machine_ID": "VM001",
+      "Product_ID": "KGC002",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-11",
+      "Machine_ID": "VM003",
+      "Product_ID": "KSMC001",
+      "Qty": 3,
+      "Selling_Price": 49
+    },
+    {
+      "Date": "2026-01-11",
+      "Machine_ID": "VM002",
+      "Product_ID": "HSF001",
+      "Qty": 2,
+      "Selling_Price": 40
+    },
+    {
+      "Date": "2026-01-11",
+      "Machine_ID": "VM001",
+      "Product_ID": "TYKNM001",
+      "Qty": 2,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-11",
+      "Machine_ID": "VM003",
+      "Product_ID": "RFMB001",
+      "Qty": 1,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-11",
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKMM001",
+      "Qty": 3,
+      "Selling_Price": 20
+    },
+    {
+      "Date": "2026-01-17",
+      "Machine_ID": "VM001",
+      "Product_ID": "LSWPW001",
+      "Qty": 1,
+      "Selling_Price": 20
+    }
+  ],
+  "stock": [
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM001",
+      "Product_ID": "LSWPW001"
+    },
+    {
+      "Current_Stock": 63,
+      "Machine_ID": "VM001",
+      "Product_ID": "LCS001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM001",
+      "Product_ID": "LMM001"
+    },
+    {
+      "Current_Stock": 56,
+      "Machine_ID": "VM001",
+      "Product_ID": "LASCO001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM001",
+      "Product_ID": "LSTT001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "LHNSC001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM001",
+      "Product_ID": "LWRC001"
+    },
+    {
+      "Current_Stock": 11,
+      "Machine_ID": "VM001",
+      "Product_ID": "LSH001"
+    },
+    {
+      "Current_Stock": 100,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYS001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYKCA001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYCC001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYWSC001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYPST001"
+    },
+    {
+      "Current_Stock": 35,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYASC001"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYBK001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYKNM001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYKT001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYKMM001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYKC001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYIM001"
+    },
+    {
+      "Current_Stock": 14,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYN001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM001",
+      "Product_ID": "TYSC001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "KSC001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM001",
+      "Product_ID": "KP001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM001",
+      "Product_ID": "KCC001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM001",
+      "Product_ID": "KGC001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "KNT001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM001",
+      "Product_ID": "KGC002"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM001",
+      "Product_ID": "KMM001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM001",
+      "Product_ID": "KSSC001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM001",
+      "Product_ID": "KSMC001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM001",
+      "Product_ID": "BNC001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM001",
+      "Product_ID": "BOSPS001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMM001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMAPP001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMC001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM001",
+      "Product_ID": "BTM001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM001",
+      "Product_ID": "BNC002"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMAT001"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMAMA001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM001",
+      "Product_ID": "BC&O001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM001",
+      "Product_ID": "BTPC001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM001",
+      "Product_ID": "BCS001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBP001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM001",
+      "Product_ID": "DNSC001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM001",
+      "Product_ID": "DNC001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM001",
+      "Product_ID": "RPM001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM001",
+      "Product_ID": "RBM001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM001",
+      "Product_ID": "RRM001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM001",
+      "Product_ID": "CB001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "CC001"
+    },
+    {
+      "Current_Stock": 14,
+      "Machine_ID": "VM001",
+      "Product_ID": "CPMM001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM001",
+      "Product_ID": "CO001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM001",
+      "Product_ID": "CBC001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM001",
+      "Product_ID": "CCC001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM001",
+      "Product_ID": "CS001"
+    },
+    {
+      "Current_Stock": 2,
+      "Machine_ID": "VM001",
+      "Product_ID": "CV001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "HBM001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM001",
+      "Product_ID": "HVM001"
+    },
+    {
+      "Current_Stock": 1,
+      "Machine_ID": "VM001",
+      "Product_ID": "HCAC001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM001",
+      "Product_ID": "HAF001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "HCF001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM001",
+      "Product_ID": "SSCF001"
+    },
+    {
+      "Current_Stock": 14,
+      "Machine_ID": "VM001",
+      "Product_ID": "HSF001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM001",
+      "Product_ID": "HCMF001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM001",
+      "Product_ID": "CBRM001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM001",
+      "Product_ID": "CBBM001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "CBV001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM001",
+      "Product_ID": "CBC002"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM001",
+      "Product_ID": "CBC003"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "CBBS001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM001",
+      "Product_ID": "DC001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM001",
+      "Product_ID": "CTZS001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM001",
+      "Product_ID": "CT001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM001",
+      "Product_ID": "COKE001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM001",
+      "Product_ID": "MD001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM001",
+      "Product_ID": "TUT001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM001",
+      "Product_ID": "THUM001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM001",
+      "Product_ID": "PT001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "PZST001"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM001",
+      "Product_ID": "MZSED001"
+    },
+    {
+      "Current_Stock": 12,
+      "Machine_ID": "VM001",
+      "Product_ID": "MEDT001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM001",
+      "Product_ID": "MAAZ001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM001",
+      "Product_ID": "MPB001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM001",
+      "Product_ID": "OA001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "ODGA001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM001",
+      "Product_ID": "ODP&P001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM001",
+      "Product_ID": "ODM&P001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM001",
+      "Product_ID": "OPG001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "MPO001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM001",
+      "Product_ID": "FANT001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM001",
+      "Product_ID": "TMF001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM001",
+      "Product_ID": "TA001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM001",
+      "Product_ID": "TS001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM001",
+      "Product_ID": "TO001"
+    },
+    {
+      "Current_Stock": 11,
+      "Machine_ID": "VM001",
+      "Product_ID": "TP001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "TG001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM001",
+      "Product_ID": "TLD001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM001",
+      "Product_ID": "MT001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM001",
+      "Product_ID": "7T001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "ST001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM001",
+      "Product_ID": "SPRI001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBSG001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBNDC001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBNDC002"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBSO001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBSM001"
+    },
+    {
+      "Current_Stock": 12,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBA001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBO001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBCG001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBMF001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBM001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM001",
+      "Product_ID": "PBL001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM001",
+      "Product_ID": "RJMF001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM001",
+      "Product_ID": "PSL001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM001",
+      "Product_ID": "PSTC001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM001",
+      "Product_ID": "PSC001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM001",
+      "Product_ID": "PF001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM001",
+      "Product_ID": "PHAS001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM001",
+      "Product_ID": "BLH001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM001",
+      "Product_ID": "NWPL001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM001",
+      "Product_ID": "NWR001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM001",
+      "Product_ID": "ECC001"
+    },
+    {
+      "Current_Stock": 9,
+      "Machine_ID": "VM001",
+      "Product_ID": "BJJ001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM001",
+      "Product_ID": "DFC001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM001",
+      "Product_ID": "DFV001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM001",
+      "Product_ID": "BTCMF001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM001",
+      "Product_ID": "BTCV001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM001",
+      "Product_ID": "BTCCC001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMS001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM001",
+      "Product_ID": "EB001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMC002"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM001",
+      "Product_ID": "BTTC001"
+    },
+    {
+      "Current_Stock": 14,
+      "Machine_ID": "VM001",
+      "Product_ID": "BMV001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM001",
+      "Product_ID": "RFMB001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM001",
+      "Product_ID": "RFMS001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM001",
+      "Product_ID": "RFMV001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM001",
+      "Product_ID": "GSGBC001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM001",
+      "Product_ID": "DMFAN001"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM001",
+      "Product_ID": "KITK001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM002",
+      "Product_ID": "LSWPW001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM002",
+      "Product_ID": "LCS001"
+    },
+    {
+      "Current_Stock": 35,
+      "Machine_ID": "VM002",
+      "Product_ID": "LMM001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM002",
+      "Product_ID": "LASCO001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM002",
+      "Product_ID": "LSTT001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM002",
+      "Product_ID": "LHNSC001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "LWRC001"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM002",
+      "Product_ID": "LSH001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYS001"
+    },
+    {
+      "Current_Stock": 11,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYKCA001"
+    },
+    {
+      "Current_Stock": 38,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYCC001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYWSC001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYPST001"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYASC001"
+    },
+    {
+      "Current_Stock": 33,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYBK001"
+    },
+    {
+      "Current_Stock": 38,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYKNM001"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYKT001"
+    },
+    {
+      "Current_Stock": 9,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYKMM001"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYKC001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYIM001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYN001"
+    },
+    {
+      "Current_Stock": 38,
+      "Machine_ID": "VM002",
+      "Product_ID": "TYSC001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM002",
+      "Product_ID": "KSC001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM002",
+      "Product_ID": "KP001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM002",
+      "Product_ID": "KCC001"
+    },
+    {
+      "Current_Stock": 2,
+      "Machine_ID": "VM002",
+      "Product_ID": "KGC001"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM002",
+      "Product_ID": "KNT001"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM002",
+      "Product_ID": "KGC002"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM002",
+      "Product_ID": "KMM001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM002",
+      "Product_ID": "KSSC001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM002",
+      "Product_ID": "KSMC001"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM002",
+      "Product_ID": "BNC001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "BOSPS001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMM001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMAPP001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMC001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM002",
+      "Product_ID": "BTM001"
+    },
+    {
+      "Current_Stock": 35,
+      "Machine_ID": "VM002",
+      "Product_ID": "BNC002"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMAT001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMAMA001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM002",
+      "Product_ID": "BC&O001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "BTPC001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM002",
+      "Product_ID": "BCS001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBP001"
+    },
+    {
+      "Current_Stock": 33,
+      "Machine_ID": "VM002",
+      "Product_ID": "DNSC001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "DNC001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM002",
+      "Product_ID": "RPM001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM002",
+      "Product_ID": "RBM001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM002",
+      "Product_ID": "RRM001"
+    },
+    {
+      "Current_Stock": 11,
+      "Machine_ID": "VM002",
+      "Product_ID": "CB001"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM002",
+      "Product_ID": "CC001"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM002",
+      "Product_ID": "CPMM001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM002",
+      "Product_ID": "CO001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM002",
+      "Product_ID": "CBC001"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM002",
+      "Product_ID": "CCC001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM002",
+      "Product_ID": "CS001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM002",
+      "Product_ID": "CV001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM002",
+      "Product_ID": "HBM001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM002",
+      "Product_ID": "HVM001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM002",
+      "Product_ID": "HCAC001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM002",
+      "Product_ID": "HAF001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM002",
+      "Product_ID": "HCF001"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM002",
+      "Product_ID": "SSCF001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM002",
+      "Product_ID": "HSF001"
+    },
+    {
+      "Current_Stock": 14,
+      "Machine_ID": "VM002",
+      "Product_ID": "HCMF001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "CBRM001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "CBBM001"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM002",
+      "Product_ID": "CBV001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "CBC002"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM002",
+      "Product_ID": "CBC003"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM002",
+      "Product_ID": "CBBS001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM002",
+      "Product_ID": "DC001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "CTZS001"
+    },
+    {
+      "Current_Stock": 11,
+      "Machine_ID": "VM002",
+      "Product_ID": "CT001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM002",
+      "Product_ID": "COKE001"
+    },
+    {
+      "Current_Stock": 2,
+      "Machine_ID": "VM002",
+      "Product_ID": "MD001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM002",
+      "Product_ID": "TUT001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM002",
+      "Product_ID": "THUM001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM002",
+      "Product_ID": "PT001"
+    },
+    {
+      "Current_Stock": 12,
+      "Machine_ID": "VM002",
+      "Product_ID": "PZST001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM002",
+      "Product_ID": "MZSED001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM002",
+      "Product_ID": "MEDT001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM002",
+      "Product_ID": "MAAZ001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM002",
+      "Product_ID": "MPB001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM002",
+      "Product_ID": "OA001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM002",
+      "Product_ID": "ODGA001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM002",
+      "Product_ID": "ODP&P001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM002",
+      "Product_ID": "ODM&P001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM002",
+      "Product_ID": "OPG001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "MPO001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM002",
+      "Product_ID": "FANT001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "TMF001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM002",
+      "Product_ID": "TA001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM002",
+      "Product_ID": "TS001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "TO001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "TP001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM002",
+      "Product_ID": "TG001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM002",
+      "Product_ID": "TLD001"
+    },
+    {
+      "Current_Stock": 9,
+      "Machine_ID": "VM002",
+      "Product_ID": "MT001"
+    },
+    {
+      "Current_Stock": 11,
+      "Machine_ID": "VM002",
+      "Product_ID": "7T001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM002",
+      "Product_ID": "ST001"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM002",
+      "Product_ID": "SPRI001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBSG001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBNDC001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBNDC002"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBSO001"
+    },
+    {
+      "Current_Stock": 33,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBSM001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBA001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBO001"
+    },
+    {
+      "Current_Stock": 33,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBCG001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBMF001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBM001"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM002",
+      "Product_ID": "PBL001"
+    },
+    {
+      "Current_Stock": 47,
+      "Machine_ID": "VM002",
+      "Product_ID": "RJMF001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM002",
+      "Product_ID": "PSL001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM002",
+      "Product_ID": "PSTC001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM002",
+      "Product_ID": "PSC001"
+    },
+    {
+      "Current_Stock": 12,
+      "Machine_ID": "VM002",
+      "Product_ID": "PF001"
+    },
+    {
+      "Current_Stock": 14,
+      "Machine_ID": "VM002",
+      "Product_ID": "PHAS001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM002",
+      "Product_ID": "BLH001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM002",
+      "Product_ID": "NWPL001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM002",
+      "Product_ID": "NWR001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM002",
+      "Product_ID": "ECC001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM002",
+      "Product_ID": "BJJ001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM002",
+      "Product_ID": "DFC001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM002",
+      "Product_ID": "DFV001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM002",
+      "Product_ID": "BTCMF001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM002",
+      "Product_ID": "BTCV001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM002",
+      "Product_ID": "BTCCC001"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMS001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM002",
+      "Product_ID": "EB001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMC002"
+    },
+    {
+      "Current_Stock": 38,
+      "Machine_ID": "VM002",
+      "Product_ID": "BTTC001"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM002",
+      "Product_ID": "BMV001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM002",
+      "Product_ID": "RFMB001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM002",
+      "Product_ID": "RFMS001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM002",
+      "Product_ID": "RFMV001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM002",
+      "Product_ID": "GSGBC001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM002",
+      "Product_ID": "DMFAN001"
+    },
+    {
+      "Current_Stock": 2,
+      "Machine_ID": "VM002",
+      "Product_ID": "KITK001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM003",
+      "Product_ID": "LSWPW001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM003",
+      "Product_ID": "LCS001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM003",
+      "Product_ID": "LMM001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM003",
+      "Product_ID": "LASCO001"
+    },
+    {
+      "Current_Stock": 1,
+      "Machine_ID": "VM003",
+      "Product_ID": "LSTT001"
+    },
+    {
+      "Current_Stock": 12,
+      "Machine_ID": "VM003",
+      "Product_ID": "LHNSC001"
+    },
+    {
+      "Current_Stock": 9,
+      "Machine_ID": "VM003",
+      "Product_ID": "LWRC001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "LSH001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYS001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKCA001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYCC001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYWSC001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYPST001"
+    },
+    {
+      "Current_Stock": 33,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYASC001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYBK001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKNM001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKT001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKMM001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYKC001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYIM001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYN001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM003",
+      "Product_ID": "TYSC001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM003",
+      "Product_ID": "KSC001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM003",
+      "Product_ID": "KP001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM003",
+      "Product_ID": "KCC001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM003",
+      "Product_ID": "KGC001"
+    },
+    {
+      "Current_Stock": 1,
+      "Machine_ID": "VM003",
+      "Product_ID": "KNT001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM003",
+      "Product_ID": "KGC002"
+    },
+    {
+      "Current_Stock": 6,
+      "Machine_ID": "VM003",
+      "Product_ID": "KMM001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM003",
+      "Product_ID": "KSSC001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM003",
+      "Product_ID": "KSMC001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM003",
+      "Product_ID": "BNC001"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM003",
+      "Product_ID": "BOSPS001"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMM001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMAPP001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMC001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "BTM001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM003",
+      "Product_ID": "BNC002"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMAT001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMAMA001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM003",
+      "Product_ID": "BC&O001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM003",
+      "Product_ID": "BTPC001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM003",
+      "Product_ID": "BCS001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBP001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM003",
+      "Product_ID": "DNSC001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM003",
+      "Product_ID": "DNC001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM003",
+      "Product_ID": "RPM001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM003",
+      "Product_ID": "RBM001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM003",
+      "Product_ID": "RRM001"
+    },
+    {
+      "Current_Stock": 35,
+      "Machine_ID": "VM003",
+      "Product_ID": "CB001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM003",
+      "Product_ID": "CC001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM003",
+      "Product_ID": "CPMM001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM003",
+      "Product_ID": "CO001"
+    },
+    {
+      "Current_Stock": 9,
+      "Machine_ID": "VM003",
+      "Product_ID": "CBC001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM003",
+      "Product_ID": "CCC001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM003",
+      "Product_ID": "CS001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "CV001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM003",
+      "Product_ID": "HBM001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM003",
+      "Product_ID": "HVM001"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM003",
+      "Product_ID": "HCAC001"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM003",
+      "Product_ID": "HAF001"
+    },
+    {
+      "Current_Stock": 36,
+      "Machine_ID": "VM003",
+      "Product_ID": "HCF001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM003",
+      "Product_ID": "SSCF001"
+    },
+    {
+      "Current_Stock": 9,
+      "Machine_ID": "VM003",
+      "Product_ID": "HSF001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM003",
+      "Product_ID": "HCMF001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM003",
+      "Product_ID": "CBRM001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM003",
+      "Product_ID": "CBBM001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM003",
+      "Product_ID": "CBV001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM003",
+      "Product_ID": "CBC002"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM003",
+      "Product_ID": "CBC003"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM003",
+      "Product_ID": "CBBS001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM003",
+      "Product_ID": "DC001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM003",
+      "Product_ID": "CTZS001"
+    },
+    {
+      "Current_Stock": 38,
+      "Machine_ID": "VM003",
+      "Product_ID": "CT001"
+    },
+    {
+      "Current_Stock": 11,
+      "Machine_ID": "VM003",
+      "Product_ID": "COKE001"
+    },
+    {
+      "Current_Stock": 30,
+      "Machine_ID": "VM003",
+      "Product_ID": "MD001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM003",
+      "Product_ID": "TUT001"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM003",
+      "Product_ID": "THUM001"
+    },
+    {
+      "Current_Stock": 12,
+      "Machine_ID": "VM003",
+      "Product_ID": "PT001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM003",
+      "Product_ID": "PZST001"
+    },
+    {
+      "Current_Stock": 1,
+      "Machine_ID": "VM003",
+      "Product_ID": "MZSED001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM003",
+      "Product_ID": "MEDT001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM003",
+      "Product_ID": "MAAZ001"
+    },
+    {
+      "Current_Stock": 3,
+      "Machine_ID": "VM003",
+      "Product_ID": "MPB001"
+    },
+    {
+      "Current_Stock": 13,
+      "Machine_ID": "VM003",
+      "Product_ID": "OA001"
+    },
+    {
+      "Current_Stock": 28,
+      "Machine_ID": "VM003",
+      "Product_ID": "ODGA001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM003",
+      "Product_ID": "ODP&P001"
+    },
+    {
+      "Current_Stock": 26,
+      "Machine_ID": "VM003",
+      "Product_ID": "ODM&P001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "OPG001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM003",
+      "Product_ID": "MPO001"
+    },
+    {
+      "Current_Stock": 35,
+      "Machine_ID": "VM003",
+      "Product_ID": "FANT001"
+    },
+    {
+      "Current_Stock": 7,
+      "Machine_ID": "VM003",
+      "Product_ID": "TMF001"
+    },
+    {
+      "Current_Stock": 39,
+      "Machine_ID": "VM003",
+      "Product_ID": "TA001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM003",
+      "Product_ID": "TS001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "TO001"
+    },
+    {
+      "Current_Stock": 38,
+      "Machine_ID": "VM003",
+      "Product_ID": "TP001"
+    },
+    {
+      "Current_Stock": 10,
+      "Machine_ID": "VM003",
+      "Product_ID": "TG001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM003",
+      "Product_ID": "TLD001"
+    },
+    {
+      "Current_Stock": 35,
+      "Machine_ID": "VM003",
+      "Product_ID": "MT001"
+    },
+    {
+      "Current_Stock": 22,
+      "Machine_ID": "VM003",
+      "Product_ID": "7T001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM003",
+      "Product_ID": "ST001"
+    },
+    {
+      "Current_Stock": 33,
+      "Machine_ID": "VM003",
+      "Product_ID": "SPRI001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBSG001"
+    },
+    {
+      "Current_Stock": 21,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBNDC001"
+    },
+    {
+      "Current_Stock": 0,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBNDC002"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBSO001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBSM001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBA001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBO001"
+    },
+    {
+      "Current_Stock": 34,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBCG001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBMF001"
+    },
+    {
+      "Current_Stock": 8,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBM001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM003",
+      "Product_ID": "PBL001"
+    },
+    {
+      "Current_Stock": 41,
+      "Machine_ID": "VM003",
+      "Product_ID": "RJMF001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM003",
+      "Product_ID": "PSL001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM003",
+      "Product_ID": "PSTC001"
+    },
+    {
+      "Current_Stock": 29,
+      "Machine_ID": "VM003",
+      "Product_ID": "PSC001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM003",
+      "Product_ID": "PF001"
+    },
+    {
+      "Current_Stock": 27,
+      "Machine_ID": "VM003",
+      "Product_ID": "PHAS001"
+    },
+    {
+      "Current_Stock": 4,
+      "Machine_ID": "VM003",
+      "Product_ID": "BLH001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM003",
+      "Product_ID": "NWPL001"
+    },
+    {
+      "Current_Stock": 19,
+      "Machine_ID": "VM003",
+      "Product_ID": "NWR001"
+    },
+    {
+      "Current_Stock": 40,
+      "Machine_ID": "VM003",
+      "Product_ID": "ECC001"
+    },
+    {
+      "Current_Stock": 18,
+      "Machine_ID": "VM003",
+      "Product_ID": "BJJ001"
+    },
+    {
+      "Current_Stock": 24,
+      "Machine_ID": "VM003",
+      "Product_ID": "DFC001"
+    },
+    {
+      "Current_Stock": 17,
+      "Machine_ID": "VM003",
+      "Product_ID": "DFV001"
+    },
+    {
+      "Current_Stock": 32,
+      "Machine_ID": "VM003",
+      "Product_ID": "BTCMF001"
+    },
+    {
+      "Current_Stock": 23,
+      "Machine_ID": "VM003",
+      "Product_ID": "BTCV001"
+    },
+    {
+      "Current_Stock": 31,
+      "Machine_ID": "VM003",
+      "Product_ID": "BTCCC001"
+    },
+    {
+      "Current_Stock": 37,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMS001"
+    },
+    {
+      "Current_Stock": 14,
+      "Machine_ID": "VM003",
+      "Product_ID": "EB001"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMC002"
+    },
+    {
+      "Current_Stock": 20,
+      "Machine_ID": "VM003",
+      "Product_ID": "BTTC001"
+    },
+    {
+      "Current_Stock": 15,
+      "Machine_ID": "VM003",
+      "Product_ID": "BMV001"
+    },
+    {
+      "Current_Stock": 9,
+      "Machine_ID": "VM003",
+      "Product_ID": "RFMB001"
+    },
+    {
+      "Current_Stock": 16,
+      "Machine_ID": "VM003",
+      "Product_ID": "RFMS001"
+    },
+    {
+      "Current_Stock": 25,
+      "Machine_ID": "VM003",
+      "Product_ID": "RFMV001"
+    },
+    {
+      "Current_Stock": 5,
+      "Machine_ID": "VM003",
+      "Product_ID": "GSGBC001"
+    },
+    {
+      "Current_Stock": 2,
+      "Machine_ID": "VM003",
+      "Product_ID": "DMFAN001"
+    },
+    {
+      "Current_Stock": 38,
+      "Machine_ID": "VM003",
+      "Product_ID": "KITK001"
+    }
+  ]
+}
