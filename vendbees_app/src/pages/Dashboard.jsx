@@ -57,7 +57,7 @@ const GSTRateSelect = ({ value, onChange, gstRatesMap = {} }) => (
 );
 
 const Dashboard = () => {
-    const { products = [], machines = [], stock = [], stats = {}, sales = [], refills = [], loading } = useData() || {};
+    const { products = [], machines = [], stock = [], stats = {}, sales = [], refills = [], loading, error } = useData() || {};
 
     const [filters, setFilters] = React.useState({
         stockValue: 'All',
@@ -93,8 +93,7 @@ const Dashboard = () => {
             const prod = products.find(p => p.Product_ID === s.Product_ID);
             const unitCost = Number(prod?.Unit_Cost) || 0;
 
-            const rawGst = String(prod?.GST || '0').replace(/[^0-9.]/g, '');
-            const prodGstRate = Number(rawGst) > 1 ? Number(rawGst) / 100 : Number(rawGst);
+            const prodGstRate = Number(prod?.GST) || 0;
 
             if (gstRateFilter === 'All' || (gstRatesMap[gstRateFilter] !== 'All' && Math.abs(prodGstRate - Number(gstRatesMap[gstRateFilter])) < 0.001)) {
                 stats.gstStockValue += (qty * unitCost);
@@ -114,8 +113,7 @@ const Dashboard = () => {
             if (s.Date === todayStr) stats.todaySales += amount;
 
             const prod = products.find(p => p.Product_ID === s.Product_ID);
-            const rawGst = String(prod?.GST || '0').replace(/[^0-9.]/g, '');
-            const prodGstRate = Number(rawGst) > 1 ? Number(rawGst) / 100 : Number(rawGst);
+            const prodGstRate = Number(prod?.GST) || 0;
             const gstAmount = amount * prodGstRate;
 
             if (gstRateFilter === 'All' || (gstRatesMap[gstRateFilter] !== 'All' && Math.abs(prodGstRate - Number(gstRatesMap[gstRateFilter])) < 0.001)) {
@@ -128,11 +126,20 @@ const Dashboard = () => {
 
     if (loading) return <div className="p-10 text-center text-slate-500 font-medium whitespace-pre-line">Loading Dashboard Data...</div>;
 
+    if (error) return (
+        <div className="p-10 text-center">
+            <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-200 inline-block font-medium">
+                {error}
+                <div className="text-sm mt-2 text-red-500">Ensure the backend server is running on Port 3001.</div>
+            </div>
+        </div>
+    );
+
     const statsStock = getFilteredStats(filters.stockValue);
     const statsUnits = getFilteredStats(filters.units);
     const statsOOS = getFilteredStats(filters.outOfStock);
     const statsSales = getFilteredStats(filters.sales);
-    const statsGST = getFilteredStats('All', filters.gstRateValue); // Force 'All' machines for GST card
+    const statsGST = getFilteredStats('All', filters.gstRateValue);
 
     // --- Dynamic Chart Data Preparation (30 Days) ---
     const last30Days = [];
@@ -263,7 +270,7 @@ const Dashboard = () => {
                     />
                     <KPICard
                         title="Total GST Payable"
-                        value={`₹${statsGST.gstStockValue.toLocaleString()}`}
+                        value={`₹${statsGST.gstSum.toLocaleString()}`}
                         icon={IndianRupee}
                         trend={0}
                         colorClass="bg-purple-50 text-purple-600"

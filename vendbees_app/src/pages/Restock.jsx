@@ -17,7 +17,7 @@ const KPI = ({ title, value, icon: Icon, colorClass }) => (
 );
 
 const Restock = () => {
-    const { products, machines, stock, loading, refillProduct } = useData();
+    const { products, machines, stock, vendors, loading, refillProduct } = useData();
     const [filter, setFilter] = useState('All');
 
     if (loading) return null;
@@ -42,13 +42,16 @@ const Restock = () => {
         if (status === 'Safe') safeCount++;
 
         if (status !== 'Safe') {
+            // Find Vendor
+            const vendor = vendors.find(v => v.Product_ID === prod.Product_ID || v.Product_Name === prod.Name)?.Name || 'Contact Admin';
+
             alerts.push({
                 Machine: machine,
                 Product: prod,
                 Stock: s.Current_Stock,
                 Reorder: prod.Reorder_Level,
                 Status: status,
-                Vendor: 'Beverage Corp' // Mock
+                Vendor: vendor
             });
         }
     });

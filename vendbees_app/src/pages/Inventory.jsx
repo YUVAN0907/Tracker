@@ -18,8 +18,7 @@ const Inventory = () => {
 
     if (loading) return null;
 
-    const totalValue = products.reduce((acc, p) => acc + (p.Landed_Cost * 50), 0); // Mock value calculation based on assumed stock
-    // Or use the context stats if available. Let's stick to simple.
+    const totalValue = products.reduce((acc, p) => acc + (p.Landed_Cost * p.Total_Stock), 0);
 
     return (
         <div className="space-y-6 pb-10">
@@ -61,7 +60,7 @@ const Inventory = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <KPI title="Total SKUs" value={products.length} />
                     <KPI title="Pending POs" value={purchases.filter(p => p.Status === 'Pending' || p.Status === 'In Transit').length} />
-                    <KPI title="Total Value" value="₹14.2L" />
+                    <KPI title="Total Value" value={`₹${(totalValue / 100000).toFixed(1)}L`} subtext={`Exact: ₹${totalValue.toLocaleString()}`} />
                 </div>
 
                 {/* Content */}
@@ -77,7 +76,7 @@ const Inventory = () => {
                                     <tr>
                                         <th className="px-6 py-4 font-medium">Product</th>
                                         <th className="px-6 py-4 font-medium">Category</th>
-                                        <th className="px-6 py-4 font-medium">Case Size</th>
+                                        <th className="px-6 py-4 font-medium">Stock</th>
                                         <th className="px-6 py-4 font-medium">Unit Cost</th>
                                         <th className="px-6 py-4 font-medium">GST %</th>
                                         <th className="px-6 py-4 font-medium">Landed Cost</th>
@@ -94,10 +93,10 @@ const Inventory = () => {
                                             <td className="px-6 py-4">
                                                 <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs font-medium">{p.Category}</span>
                                             </td>
-                                            <td className="px-6 py-4 text-slate-600">{p.Case_Size} Units</td>
+                                            <td className="px-6 py-4 text-slate-600">{p.Total_Stock || p.Case_Size} Units</td>
                                             <td className="px-6 py-4 text-slate-600">₹{p.Unit_Cost}</td>
                                             <td className="px-6 py-4 text-slate-600">{(p.GST * 100).toFixed(0)}%</td>
-                                            <td className="px-6 py-4 font-semibold text-slate-800">₹{p.Landed_Cost}</td>
+                                            <td className="px-6 py-4 font-semibold text-slate-800">₹{p.Landed_Cost.toFixed(2)}</td>
                                             <td className="px-6 py-4 text-slate-600">{p.Reorder_Level} units</td>
                                             <td className="px-6 py-4">
                                                 <div className="flex gap-3">
