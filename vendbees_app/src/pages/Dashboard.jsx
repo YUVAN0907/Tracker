@@ -91,7 +91,7 @@ const Dashboard = () => {
             if (!s) return;
             const qty = Number(s.Current_Stock) || 0;
             const prod = products.find(p => p.Product_ID === s.Product_ID);
-            const unitCost = Number(prod?.Unit_Cost) || 0;
+            const unitCost = Number(prod?.PO) || Number(prod?.Unit_Cost) || 0;
 
             const prodGstRate = Number(prod?.GST) || 0;
 
@@ -157,7 +157,7 @@ const Dashboard = () => {
         const prod = products.find(p => p.Product_ID === s.Product_ID);
         if (prod) {
             const cat = prod.Category || 'Others';
-            const cost = Number(prod.Unit_Cost) || 0;
+            const cost = Number(prod.PO) || Number(prod.Unit_Cost) || 0;
             const value = (Number(s.Current_Stock) || 0) * cost;
             categoryMap[cat] = (categoryMap[cat] || 0) + value;
         }
@@ -180,7 +180,7 @@ const Dashboard = () => {
         if (dailyStats[s.Date]) {
             const qty = Number(s.Qty) || 0;
             const prod = products.find(p => p.Product_ID === s.Product_ID);
-            const cost = Number(prod?.Unit_Cost) || 0;
+            const cost = Number(prod?.PO) || Number(prod?.Unit_Cost) || 0;
             dailyStats[s.Date].out += qty;
             dailyStats[s.Date].salesVal += (qty * cost); // Value reduction due to sale
         }
@@ -190,7 +190,7 @@ const Dashboard = () => {
         if (dailyStats[r.Date]) {
             const qty = Number(r.Qty) || 0;
             const prod = products.find(p => p.Product_ID === r.Product_ID);
-            const cost = Number(prod?.Unit_Cost) || 0;
+            const cost = Number(prod?.PO) || Number(prod?.Unit_Cost) || 0;
             dailyStats[r.Date].in += qty;
             dailyStats[r.Date].refillVal += (qty * cost); // Value addition due to refill
         }

@@ -1,19 +1,38 @@
 import os
 import time
+import threading
+import requests
 import pandas as pd
 import numpy as np
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
-import threading
+from dotenv import load_dotenv
 
+# --------------------------------------------------
+# LOAD ENV VARIABLES
+# --------------------------------------------------
+load_dotenv()
+
+TENANT_ID = os.environ["SP_TENANT_ID"]
+CLIENT_ID = os.environ["SP_CLIENT_ID"]
+CLIENT_SECRET = os.environ["SP_CLIENT_SECRET"]
+SITE_ID = os.environ["SP_SITE_ID"]
+DRIVE_ID = os.environ["SP_DRIVE_ID"]
+FILE_ID = os.environ["SP_FILE_ID"]
+
+PORT = 3001
+TEMP_EXCEL = "ventory_sheet.xlsx"
+
+# --------------------------------------------------
+# FLASK APP
+# --------------------------------------------------
 app = Flask(__name__)
-# Enable CORS for all routes (important for localhost:3000 to hit localhost:3001)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-EXCEL_FILE = r'C:\Users\YUVANSANKAR R\Inv\Inventory\vendbees_app\ventory_sheet.xlsx'
-PORT = 3001
-
+# --------------------------------------------------
+# SHEET MAP
+# --------------------------------------------------
 SHEET_MAP = {
     'Products': 'Product_Master',
     'Machines': 'Machine_Master',
@@ -25,222 +44,226 @@ SHEET_MAP = {
 }
 
 db = {}
-last_file_mtime = 0
+last_sync = 0
 
+# --------------------------------------------------
+# SHAREPOINT AUTH
+# --------------------------------------------------
+def get_access_token():
+    url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
+    data = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "client_credentials",
+        "scope": "https://graph.microsoft.com/.default"
+    }
+    r = requests.post(url, data=data)
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+# --------------------------------------------------
+# SHAREPOINT FILE OPS
+# --------------------------------------------------
+def download_excel():
+    token = get_access_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/drives/{DRIVE_ID}/items/{FILE_ID}/content"
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    with open(TEMP_EXCEL, "wb") as f:
+        f.write(r.content)
+
+def upload_excel():
+    token = get_access_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/octet-stream"
+    }
+    url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/drives/{DRIVE_ID}/items/{FILE_ID}/content"
+    with open(TEMP_EXCEL, "rb") as f:
+        r = requests.put(url, headers=headers, data=f)
+    r.raise_for_status()
+
+# --------------------------------------------------
+# HELPERS
+# --------------------------------------------------
 def clean_df(df):
-    """Cleans a dataframe: strips headers, strips string values, drops fully empty rows, and replaces NaNs."""
-    if df.empty: return df
-    # Clean headers
+    if df.empty:
+        return df
+
     df.columns = df.columns.astype(str).str.strip()
-    # Replace NaN/Inf with None (becomes null in JSON)
     df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
-    # Strip string values
+
     for col in df.columns:
         if df[col].dtype == "object":
             df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
-    # Drop rows that are completely None
-    df = df.dropna(how='all')
-    return df
+
+    return df.dropna(how="all")
 
 def df_to_safe_dict(df):
-    """Converts a dataframe to a list of dicts, ensuring all values are JSON serializable (no NaN/Inf)."""
-    if df.empty: return []
-    # Final safety check for NaN/Inf before conversion
-    return df.replace({np.nan: None, np.inf: None, -np.inf: None}).to_dict(orient='records')
+    if df.empty:
+        return []
+    return df.replace({np.nan: None}).to_dict(orient="records")
 
+# --------------------------------------------------
+# LOAD DATA FROM SHAREPOINT
+# --------------------------------------------------
 def load_data():
-    """Reads the Excel file and populates the in-memory db."""
-    global db, last_file_mtime
-    
-    if not os.path.exists(EXCEL_FILE):
-        print(f"[{datetime.now()}] Error: Excel file not found at {EXCEL_FILE}")
-        return False
+    global db, last_sync
 
     try:
-        current_mtime = os.path.getmtime(EXCEL_FILE)
-        if current_mtime == last_file_mtime:
-            return True
+        download_excel()
 
-        print(f"[{datetime.now()}] Reloading data from Excel...")
-        with pd.ExcelFile(EXCEL_FILE) as xls:
-            for internal_key, sheet_name in SHEET_MAP.items():
-                if sheet_name in xls.sheet_names:
-                    df = pd.read_excel(xls, sheet_name=sheet_name)
-                    df = clean_df(df)
-                    
-                    # Special check for products: skip rows until we find valid PRODUCT_ID
-                    if internal_key == 'Products' and not df.empty:
-                        # Find first row with a P... ID or similar non-null ID
-                        # In the inspection, row 0 was CHIPS but ID was nan.
-                        # So we filter rows where PRODUCT_ID is missing.
-                        df = df[df['PRODUCT_ID'].notna()].reset_index(drop=True)
-                    
-                    db[internal_key] = df
+        with pd.ExcelFile(TEMP_EXCEL, engine="openpyxl") as xls:
+            for key, sheet in SHEET_MAP.items():
+                if sheet in xls.sheet_names:
+                    df = clean_df(pd.read_excel(xls, sheet))
+
+                    if key == "Products" and "PRODUCT_ID" in df.columns:
+                        df = df[df["PRODUCT_ID"].notna()]
+
+                    db[key] = df.reset_index(drop=True)
                 else:
-                    print(f"Warning: Sheet '{sheet_name}' not found.")
-                    db[internal_key] = pd.DataFrame()
-        
-        # --- Derived Stock Logic ---
-        # Derive stock even if sheet exists but is actually empty
-        stock_df = db.get('Stock', pd.DataFrame())
-        if stock_df.empty or len(stock_df) == 0:
-            print(f"[{datetime.now()}] Current_Stock sheet is empty. Deriving stock from logs...")
-            refills = db.get('Refills', pd.DataFrame())
-            sales = db.get('Sales', pd.DataFrame())
-            
-            stock_map = {} # (machine, product) -> qty
-            
-            # Add refills
-            if not refills.empty:
-                for _, r in refills.iterrows():
-                    mid = str(r.get('Machine_ID', '')).strip()
-                    pid = str(r.get('Product_ID', '')).strip()
-                    qty = r.get('Qty', 0)
-                    if mid and pid and pid.lower() != 'nan' and pd.notna(qty):
-                        key = (mid, pid)
-                        stock_map[key] = stock_map.get(key, 0) + float(qty)
-            
-            # Subtract sales
-            if not sales.empty:
-                # Use cleaned names for sales (Qty Sold)
-                for _, s in sales.iterrows():
-                    mid = str(s.get('Machine_ID', '')).strip()
-                    pid = str(s.get('Product_ID', '')).strip()
-                    # Try both variants due to previous inspection showing "Qty Sold "
-                    qty = s.get('Qty Sold', s.get('Qty', 0))
-                    if mid and pid and pid.lower() != 'nan' and pd.notna(qty):
-                        key = (mid, pid)
-                        stock_map[key] = stock_map.get(key, 0) - float(qty)
-            
-            # Convert map back to DF
-            new_stock_rows = []
-            for (mid, pid), qty in stock_map.items():
-                new_stock_rows.append({'Machine_ID': mid, 'Product_ID': pid, 'Current_Stock': max(0, qty)})
-            
-            db['Stock'] = pd.DataFrame(new_stock_rows) if new_stock_rows else pd.DataFrame(columns=['Machine_ID', 'Product_ID', 'Current_Stock'])
-            print(f"[{datetime.now()}] Derived stock for {len(stock_map)} items.")
+                    db[key] = pd.DataFrame()
 
-        last_file_mtime = current_mtime
-        print(f"[{datetime.now()}] Data loaded successfully.")
+        if "Sales" in db and "Date" in db["Sales"].columns:
+            db["Sales"]["Date"] = pd.to_datetime(
+                db["Sales"]["Date"], errors="coerce"
+            ).dt.strftime("%Y-%m-%d")
+
+        last_sync = time.time()
+        print("✔ SharePoint Excel loaded")
         return True
+
     except Exception as e:
-        print(f"[{datetime.now()}] Error reading Excel: {e}")
-        import traceback
-        traceback.print_exc()
+        print("❌ Load failed:", e)
         return False
 
-def save_sheet(internal_key):
-    """Saves a dataframe back to Excel."""
-    global last_file_mtime
-    df = db.get(internal_key)
-    if df is None: return
-    sheet_name = SHEET_MAP[internal_key]
-    try:
-        with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-        last_file_mtime = os.path.getmtime(EXCEL_FILE)
-    except Exception as e:
-        print(f"Error saving to Excel: {e}")
+# --------------------------------------------------
+# SAVE BACK TO SHAREPOINT
+# --------------------------------------------------
+def save_all():
+    with pd.ExcelWriter(TEMP_EXCEL, engine="openpyxl", mode="w") as writer:
+        for key, sheet in SHEET_MAP.items():
+            db.get(key, pd.DataFrame()).to_excel(writer, sheet_name=sheet, index=False)
+    upload_excel()
 
-# Initial Load
+# --------------------------------------------------
+# POLLING THREAD
+# --------------------------------------------------
+def poll_sharepoint():
+    while True:
+        load_data()
+        time.sleep(30)
+
+threading.Thread(target=poll_sharepoint, daemon=True).start()
 load_data()
 
-def poll_excel():
-    while True:
-        try:
-            if os.path.exists(EXCEL_FILE):
-                current_mtime = os.path.getmtime(EXCEL_FILE)
-                if current_mtime > last_file_mtime:
-                    load_data()
-        except Exception: pass
-        time.sleep(5) # Poll every 5s
+# --------------------------------------------------
+# ROUTES
+# --------------------------------------------------
+@app.route("/api/dashboard")
+def dashboard():
+    products = db.get("Products", pd.DataFrame())
+    machines = db.get("Machines", pd.DataFrame())
+    stock = db.get("Stock", pd.DataFrame())
 
-threading.Thread(target=poll_excel, daemon=True).start()
-
-@app.route('/api/dashboard', methods=['GET'])
-def get_dashboard():
-    # Fresh references
-    products_df = db.get('Products', pd.DataFrame())
-    machines_df = db.get('Machines', pd.DataFrame())
-    stock_df = db.get('Stock', pd.DataFrame())
-    sales_df = db.get('Sales', pd.DataFrame())
-    purchases_df = db.get('Purchases', pd.DataFrame())
-    refills_df = db.get('Refills', pd.DataFrame())
-    vendors_df = db.get('Vendors', pd.DataFrame())
-
-    # Calculate basic summary metrics
+    # SAFE cost map (handles "-", empty, text)
     cost_map = {}
-    for _, p in products_df.iterrows():
-        pid = str(p.get('PRODUCT_ID', '')).strip()
-        if not pid or pid.lower() == 'nan': continue
-        cost = p.get('PO', 0)
-        try: cost_map[pid] = float(cost) if pd.notna(cost) else 0
-        except: cost_map[pid] = 0
+    for _, r in products.iterrows():
+        pid = str(r.get("PRODUCT_ID", "")).strip()
+        if not pid or pid.lower() == "nan":
+            continue
 
-    total_stock_value = 0
+        raw_cost = r.get("PO")
+        try:
+            cost = float(raw_cost)
+        except (TypeError, ValueError):
+            cost = 0.0
+
+        cost_map[pid] = cost
+
     total_units = 0
-    for _, s in stock_df.iterrows():
-        pid = str(s.get('Product_ID', '')).strip()
-        qty = s.get('Current_Stock', 0)
-        qty = float(qty) if pd.notna(qty) else 0
-        total_units += qty
-        total_stock_value += (qty * cost_map.get(pid, 0))
+    total_value = 0
 
-    active_machines = len(machines_df[machines_df['Status'].str.strip() == 'Active']) if not machines_df.empty else 0
-    out_of_stock = len(stock_df[stock_df['Current_Stock'] <= 0]) if not stock_df.empty else 0
+    for _, r in stock.iterrows():
+        qty = float(r.get("Current_Stock", 0) or 0)
+        total_units += qty
+        total_value += qty * cost_map.get(str(r.get("Product_ID")), 0)
 
     return jsonify({
-        'products': df_to_safe_dict(products_df),
-        'machines': df_to_safe_dict(machines_df),
-        'stock': df_to_safe_dict(stock_df),
-        'sales': df_to_safe_dict(sales_df),
-        'purchases': df_to_safe_dict(purchases_df),
-        'refills': df_to_safe_dict(refills_df),
-        'vendors': df_to_safe_dict(vendors_df),
-        'metrics': {
-            'totalStockValue': float(total_stock_value) if pd.notna(total_stock_value) else 0,
-            'totalUnits': int(total_units) if pd.notna(total_units) else 0,
-            'activeMachines': int(active_machines),
-            'outOfStock': int(out_of_stock)
+        "products": df_to_safe_dict(products),
+        "machines": df_to_safe_dict(machines),
+        "stock": df_to_safe_dict(stock),
+        "sales": df_to_safe_dict(db.get("Sales", pd.DataFrame())),
+        "purchases": df_to_safe_dict(db.get("Purchases", pd.DataFrame())),
+        "refills": df_to_safe_dict(db.get("Refills", pd.DataFrame())),
+        "vendors": df_to_safe_dict(db.get("Vendors", pd.DataFrame())),
+        "metrics": {
+            "totalStockValue": round(total_value, 2),
+            "totalUnits": int(total_units),
+            "activeMachines": int((machines["Status"] == "Active").sum()) if not machines.empty else 0,
+            "outOfStock": int((stock["Current_Stock"] <= 0).sum()) if not stock.empty else 0
         }
     })
 
-@app.route('/api/sell', methods=['POST'])
-def sell_product():
-    data = request.json
-    mid, pid, qty = data.get('machineId'), data.get('productId'), int(data.get('qty', 1))
-    stock_df = db.get('Stock')
-    mask = (stock_df['Machine_ID'].astype(str) == str(mid)) & (stock_df['Product_ID'].astype(str) == str(pid))
-    if not stock_df[mask].empty:
-        idx = stock_df[mask].index[0]
-        if stock_df.at[idx, 'Current_Stock'] >= qty:
-            stock_df.at[idx, 'Current_Stock'] -= qty
-            db['Sales'] = pd.concat([db.get('Sales'), pd.DataFrame([{
-                'Date': datetime.now().strftime('%Y-%m-%d'),
-                'Machine_ID': mid, 'Product_ID': pid, 'Qty Sold': qty, 'Selling_Price': data.get('price', 0)
-            }])], ignore_index=True)
-            save_sheet('Stock'); save_sheet('Sales')
-            return jsonify({'success': True})
-    return jsonify({'error': 'Insufficient stock or not found'}), 400
+@app.route("/api/sell", methods=["POST"])
+def sell():
+    d = request.json
+    mid, pid, qty = d["machineId"], d["productId"], int(d.get("qty", 1))
 
-@app.route('/api/refill', methods=['POST'])
-def refill_product():
-    data = request.json
-    mid, pid, qty = data.get('machineId'), data.get('productId'), int(data.get('qty', 0))
-    stock_df = db.get('Stock')
-    mask = (stock_df['Machine_ID'].astype(str) == str(mid)) & (stock_df['Product_ID'].astype(str) == str(pid))
-    if not stock_df[mask].empty:
-        stock_df.at[stock_df[mask].index[0], 'Current_Stock'] += qty
+    stock = db["Stock"]
+    mask = (stock["Machine_ID"] == mid) & (stock["Product_ID"] == pid)
+
+    if mask.any() and stock.loc[mask, "Current_Stock"].iloc[0] >= qty:
+        stock.loc[mask, "Current_Stock"] -= qty
+
+        db["Sales"] = pd.concat([db["Sales"], pd.DataFrame([{
+            "Date": datetime.now().strftime("%Y-%m-%d"),
+            "Machine_ID": mid,
+            "Product_ID": pid,
+            "Qty Sold": qty,
+            "Selling_Price": d.get("price", 0)
+        }])])
+
+        save_all()
+        return jsonify(success=True)
+
+    return jsonify(error="Insufficient stock"), 400
+
+@app.route("/api/refill", methods=["POST"])
+def refill():
+    d = request.json
+    mid, pid, qty = d["machineId"], d["productId"], int(d["qty"])
+
+    stock = db["Stock"]
+    mask = (stock["Machine_ID"] == mid) & (stock["Product_ID"] == pid)
+
+    if mask.any():
+        stock.loc[mask, "Current_Stock"] += qty
     else:
-        stock_df = pd.concat([stock_df, pd.DataFrame([{'Machine_ID': mid, 'Product_ID': pid, 'Current_Stock': qty}])], ignore_index=True)
-    db['Stock'] = stock_df
-    db['Refills'] = pd.concat([db.get('Refills'), pd.DataFrame([{
-        'Date': datetime.now().strftime('%Y-%m-%d'),
-        'Refiller_ID': data.get('refillerId', 'R001'),
-        'Machine_ID': mid, 'Product_ID': pid, 'Qty': qty
-    }])], ignore_index=True)
-    save_sheet('Stock'); save_sheet('Refills')
-    return jsonify({'success': True})
+        db["Stock"] = pd.concat([stock, pd.DataFrame([{
+            "Machine_ID": mid,
+            "Product_ID": pid,
+            "Current_Stock": qty
+        }])])
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=PORT, debug=True)
+    db["Refills"] = pd.concat([db["Refills"], pd.DataFrame([{
+        "Date": datetime.now().strftime("%Y-%m-%d"),
+        "Refiller_ID": d.get("refillerId", "R001"),
+        "Machine_ID": mid,
+        "Product_ID": pid,
+        "Qty": qty
+    }])])
+
+    save_all()
+    return jsonify(success=True)
+
+# --------------------------------------------------
+# RUN SERVER
+# --------------------------------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT, debug=False)
+    
+    
+    
