@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
-import { AlertTriangle, Package, CheckCircle, FileText, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Package, CheckCircle, Search } from 'lucide-react';
 import clsx from 'clsx';
 
 const KPI = ({ title, value, icon: Icon, colorClass }) => (
@@ -17,8 +17,9 @@ const KPI = ({ title, value, icon: Icon, colorClass }) => (
 );
 
 const Restock = () => {
-    const { products, machines, stock, vendors, loading, refillProduct } = useData();
+    const { products, machines, stock, vendors, loading } = useData();
     const [filter, setFilter] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
 
     if (loading) return null;
 
@@ -56,10 +57,21 @@ const Restock = () => {
         }
     });
 
-    // Filter Logic
-    const filteredAlerts = filter === 'All' ? alerts :
+    // Filter Logic (status filter)
+    let filteredAlerts = filter === 'All' ? alerts :
         filter === 'Critical' ? alerts.filter(a => a.Status === 'Critical') :
             filter === 'Low' ? alerts.filter(a => a.Status === 'Low Stock') : alerts;
+
+    // Search Filter
+    if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filteredAlerts = filteredAlerts.filter(a =>
+            a.Machine.Machine_ID.toLowerCase().includes(query) ||
+            a.Machine.Location.toLowerCase().includes(query) ||
+            a.Product.Name.toLowerCase().includes(query) ||
+            a.Product.Product_ID.toLowerCase().includes(query)
+        );
+    }
 
     return (
         <div className="space-y-6 pb-10">
@@ -86,11 +98,16 @@ const Restock = () => {
                             </button>
                         ))}
                     </div>
-                    <input
-                        type="text"
-                        placeholder="Search machine or product..."
-                        className="px-4 py-2 rounded-lg border border-slate-200 text-sm w-full sm:w-64 focus:outline-none focus:border-orange-500"
-                    />
+                    <div className="relative">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search machine or product..."
+                            className="pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm w-full sm:w-64 focus:outline-none focus:border-orange-500"
+                        />
+                    </div>
                 </div>
 
                 {/* Feed Table */}
@@ -112,7 +129,6 @@ const Restock = () => {
                                     <th className="px-6 py-4 font-medium">Reorder Level</th>
                                     <th className="px-6 py-4 font-medium">Vendor</th>
                                     <th className="px-6 py-4 font-medium">Status</th>
-                                    <th className="px-6 py-4 font-medium">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -134,18 +150,6 @@ const Restock = () => {
                                                 alert.Status === 'Critical' ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-600")}>
                                                 {alert.Status}
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex gap-2">
-                                                <button className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors">
-                                                    <FileText size={12} /> Create PO
-                                                </button>
-                                                <button
-                                                    onClick={() => refillProduct(alert.Machine.Machine_ID, alert.Product.Product_ID, 50)}
-                                                    className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors">
-                                                    <RefreshCw size={12} /> Refill
-                                                </button>
-                                            </div>
                                         </td>
                                     </tr>
                                 ))}

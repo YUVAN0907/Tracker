@@ -47,7 +47,7 @@ const Machines = () => {
             .filter(s => s.Machine_ID === m.Machine_ID)
             .reduce((acc, s) => {
                 const prod = products.find(p => p.Product_ID === s.Product_ID);
-                return acc + (s.Current_Stock * (prod?.Landed_Cost || 0));
+                return acc + (s.Current_Stock * (prod?.Unit_Cost || 0));
             }, 0);
         return { name: m.Machine_ID, value: Math.round(value), location: m.Location, fullMachine: m };
     }).sort((a, b) => b.value - a.value);
@@ -106,7 +106,7 @@ const Machines = () => {
                                 {machineStock.map((s, idx) => {
                                     const prod = products.find(p => p.Product_ID === s.Product_ID);
                                     if (!prod) return null;
-                                    const value = s.Current_Stock * prod.Landed_Cost;
+                                    const value = s.Current_Stock * prod.Unit_Cost;
                                     const status = s.Current_Stock < 10 ? 'Critical' : s.Current_Stock < 20 ? 'Low' : 'Safe';
                                     const statusColor = status === 'Critical' ? 'bg-red-50 text-red-600' : status === 'Low' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600';
 

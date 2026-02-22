@@ -91,7 +91,7 @@ const Dashboard = () => {
             if (!s) return;
             const qty = Number(s.Current_Stock) || 0;
             const prod = products.find(p => p.Product_ID === s.Product_ID);
-            const unitCost = Number(prod?.PO) || Number(prod?.Unit_Cost) || 0;
+            const unitCost = Number(prod?.Unit_Cost) || 0;
 
             const prodGstRate = Number(prod?.GST) || 0;
 
@@ -157,7 +157,7 @@ const Dashboard = () => {
         const prod = products.find(p => p.Product_ID === s.Product_ID);
         if (prod) {
             const cat = prod.Category || 'Others';
-            const cost = Number(prod.PO) || Number(prod.Unit_Cost) || 0;
+            const cost = Number(prod.Unit_Cost) || 0;
             const value = (Number(s.Current_Stock) || 0) * cost;
             categoryMap[cat] = (categoryMap[cat] || 0) + value;
         }
@@ -180,7 +180,7 @@ const Dashboard = () => {
         if (dailyStats[s.Date]) {
             const qty = Number(s.Qty) || 0;
             const prod = products.find(p => p.Product_ID === s.Product_ID);
-            const cost = Number(prod?.PO) || Number(prod?.Unit_Cost) || 0;
+            const cost = Number(prod?.Unit_Cost) || 0;
             dailyStats[s.Date].out += qty;
             dailyStats[s.Date].salesVal += (qty * cost); // Value reduction due to sale
         }
@@ -190,7 +190,7 @@ const Dashboard = () => {
         if (dailyStats[r.Date]) {
             const qty = Number(r.Qty) || 0;
             const prod = products.find(p => p.Product_ID === r.Product_ID);
-            const cost = Number(prod?.PO) || Number(prod?.Unit_Cost) || 0;
+            const cost = Number(prod?.Unit_Cost) || 0;
             dailyStats[r.Date].in += qty;
             dailyStats[r.Date].refillVal += (qty * cost); // Value addition due to refill
         }
@@ -216,10 +216,52 @@ const Dashboard = () => {
         rollingValue = rollingValue - dayInVal + dayOutVal;
     }
 
-    // 4. Machine-wise Comparison (Existing logic is fine but reuse common helper)
-    const dataMachineCompare = (machines || []).map(m => {
-        const val = getFilteredStats(m.Machine_ID).totalStockValue;
-        return { name: m.Machine_ID || 'Unknown', value: Math.round(val) };
+    // Weekly summary for easier understanding
+    const weeklyData = [];
+    for (let week = 0; week < 4; week++) {
+        const startIdx = week * 7;
+        const endIdx = Math.min(startIdx + 7, dataBar.length);
+        const weekSlice = dataBar.slice(startIdx, endIdx);
+        const weekIn = weekSlice.reduce((sum, d) => sum + d.In, 0);
+        const weekOut = weekSlice.reduce((sum, d) => sum + d.Out, 0);
+        const weekLabel = week === 3 ? 'This Week' : week === 2 ? 'Last Week' : `${4 - week} Weeks Ago`;
+        weeklyData.push({ name: weekLabel, 'Refilled': weekIn, 'Sold': weekOut });
+    }
+    weeklyData.reverse(); // Show oldest first
+
+    // Inventory Health Stats
+    let healthyCount = 0, lowCount = 0, criticalCount = 0, totalProducts = 0;
+    stock.forEach(s => {
+        const prod = products.find(p => p.Product_ID === s.Product_ID);
+        if (!prod) return;
+        totalProducts++;
+        if (s.Current_Stock < 10) criticalCount++;
+        else if (s.Current_Stock < prod.Reorder_Level) lowCount++;
+        else healthyCount++;
+    });
+
+    const healthPercent = totalProducts > 0 ? Math.round((healthyCount / totalProducts) * 100) : 0;
+    const lowPercent = totalProducts > 0 ? Math.round((lowCount / totalProducts) * 100) : 0;
+    const criticalPercent = totalProducts > 0 ? Math.round((criticalCount / totalProducts) * 100) : 0;
+
+    // Calculate total 30-day movement
+    const total30DayIn = dataBar.reduce((sum, d) => sum + d.In, 0);
+    const total30DayOut = dataBar.reduce((sum, d) => sum + d.Out, 0);
+    const avgDailySales = Math.round(total30DayOut / 30);
+
+    // Calculate Restock Cost (money needed to bring low/critical items to reorder level)
+    let restockCost = 0;
+    let potentialRevenue = 0;
+    stock.forEach(s => {
+        const prod = products.find(p => p.Product_ID === s.Product_ID);
+        if (!prod) return;
+        const mrp = Number(prod.MRP) || 0;
+        const unitCost = Number(prod.Unit_Cost) || 0;
+        potentialRevenue += (s.Current_Stock * mrp);
+        if (s.Current_Stock < prod.Reorder_Level) {
+            const unitsNeeded = prod.Reorder_Level - s.Current_Stock;
+            restockCost += (unitsNeeded * unitCost);
+        }
     });
 
 
@@ -347,38 +389,106 @@ const Dashboard = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Bar Chart: Stock In vs Out */}
-                    <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                        <h3 className="text-sm font-semibold text-slate-700 mb-6">Stock In vs Stock Out (Last 30 Days)</h3>
-                        <div className="overflow-x-auto custom-scrollbar">
-                            <div className="h-64 min-w-[1200px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={dataBar} barSize={20}>
-                                        <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} interval={0} />
-                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                                        <Tooltip cursor={{ fill: 'transparent' }} />
-                                        <Legend verticalAlign="top" height={36} />
-                                        <Bar dataKey="In" name="Stock In" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="Out" name="Stock Out" fill="#f97316" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                    {/* Weekly Stock Movement - Simplified View */}
+                    <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-sm font-semibold text-slate-700">Stock Movement Summary</h3>
+                                <p className="text-xs text-slate-400 mt-1">Units refilled vs units sold per week</p>
+                            </div>
+                            <div className="flex gap-4 text-xs">
+                                <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 rounded bg-blue-500"></div>
+                                    <span className="text-slate-500">Refilled</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 rounded bg-orange-500"></div>
+                                    <span className="text-slate-500">Sold</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-56">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={weeklyData} barSize={32}>
+                                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                                    <Tooltip 
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                        formatter={(value, name) => [`${value} units`, name]}
+                                    />
+                                    <Bar dataKey="Refilled" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="Sold" fill="#f97316" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-4 text-center">
+                            <div>
+                                <div className="text-lg font-bold text-blue-600">{total30DayIn.toLocaleString()}</div>
+                                <div className="text-[10px] text-slate-400 uppercase tracking-wide">Total Refilled (30d)</div>
+                            </div>
+                            <div>
+                                <div className="text-lg font-bold text-orange-600">{total30DayOut.toLocaleString()}</div>
+                                <div className="text-[10px] text-slate-400 uppercase tracking-wide">Total Sold (30d)</div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Bar Chart: Machine Comparison */}
+                    {/* Inventory Health Overview */}
                     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-                        <h3 className="text-sm font-semibold text-slate-700 mb-6">Machine-wise Stock Value Comparison</h3>
-                        <div className="h-64">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={dataMachineCompare} barSize={30} layout="vertical">
-                                    <CartesianGrid horizontal={false} stroke="#f1f5f9" />
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} width={80} />
-                                    <Tooltip cursor={{ fill: 'transparent' }} />
-                                    <Bar dataKey="value" name="Total Value (₹)" fill="#10b981" radius={[0, 4, 4, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
+                        <h3 className="text-sm font-semibold text-slate-700 mb-6">Inventory Health Overview</h3>
+                        
+                        {/* Health Status Bars */}
+                        <div className="space-y-4 mb-6">
+                            <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                    <span className="text-slate-600 font-medium">Healthy Stock</span>
+                                    <span className="text-green-600 font-bold">{healthyCount} items ({healthPercent}%)</span>
+                                </div>
+                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${healthPercent}%` }}></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                    <span className="text-slate-600 font-medium">Low Stock</span>
+                                    <span className="text-yellow-600 font-bold">{lowCount} items ({lowPercent}%)</span>
+                                </div>
+                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-yellow-500 rounded-full transition-all" style={{ width: `${lowPercent}%` }}></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                    <span className="text-slate-600 font-medium">Critical (Needs Restock)</span>
+                                    <span className="text-red-600 font-bold">{criticalCount} items ({criticalPercent}%)</span>
+                                </div>
+                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-red-500 rounded-full transition-all" style={{ width: `${criticalPercent}%` }}></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Quick Stats */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-slate-50 rounded-lg p-3">
+                                <div className="text-lg font-bold text-slate-800">{avgDailySales}</div>
+                                <div className="text-[10px] text-slate-500 uppercase tracking-wide">Avg. Daily Sales</div>
+                            </div>
+                            <div className="bg-slate-50 rounded-lg p-3">
+                                <div className={clsx("text-lg font-bold", restockCost > 10000 ? "text-red-600" : restockCost > 5000 ? "text-yellow-600" : "text-green-600")}>
+                                    ₹{restockCost.toLocaleString()}
+                                </div>
+                                <div className="text-[10px] text-slate-500 uppercase tracking-wide">Restock Cost</div>
+                            </div>
+                            <div className="bg-slate-50 rounded-lg p-3">
+                                <div className="text-lg font-bold text-slate-800">{totalProducts}</div>
+                                <div className="text-[10px] text-slate-500 uppercase tracking-wide">Total SKUs</div>
+                            </div>
+                            <div className="bg-slate-50 rounded-lg p-3">
+                                <div className="text-lg font-bold text-emerald-600">₹{potentialRevenue.toLocaleString()}</div>
+                                <div className="text-[10px] text-slate-500 uppercase tracking-wide">Potential Revenue</div>
+                            </div>
                         </div>
                     </div>
                 </div>
