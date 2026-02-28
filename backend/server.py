@@ -44,6 +44,9 @@ SHEET_MAP = {
     'Refills': 'Machine_Refill_Log',
     'Vendors': 'Vendor_Master',
     'Warehouse': 'Warehouse_Stock',
+    'Purchased_Products': 'Purchased_Products',
+    'Stocks': 'Stocks',
+    'Stock_Assignments': 'Stock_Assignments',
     'OUR_PO': 'OUR_PO'
 }
 
@@ -320,6 +323,9 @@ def dashboard():
         "refills": df_to_safe_dict(db.get("Refills", pd.DataFrame())),
         "vendors": df_to_safe_dict(db.get("Vendors", pd.DataFrame())),
         "warehouse": df_to_safe_dict(db.get("Warehouse", pd.DataFrame())),
+        "purchased_products": df_to_safe_dict(db.get("Purchased_Products", pd.DataFrame())),
+        "stocks": df_to_safe_dict(db.get("Stocks", pd.DataFrame())),
+        "stock_assignments": df_to_safe_dict(db.get("Stock_Assignments", pd.DataFrame())),
         "our_pos": our_pos_enriched,
         "metrics": {
             "totalStockValue": round(total_value, 2),
@@ -1042,24 +1048,24 @@ def get_po_items(po_id):
 @app.route("/api/record-delivery", methods=["POST"])
 def record_delivery():
     """
-    Record vendor delivery against a PO. This adds to Vendor_Purchase sheet.
-    Accepts multiple products in a single delivery.
-    Skips products with 0 case count (not delivered).
+    Record vendor delivery against a PO. Saves ALL products to Purchased_Products.
+    Supports both PO products and custom products from vendor.
     """
     try:
         d = request.json
         po_id = str(d.get("po_id", "")).strip()
         vendor_id = str(d.get("vendor_id", "")).strip()
-        po_date = str(d.get("po_date", "")).strip()  # Date from PO creation
-        purchase_date = str(d.get("purchase_date", "")).strip()  # Manual entry by admin
-        products = d.get("products", [])  # List of products with delivery details
+        po_date = str(d.get("po_date", "")).strip()
+        purchase_date = str(d.get("purchase_date", "")).strip()
+        po_products = d.get("po_products", [])  # Products from PO
+        custom_products = d.get("custom_products", [])  # Custom products added by admin
         
         if not po_id:
             return jsonify(error="PO ID is required"), 400
         if not purchase_date:
             return jsonify(error="Purchase Date is required"), 400
-        if not products:
-            return jsonify(error="No products provided"), 400
+        if not po_products and not custom_products:
+            return jsonify(error="At least one product must be provided"), 400
         
         # Parse dates
         try:
@@ -1073,8 +1079,6 @@ def record_delivery():
             return jsonify(error="Invalid Purchase Date format"), 400
         
         purchases = db.get("Purchases", pd.DataFrame())
-        
-        # Initialize if empty with correct columns matching Excel
         if purchases.empty:
             purchases = pd.DataFrame(columns=[
                 "PO ID", "DATE", "PURCHASE DATE", "VENDOR ID", "PRODUCT ID",
@@ -1082,40 +1086,49 @@ def record_delivery():
                 "MRP", "PO PRICE", "PAYMENT MODE", "PAYMENT STATUS", "GST FILED"
             ])
         
-        warehouse = db.get("Warehouse", pd.DataFrame())
-        if warehouse.empty:
-            warehouse = pd.DataFrame(columns=["Product_ID", "Product_Name", "Available_Units", "Units_Per_Case", "Last_Received_Date", "Notes"])
+        purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        if purchased_products.empty:
+            purchased_products = pd.DataFrame(columns=[
+                "Product_ID", "Product_Name", "Available_Units", "Units_Per_Case", 
+                "Batch", "Received_Date", "Notes"
+            ])
         
         new_deliveries = []
-        products_recorded = 0
-        products_skipped = 0
+        new_purchased_items = []
+        po_products_recorded = 0
+        custom_products_recorded = 0
+        po_products_skipped = 0
         total_units_added = 0
         
-        for product in products:
+        # Process PO Products
+        for product in po_products:
             case_count = int(product.get("case_count", 0))
             
-            # Skip products with 0 case count (not delivered)
+            # Skip products with 0 case count
             if case_count <= 0:
-                products_skipped += 1
+                po_products_skipped += 1
                 continue
             
             product_id = str(product.get("product_id", "")).strip()
             product_name = str(product.get("product_name", "")).strip()
+            
+            if not product_id or not product_name:
+                po_products_skipped += 1
+                continue
+            
             batch = str(product.get("batch", "")).strip() or ""
             units_per_case = int(product.get("units_per_case", 1))
-            quantity = case_count * units_per_case  # Auto-calculated
+            quantity = case_count * units_per_case
             mrp = float(product.get("mrp", 0))
             po_price = float(product.get("po_price", 0))
             payment_mode = str(product.get("payment_mode", "")).strip()
             payment_status = str(product.get("payment_status", "")).strip()
             gst_filed = str(product.get("gst_filed", "")).strip()
             
-            # Common PO fields only for first row (except PO ID and PRODUCT ID which are needed for matching)
             is_first_row = len(new_deliveries) == 0
             
-            # Create delivery record
             new_deliveries.append({
-                "PO ID": po_id,
+                "PO ID": po_id if is_first_row else "",
                 "DATE": po_date_parsed if is_first_row else "",
                 "PURCHASE DATE": purchase_date_parsed if is_first_row else "",
                 "VENDOR ID": vendor_id if is_first_row else "",
@@ -1132,93 +1145,158 @@ def record_delivery():
                 "GST FILED": gst_filed if is_first_row else ""
             })
             
-            products_recorded += 1
-            total_units_added += quantity
+            new_purchased_items.append({
+                "Product_ID": product_id,
+                "Product_Name": product_name,
+                "Available_Units": quantity,
+                "Units_Per_Case": units_per_case,
+                "Batch": batch,
+                "Received_Date": purchase_date_parsed,
+                "Notes": "From PO"
+            })
             
-            # Update warehouse stock
-            wh_mask = warehouse["Product_ID"].astype(str) == product_id
-            if wh_mask.any():
-                warehouse.loc[wh_mask, "Available_Units"] = warehouse.loc[wh_mask, "Available_Units"].fillna(0).astype(int) + quantity
-                warehouse.loc[wh_mask, "Units_Per_Case"] = units_per_case
-                warehouse.loc[wh_mask, "Last_Received_Date"] = purchase_date_parsed
-            else:
-                new_wh = pd.DataFrame([{
-                    "Product_ID": product_id,
-                    "Product_Name": product_name,
-                    "Available_Units": quantity,
-                    "Units_Per_Case": units_per_case,
-                    "Last_Received_Date": purchase_date_parsed,
-                    "Notes": f"From PO: {po_id}"
-                }])
-                warehouse = pd.concat([warehouse, new_wh], ignore_index=True)
+            po_products_recorded += 1
+            total_units_added += quantity
         
-        # Save deliveries if any
+        # Process Custom Products (not in original PO)
+        for product in custom_products:
+            quantity = int(product.get("quantity", 0))
+            
+            if quantity <= 0:
+                continue
+            
+            product_id = str(product.get("product_id", "")).strip()
+            product_name = str(product.get("product_name", "")).strip()
+            
+            if not product_id or not product_name:
+                continue
+            
+            batch = str(product.get("batch", "")).strip() or ""
+            units_per_case = int(product.get("units_per_case", 1))
+            mrp = float(product.get("mrp", 0))
+            po_price = float(product.get("po_price", 0))
+            
+            is_first_row = len(new_deliveries) == 0
+            
+            # Add custom products to Purchases sheet as well
+            new_deliveries.append({
+                "PO ID": po_id if is_first_row else "",
+                "DATE": po_date_parsed if is_first_row else "",
+                "PURCHASE DATE": purchase_date_parsed if is_first_row else "",
+                "VENDOR ID": vendor_id if is_first_row else "",
+                "PRODUCT ID": product_id,
+                "PRODUCT NAME": product_name,
+                "BATCH": batch if is_first_row else "",
+                "UNIT/CASE": units_per_case,
+                "CASE COUNT": 0,
+                "QUANTITY": quantity,
+                "MRP": mrp,
+                "PO PRICE": po_price,
+                "PAYMENT MODE": "",
+                "PAYMENT STATUS": "",
+                "GST FILED": ""
+            })
+            
+            # Also add to purchased_products
+            new_purchased_items.append({
+                "Product_ID": product_id,
+                "Product_Name": product_name,
+                "Available_Units": quantity,
+                "Units_Per_Case": units_per_case,
+                "Batch": batch,
+                "Received_Date": purchase_date_parsed,
+                "Notes": "Custom Product (not in PO)"
+            })
+            
+            custom_products_recorded += 1
+            total_units_added += quantity
+        
+        # Save all data
         if new_deliveries:
             new_df = pd.DataFrame(new_deliveries)
             db["Purchases"] = pd.concat([purchases, new_df], ignore_index=True)
-            db["Warehouse"] = warehouse
+        
+        if new_purchased_items:
+            # Check if products already exist in purchased_products and update availability instead
+            for new_item in new_purchased_items:
+                product_id = new_item["Product_ID"]
+                product_name = new_item["Product_Name"]
+                new_units = new_item["Available_Units"]
+                
+                # Find if product already exists in purchased_products
+                existing_row = purchased_products[
+                    (purchased_products["Product_ID"].astype(str).str.strip() == product_id) &
+                    (purchased_products["Product_Name"].astype(str).str.strip() == product_name)
+                ]
+                
+                if not existing_row.empty:
+                    # Product already exists - increase the availability count
+                    idx = existing_row.index[0]
+                    current_units = int(purchased_products.at[idx, "Available_Units"] or 0)
+                    purchased_products.at[idx, "Available_Units"] = current_units + new_units
+                else:
+                    # Product doesn't exist - add new row
+                    purchased_products = pd.concat([
+                        purchased_products, 
+                        pd.DataFrame([new_item])
+                    ], ignore_index=True)
             
-            # Update OUR_PO Status for delivered products
-            our_po = db.get("OUR_PO", pd.DataFrame())
-            if not our_po.empty and "Status" not in our_po.columns:
-                our_po["Status"] = "Pending"
+            db["Purchased_Products"] = purchased_products
+        
+        # Update OUR_PO Status
+        our_po = db.get("OUR_PO", pd.DataFrame())
+        if not our_po.empty and "Status" not in our_po.columns:
+            our_po["Status"] = "Pending"
+        
+        if not our_po.empty:
+            po_first_row_idx = None
+            po_product_rows = []
+            current_po = None
             
-            if not our_po.empty:
-                # Find the first row index for this PO (where PO_ID is set)
-                po_first_row_idx = None
-                po_product_rows = []  # Track all product rows for this PO
-                current_po = None
+            for idx, row in our_po.iterrows():
+                row_po_id = row.get("PO_ID")
+                row_po_id_str = str(row_po_id).strip() if pd.notna(row_po_id) else ""
+                is_valid_po_id = row_po_id_str and row_po_id_str not in ("nan", "None", "")
                 
-                for idx, row in our_po.iterrows():
-                    row_po_id = row.get("PO_ID")
-                    # Handle None, NaN, "nan", "None", and empty strings
-                    row_po_id_str = str(row_po_id).strip() if pd.notna(row_po_id) else ""
-                    is_valid_po_id = row_po_id_str and row_po_id_str not in ("nan", "None", "")
-                    
-                    if is_valid_po_id:
-                        current_po = row_po_id_str
-                        if current_po == po_id:
-                            po_first_row_idx = idx
-                            po_product_rows = [idx]
-                    elif current_po == po_id:
-                        po_product_rows.append(idx)
-                
-                # Check if all products in this PO are delivered
-                all_delivered = True
-                any_partial = False
-                
-                for delivery in new_deliveries:
-                    product_id = delivery["PRODUCT ID"]
-                    delivered_cases = delivery["CASE COUNT"]
-                    
-                    # Find matching product in PO rows
-                    for row_idx in po_product_rows:
-                        if str(our_po.at[row_idx, "Product_ID"]).strip() == product_id:
-                            ordered_cases = int(our_po.at[row_idx, "No_of_Cases"] or 0)
-                            if delivered_cases < ordered_cases:
-                                all_delivered = False
-                                if delivered_cases > 0:
-                                    any_partial = True
-                            break
-                
-                # Update status in the first row only
-                if po_first_row_idx is not None:
-                    if all_delivered:
-                        our_po.at[po_first_row_idx, "Status"] = "Completed"
-                    elif any_partial:
-                        our_po.at[po_first_row_idx, "Status"] = "Partial"
-                
-                db["OUR_PO"] = our_po
+                if is_valid_po_id:
+                    current_po = row_po_id_str
+                    if current_po == po_id:
+                        po_first_row_idx = idx
+                        po_product_rows = [idx]
+                elif current_po == po_id:
+                    po_product_rows.append(idx)
             
-            save_all()
+            all_delivered = True
+            
+            for delivery in new_deliveries:
+                product_id = delivery["PRODUCT ID"]
+                delivered_cases = delivery["CASE COUNT"]
+                
+                for row_idx in po_product_rows:
+                    if str(our_po.at[row_idx, "Product_ID"]).strip() == product_id:
+                        ordered_cases = int(our_po.at[row_idx, "No_of_Cases"] or 0)
+                        if delivered_cases < ordered_cases:
+                            all_delivered = False
+                        break
+            
+            if po_first_row_idx is not None:
+                if all_delivered:
+                    our_po.at[po_first_row_idx, "Status"] = "Completed"
+                else:
+                    our_po.at[po_first_row_idx, "Status"] = "Pending"
+            
+            db["OUR_PO"] = our_po
+        
+        save_all()
         
         return jsonify(
             success=True,
             message=f"Recorded delivery for PO {po_id}",
-            products_recorded=products_recorded,
-            products_skipped=products_skipped,
+            po_products_recorded=po_products_recorded,
+            custom_products_recorded=custom_products_recorded,
+            po_products_skipped=po_products_skipped,
             total_units=total_units_added,
-            warehouse_updated=True
+            purchased_products_updated=True
         )
     except Exception as e:
         return jsonify(error=str(e)), 500
@@ -1274,22 +1352,42 @@ def refill():
     stock = db["Stock"]
     mask = (stock["Machine_ID"] == mid) & (stock["Product_ID"] == pid)
 
+    # Optional metadata: Batch and Stock_ID
+    batch = d.get('batch')
+    stock_id = d.get('stockId') or d.get('Stock_ID')
+
     if mask.any():
         stock.loc[mask, "Current_Stock"] += qty
+        # If existing row, optionally set Stock_ID/Batch if provided
+        if stock_id is not None:
+            stock.loc[mask, 'Stock_ID'] = stock_id
+        if batch is not None:
+            stock.loc[mask, 'Batch'] = batch
     else:
-        db["Stock"] = pd.concat([stock, pd.DataFrame([{
+        new_row = {
             "Machine_ID": mid,
             "Product_ID": pid,
             "Current_Stock": qty
-        }])])
+        }
+        if stock_id is not None:
+            new_row['Stock_ID'] = stock_id
+        if batch is not None:
+            new_row['Batch'] = batch
+        db["Stock"] = pd.concat([stock, pd.DataFrame([new_row])])
 
-    db["Refills"] = pd.concat([db["Refills"], pd.DataFrame([{
+    refill_entry = {
         "Date": datetime.now().strftime("%Y-%m-%d"),
         "Refiller_ID": d.get("refillerId", "R001"),
         "Machine_ID": mid,
         "Product_ID": pid,
         "Qty": qty
-    }])])
+    }
+    if batch is not None:
+        refill_entry['Batch'] = batch
+    if stock_id is not None:
+        refill_entry['Stock_ID'] = stock_id
+
+    db["Refills"] = pd.concat([db["Refills"], pd.DataFrame([refill_entry])])
 
     save_all()
     return jsonify(success=True)
@@ -1314,6 +1412,382 @@ def update_stock():
 
     save_all()
     return jsonify(success=True)
+
+# --------------------------------------------------
+# PURCHASED_PRODUCTS ROUTES (Received goods awaiting warehouse approval)
+# --------------------------------------------------
+@app.route("/api/purchased-products/items", methods=["GET"])
+def get_purchased_products():
+    """Get all purchased products awaiting warehouse approval"""
+    try:
+        purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        return jsonify(items=df_to_safe_dict(purchased_products))
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+@app.route("/api/purchased-products/move-to-warehouse", methods=["POST"])
+def move_purchased_products_to_warehouse():
+    """Move items from purchased products to warehouse (admin action)"""
+    try:
+        d = request.json
+        purchased_items = d.get("items", [])  # List of {product_id, available_units, units_per_case, batch}
+        
+        if not purchased_items:
+            return jsonify(error="No items provided"), 400
+        
+        purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        warehouse = db.get("Warehouse", pd.DataFrame())
+        
+        if purchased_products.empty:
+            return jsonify(error="Purchased products is empty"), 400
+        
+        if warehouse.empty:
+            warehouse = pd.DataFrame(columns=["Product_ID", "Product_Name", "Available_Units", "Units_Per_Case", "Last_Received_Date", "Notes"])
+        
+        moved_count = 0
+        total_units = 0
+        
+        for item in purchased_items:
+            product_id = str(item.get("product_id", "")).strip()
+            units_to_move = int(item.get("available_units", 0))
+            
+            if not product_id or units_to_move <= 0:
+                continue
+            
+            # Find the purchased products item
+            pp_mask = purchased_products["Product_ID"].astype(str) == product_id
+            if not pp_mask.any():
+                continue
+            
+            pp_row = purchased_products[pp_mask].iloc[0]
+            product_name = pp_row.get("Product_Name", "")
+            units_per_case = int(pp_row.get("Units_Per_Case", 1))
+            batch = pp_row.get("Batch", "")
+            po_id = pp_row.get("PO_ID", "")
+            
+            # Add to warehouse
+            wh_mask = warehouse["Product_ID"].astype(str) == product_id
+            if wh_mask.any():
+                warehouse.loc[wh_mask, "Available_Units"] = warehouse.loc[wh_mask, "Available_Units"].fillna(0).astype(int) + units_to_move
+                warehouse.loc[wh_mask, "Units_Per_Case"] = units_per_case
+                warehouse.loc[wh_mask, "Last_Received_Date"] = datetime.now().strftime("%Y-%m-%d")
+            else:
+                new_wh = pd.DataFrame([{
+                    "Product_ID": product_id,
+                    "Product_Name": product_name,
+                    "Available_Units": units_to_move,
+                    "Units_Per_Case": units_per_case,
+                    "Last_Received_Date": datetime.now().strftime("%Y-%m-%d"),
+                    "Notes": f"From Purchased Products - Batch: {batch}, PO: {po_id}"
+                }])
+                warehouse = pd.concat([warehouse, new_wh], ignore_index=True)
+            
+            # Remove from purchased products
+            purchased_products = purchased_products[~pp_mask].reset_index(drop=True)
+            moved_count += 1
+            total_units += units_to_move
+        
+        db["Purchased_Products"] = purchased_products
+        db["Warehouse"] = warehouse
+        save_all()
+        
+        return jsonify(success=True, message=f"Moved {moved_count} items to warehouse", total_units=total_units)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+# --------------------------------------------------
+# STOCKS MANAGEMENT ROUTES
+# --------------------------------------------------
+@app.route("/api/stocks/create", methods=["POST"])
+def create_stock():
+    """Create a new stock (collection of products from inventory) assigned to a specific machine"""
+    try:
+        import uuid
+        d = request.json
+        stock_name = str(d.get("stock_name", "")).strip()
+        machine_id = str(d.get("machine_id", "")).strip()  # REQUIRED: Machine assignment
+        products = d.get("products", [])  # List of {product_id, units}
+        
+        if not stock_name or not products:
+            return jsonify(error="Stock name and products are required"), 400
+        
+        if not machine_id:
+            return jsonify(error="Machine assignment is required"), 400
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        if stocks.empty:
+            stocks = pd.DataFrame(columns=["Stock_ID", "Stock_Name", "Machine_ID", "Created_Date", "Status", "Total_Units", "Products_Count"])
+        
+        inventory = db.get("Inventory", pd.DataFrame())
+        
+        # Validate and prepare products
+        stock_products = []
+        total_units = 0
+        
+        for product in products:
+            product_id = str(product.get("product_id", "")).strip()
+            units = int(product.get("units", 0))
+            
+            if not product_id or units <= 0:
+                continue
+            
+            # Check inventory availability
+            inv_mask = inventory["Product_ID"].astype(str) == product_id
+            if not inv_mask.any():
+                return jsonify(error=f"Product {product_id} not found in inventory"), 404
+            
+            inv_item = inventory[inv_mask].iloc[0]
+            available = int(inv_item.get("Available_Units", 0))
+            
+            if available < units:
+                return jsonify(error=f"Insufficient stock for {product_id}. Available: {available}, Requested: {units}"), 400
+            
+            stock_products.append({
+                "product_id": product_id,
+                "product_name": inv_item.get("Product_Name", ""),
+                "units": units
+            })
+            total_units += units
+        
+        if not stock_products:
+            return jsonify(error="No valid products to add"), 400
+        
+        # Generate unique Stock_ID using timestamp (format: STK-YYYYMMDD-HHMMSS)
+        stock_id = f"STK-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        
+        # Create stock entry with Machine_ID
+        new_stock = {
+            "Stock_ID": stock_id,
+            "Stock_Name": stock_name,
+            "Machine_ID": machine_id,
+            "Created_Date": datetime.now().strftime("%Y-%m-%d"),
+            "Status": "Active",
+            "Total_Units": total_units,
+            "Products_Count": len(stock_products)
+        }
+        
+        stocks = pd.concat([stocks, pd.DataFrame([new_stock])], ignore_index=True)
+        db["Stocks"] = stocks
+        
+        # Store stock product details
+        stock_assignments = db.get("Stock_Assignments", pd.DataFrame())
+        if stock_assignments.empty:
+            stock_assignments = pd.DataFrame(columns=["Stock_ID", "Product_ID", "Product_Name", "Units", "Assignment_Status", "Machine_ID", "Assigned_Date"])
+        
+        for product in stock_products:
+            assignment = {
+                "Stock_ID": stock_id,
+                "Product_ID": product["product_id"],
+                "Product_Name": product["product_name"],
+                "Units": product["units"],
+                "Assignment_Status": "Assigned",
+                "Machine_ID": machine_id,
+                "Assigned_Date": datetime.now().strftime("%Y-%m-%d")
+            }
+            stock_assignments = pd.concat([stock_assignments, pd.DataFrame([assignment])], ignore_index=True)
+            
+            # Deduct from inventory
+            inv_mask = inventory["Product_ID"].astype(str) == product["product_id"]
+            inventory.loc[inv_mask, "Available_Units"] = inventory.loc[inv_mask, "Available_Units"].fillna(0).astype(int) - product["units"]
+            # Remove if stock becomes 0
+            inventory = inventory[inventory["Available_Units"] > 0].reset_index(drop=True)
+        
+        db["Inventory"] = inventory
+        db["Stock_Assignments"] = stock_assignments
+        save_all()
+        
+        return jsonify(success=True, stock_id=stock_id, message=f"Created stock {stock_id} with {total_units} units")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+@app.route("/api/stocks/list", methods=["GET"])
+def list_stocks():
+    """Get all stocks"""
+    try:
+        stocks = db.get("Stocks", pd.DataFrame())
+        stock_assignments = db.get("Stock_Assignments", pd.DataFrame())
+        
+        stocks_list = []
+        for _, stock in stocks.iterrows():
+            stock_id = stock.get("Stock_ID", "")
+            assignments = stock_assignments[stock_assignments["Stock_ID"] == stock_id] if not stock_assignments.empty else pd.DataFrame()
+            
+            stocks_list.append({
+                "Stock_ID": stock_id,
+                "Stock_Name": stock.get("Stock_Name", ""),
+                "Machine_ID": stock.get("Machine_ID", ""),
+                "Created_Date": stock.get("Created_Date", ""),
+                "Status": stock.get("Status", ""),
+                "Total_Units": int(stock.get("Total_Units", 0)),
+                "Products_Count": int(stock.get("Products_Count", 0)),
+                "Products": df_to_safe_dict(assignments)
+            })
+        
+        return jsonify(stocks=stocks_list)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+@app.route("/api/stocks/create-from-warehouse", methods=["POST"])
+def create_stock_from_warehouse():
+    """Create a new stock from warehouse items and assign to a machine"""
+    try:
+        d = request.json
+        stock_name = str(d.get("stock_name", "")).strip()
+        machine_id = str(d.get("machine_id", "")).strip()
+        products = d.get("products", [])  # List of {product_id, units}
+        
+        if not stock_name or not machine_id:
+            return jsonify(error="Stock name and machine assignment are required"), 400
+        
+        if not products:
+            return jsonify(error="At least one product is required"), 400
+        
+        warehouse = db.get("Warehouse", pd.DataFrame())
+        stocks = db.get("Stocks", pd.DataFrame())
+        if stocks.empty:
+            stocks = pd.DataFrame(columns=["Stock_ID", "Stock_Name", "Machine_ID", "Created_Date", "Status", "Total_Units", "Products_Count"])
+        
+        # Validate and prepare products from warehouse
+        stock_products = []
+        total_units = 0
+        
+        for product in products:
+            product_id = str(product.get("product_id", "")).strip()
+            units = int(product.get("units", 0))
+            
+            if not product_id or units <= 0:
+                continue
+            
+            # Check warehouse availability
+            if warehouse.empty:
+                return jsonify(error=f"Warehouse is empty"), 400
+            
+            mask = warehouse["Product_ID"].astype(str) == product_id
+            if not mask.any():
+                return jsonify(error=f"Product {product_id} not found in warehouse"), 404
+            
+            warehouse_item = warehouse[mask].iloc[0]
+            available = int(warehouse_item.get("Available_Units", 0))
+            
+            if available < units:
+                return jsonify(error=f"Insufficient warehouse stock for {product_id}. Available: {available}, Requested: {units}"), 400
+            
+            stock_products.append({
+                "product_id": product_id,
+                "product_name": warehouse_item.get("Product_Name", ""),
+                "units": units
+            })
+            total_units += units
+        
+        if not stock_products:
+            return jsonify(error="No valid products to create stock"), 400
+        
+        # Generate unique Stock_ID using timestamp (format: STK-YYYYMMDD-HHMMSS)
+        stock_id = f"STK-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        
+        # Create stock entry with Machine_ID
+        new_stock = {
+            "Stock_ID": stock_id,
+            "Stock_Name": stock_name,
+            "Machine_ID": machine_id,
+            "Created_Date": datetime.now().strftime("%Y-%m-%d"),
+            "Status": "Active",
+            "Total_Units": total_units,
+            "Products_Count": len(stock_products)
+        }
+        
+        stocks = pd.concat([stocks, pd.DataFrame([new_stock])], ignore_index=True)
+        db["Stocks"] = stocks
+        
+        # Store stock product assignments
+        stock_assignments = db.get("Stock_Assignments", pd.DataFrame())
+        if stock_assignments.empty:
+            stock_assignments = pd.DataFrame(columns=["Stock_ID", "Product_ID", "Product_Name", "Units", "Assignment_Status", "Machine_ID", "Assigned_Date"])
+        
+        for product in stock_products:
+            assignment = {
+                "Stock_ID": stock_id,
+                "Product_ID": product["product_id"],
+                "Product_Name": product["product_name"],
+                "Units": product["units"],
+                "Assignment_Status": "Assigned",
+                "Machine_ID": machine_id,
+                "Assigned_Date": datetime.now().strftime("%Y-%m-%d")
+            }
+            stock_assignments = pd.concat([stock_assignments, pd.DataFrame([assignment])], ignore_index=True)
+            
+            # Deduct from warehouse
+            mask = warehouse["Product_ID"].astype(str) == product["product_id"]
+            warehouse.loc[mask, "Available_Units"] = warehouse.loc[mask, "Available_Units"].fillna(0).astype(int) - product["units"]
+            # Remove if stock becomes 0
+            warehouse = warehouse[warehouse["Available_Units"] > 0].reset_index(drop=True)
+        
+        db["Warehouse"] = warehouse
+        db["Stock_Assignments"] = stock_assignments
+        save_all()
+        
+        return jsonify(success=True, stock_id=stock_id, message=f"Created stock {stock_id} with {total_units} units assigned to {machine_id}")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+@app.route("/api/stocks/assign-to-machine", methods=["POST"])
+def assign_stock_to_machine():
+    """Assign a stock to a machine"""
+    try:
+        d = request.json
+        stock_id = str(d.get("stock_id", "")).strip()
+        machine_id = str(d.get("machine_id", "")).strip()
+        
+        if not stock_id or not machine_id:
+            return jsonify(error="Stock ID and Machine ID are required"), 400
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        stock_assignments = db.get("Stock_Assignments", pd.DataFrame())
+        stock = db.get("Stock", pd.DataFrame())
+        
+        if stocks.empty or (stocks["Stock_ID"] != stock_id).all():
+            return jsonify(error="Stock not found"), 404
+        
+        # Get all products in this stock
+        assignments = stock_assignments[stock_assignments["Stock_ID"] == stock_id] if not stock_assignments.empty else pd.DataFrame()
+        
+        if assignments.empty:
+            return jsonify(error="No products in this stock"), 400
+        
+        # Update stock assignments status
+        for _, assignment in assignments.iterrows():
+            product_id = assignment.get("Product_ID", "")
+            units = int(assignment.get("Units", 0))
+            
+            mask = (stock_assignments["Stock_ID"] == stock_id) & (stock_assignments["Product_ID"] == product_id)
+            stock_assignments.loc[mask, "Assignment_Status"] = "Assigned"
+            stock_assignments.loc[mask, "Machine_ID"] = machine_id
+            stock_assignments.loc[mask, "Assigned_Date"] = datetime.now().strftime("%Y-%m-%d")
+            
+            # Update machine stock
+            s_mask = (stock["Machine_ID"] == machine_id) & (stock["Product_ID"] == product_id)
+            if s_mask.any():
+                stock.loc[s_mask, "Current_Stock"] = stock.loc[s_mask, "Current_Stock"].fillna(0).astype(int) + units
+            else:
+                new_stock_entry = pd.DataFrame([{
+                    "Machine_ID": machine_id,
+                    "Product_ID": product_id,
+                    "Current_Stock": units
+                }])
+                stock = pd.concat([stock, new_stock_entry], ignore_index=True)
+        
+        # Update stock status
+        stock_mask = stocks["Stock_ID"] == stock_id
+        stocks.loc[stock_mask, "Status"] = "Assigned_to_Machine"
+        
+        db["Stocks"] = stocks
+        db["Stock_Assignments"] = stock_assignments
+        db["Stock"] = stock
+        save_all()
+        
+        return jsonify(success=True, message=f"Stock {stock_id} assigned to machine {machine_id}")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
 
 # --------------------------------------------------
 # WAREHOUSE ROUTES
@@ -1510,6 +1984,393 @@ def warehouse_recommendation():
                     })
         
         return jsonify(recommendations=recommendations)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+# --------------------------------------------------
+# BATCH STOCK MANAGEMENT ENDPOINTS
+# --------------------------------------------------
+@app.route("/api/stocks/create-batch", methods=["POST"])
+def create_batch_stocks():
+    """Create 4 stocks (S1, S2, S3, S4) for a batch assigned to 4 machines"""
+    try:
+        d = request.json
+        batch_number = str(d.get("batch_number", "")).strip()
+        machine_ids = d.get("machine_ids", [])  # Should be 4 machine IDs
+        created_date = d.get("created_date", datetime.now().strftime("%Y-%m-%d"))
+        
+        if not batch_number:
+            return jsonify(error="Batch number is required"), 400
+        
+        if len(machine_ids) != 4:
+            return jsonify(error="Exactly 4 machine IDs are required for a batch"), 400
+        
+        # Initialize sheets if they don't exist
+        stocks = db.get("Stocks", pd.DataFrame())
+        if stocks.empty:
+            stocks = pd.DataFrame(columns=["Stock_ID", "Batch_Number", "Stock_Name", "Machine_ID", "Created_Date", "Status", "Cover_List", "Total_Products", "Total_Units"])
+        
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        if stock_products.empty:
+            stock_products = pd.DataFrame(columns=["Stock_ID", "Batch_Number", "Stock_Name", "Cover_Name", "Product_ID", "Product_Name", "Units", "Created_Date"])
+        
+        created_stocks = []
+        stock_names = ["S1", "S2", "S3", "S4"]
+        
+        for i, machine_id in enumerate(machine_ids):
+            stock_name = stock_names[i]
+            stock_id = f"STK-{batch_number}-{stock_name}"
+            
+            # Check if stock already exists
+            if not stocks.empty and (stocks["Stock_ID"] == stock_id).any():
+                return jsonify(error=f"Stock {stock_id} already exists"), 400
+            
+            new_stock = {
+                "Stock_ID": stock_id,
+                "Batch_Number": batch_number,
+                "Stock_Name": stock_name,
+                "Machine_ID": machine_id,
+                "Created_Date": created_date,
+                "Status": "Active",
+                "Cover_List": "",  # Will be populated as covers are added
+                "Total_Products": 0,
+                "Total_Units": 0
+            }
+            
+            stocks = pd.concat([stocks, pd.DataFrame([new_stock])], ignore_index=True)
+            created_stocks.append(stock_id)
+        
+        db["Stocks"] = stocks
+        db["Stock_Products"] = stock_products
+        save_all()
+        
+        return jsonify(success=True, created_stocks=created_stocks, message=f"Created batch {batch_number} with stocks: {', '.join(created_stocks)}")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/create-batch-full", methods=["POST"])
+def create_batch_full():
+    """Create complete batch with all stocks, covers, and products in one operation"""
+    try:
+        d = request.json
+        batch_number = str(d.get("batch_number", "")).strip()
+        machine_ids = d.get("machine_ids", [])  # Should be 4 machine IDs [M, M2, M3, M4]
+        created_date = d.get("created_date", datetime.now().strftime("%Y-%m-%d"))
+        stocks_data = d.get("stocks", {})  # { S1: {machine, covers: {C1: [...products]}}, ... }
+        
+        if not batch_number:
+            return jsonify(error="Batch number is required"), 400
+        
+        if len(machine_ids) != 4:
+            return jsonify(error="Exactly 4 machine IDs are required for a batch"), 400
+        
+        if not stocks_data:
+            return jsonify(error="At least one stock with covers and products is required"), 400
+        
+        # Initialize sheets if they don't exist
+        stocks = db.get("Stocks", pd.DataFrame())
+        if stocks.empty:
+            stocks = pd.DataFrame(columns=["Stock_ID", "Batch_Number", "Stock_Name", "Machine_ID", "Created_Date", "Status", "Cover_List", "Total_Products", "Total_Units"])
+        
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        if stock_products.empty:
+            stock_products = pd.DataFrame(columns=["Stock_ID", "Batch_Number", "Stock_Name", "Cover_Name", "Product_ID", "Product_Name", "Units", "Created_Date"])
+        
+        created_stocks = []
+        stock_names = ["S1", "S2", "S3", "S4"]
+        
+        # Process each stock (S1, S2, S3, S4)
+        for i, stock_name in enumerate(stock_names):
+            machine_id = machine_ids[i]
+            stock_id = f"STK-{batch_number}-{stock_name}"
+            
+            # Check if stock already exists
+            if not stocks.empty and (stocks["Stock_ID"] == stock_id).any():
+                return jsonify(error=f"Stock {stock_id} already exists"), 400
+            
+            # Get data for this stock from the form
+            stock_form_data = stocks_data.get(stock_name, {})
+            covers_dict = stock_form_data.get("covers", {})
+            
+            # Calculate totals for this stock
+            total_products = 0
+            total_units = 0
+            cover_names = []
+            
+            # Process covers and products
+            for cover_name, products_list in covers_dict.items():
+                if not products_list:
+                    continue
+                
+                cover_names.append(cover_name)
+                
+                for product in products_list:
+                    product_id = str(product.get("product_id", "")).strip()
+                    product_name = str(product.get("product_name", "")).strip()
+                    units = int(product.get("units", 0))
+                    
+                    if not product_id or not product_name or units <= 0:
+                        continue
+                    
+                    # Add product entry
+                    new_product_entry = {
+                        "Stock_ID": stock_id,
+                        "Batch_Number": batch_number,
+                        "Stock_Name": stock_name,
+                        "Cover_Name": cover_name,
+                        "Product_ID": product_id,
+                        "Product_Name": product_name,
+                        "Units": units,
+                        "Created_Date": created_date
+                    }
+                    
+                    stock_products = pd.concat([stock_products, pd.DataFrame([new_product_entry])], ignore_index=True)
+                    total_products += 1
+                    total_units += units
+            
+            # Create stock entry
+            new_stock = {
+                "Stock_ID": stock_id,
+                "Batch_Number": batch_number,
+                "Stock_Name": stock_name,
+                "Machine_ID": machine_id,
+                "Created_Date": created_date,
+                "Status": "Active",
+                "Cover_List": ", ".join(cover_names) if cover_names else "",
+                "Total_Products": total_products,
+                "Total_Units": total_units
+            }
+            
+            stocks = pd.concat([stocks, pd.DataFrame([new_stock])], ignore_index=True)
+            created_stocks.append(stock_id)
+        
+        db["Stocks"] = stocks
+        db["Stock_Products"] = stock_products
+        save_all()
+        
+        return jsonify(
+            success=True,
+            batch_number=batch_number,
+            created_stocks=created_stocks,
+            message=f"Successfully created batch {batch_number} with {len(created_stocks)} stocks and all covers/products"
+        )
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/add-cover", methods=["POST"])
+def add_cover_to_stock():
+    """Add a cover (C1, C2, etc.) to a stock"""
+    try:
+        d = request.json
+        stock_id = str(d.get("stock_id", "")).strip()
+        cover_name = str(d.get("cover_name", "")).strip()
+        
+        if not stock_id or not cover_name:
+            return jsonify(error="Stock ID and cover name are required"), 400
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        
+        if stocks.empty or (stocks["Stock_ID"] != stock_id).all():
+            return jsonify(error="Stock not found"), 404
+        
+        # Find stock and update cover list
+        stock_mask = stocks["Stock_ID"] == stock_id
+        stock = stocks[stock_mask].iloc[0]
+        covers = stock.get("Cover_List", "")
+        covers_list = [c.strip() for c in covers.split(",") if c.strip()] if covers else []
+        
+        if cover_name in covers_list:
+            return jsonify(error=f"Cover {cover_name} already exists in this stock"), 400
+        
+        covers_list.append(cover_name)
+        new_cover_list = ", ".join(covers_list)
+        
+        stocks.loc[stock_mask, "Cover_List"] = new_cover_list
+        db["Stocks"] = stocks
+        save_all()
+        
+        return jsonify(success=True, message=f"Cover {cover_name} added to stock {stock_id}")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/add-product", methods=["POST"])
+def add_product_to_cover():
+    """Add a product to a cover in a stock"""
+    try:
+        d = request.json
+        stock_id = str(d.get("stock_id", "")).strip()
+        cover_name = str(d.get("cover_name", "")).strip()
+        product_id = str(d.get("product_id", "")).strip()
+        product_name = str(d.get("product_name", "")).strip()
+        units = int(d.get("units", 0))
+        
+        if not all([stock_id, cover_name, product_id, product_name, units > 0]):
+            return jsonify(error="Stock ID, cover name, product ID, product name, and units are required"), 400
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stocks.empty or (stocks["Stock_ID"] != stock_id).all():
+            return jsonify(error="Stock not found"), 404
+        
+        stock = stocks[stocks["Stock_ID"] == stock_id].iloc[0]
+        batch_number = stock.get("Batch_Number", "")
+        stock_name = stock.get("Stock_Name", "")
+        created_date = stock.get("Created_Date", datetime.now().strftime("%Y-%m-%d"))
+        
+        # Add product entry
+        new_product = {
+            "Stock_ID": stock_id,
+            "Batch_Number": batch_number,
+            "Stock_Name": stock_name,
+            "Cover_Name": cover_name,
+            "Product_ID": product_id,
+            "Product_Name": product_name,
+            "Units": units,
+            "Created_Date": created_date
+        }
+        
+        stock_products = pd.concat([stock_products, pd.DataFrame([new_product])], ignore_index=True)
+        
+        # Update stock totals
+        total_products = 0
+        total_units = 0
+        
+        if not stock_products.empty:
+            stock_filter = stock_products["Stock_ID"] == stock_id
+            total_products = len(stock_products[stock_filter])
+            total_units = int(stock_products[stock_filter]["Units"].sum())
+        
+        stock_mask = stocks["Stock_ID"] == stock_id
+        stocks.loc[stock_mask, "Total_Products"] = total_products
+        stocks.loc[stock_mask, "Total_Units"] = total_units
+        
+        db["Stocks"] = stocks
+        db["Stock_Products"] = stock_products
+        save_all()
+        
+        return jsonify(success=True, message=f"Product {product_id} added to cover {cover_name}")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-covers/<stock_id>", methods=["GET"])
+def get_stock_covers(stock_id):
+    """Get all covers and products in a specific stock"""
+    try:
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stock_products.empty:
+            return jsonify(covers=[])
+        
+        stock_filter = stock_products["Stock_ID"] == stock_id
+        stock_data = stock_products[stock_filter]
+        
+        if stock_data.empty:
+            return jsonify(covers=[])
+        
+        # Group by cover
+        covers = {}
+        for _, row in stock_data.iterrows():
+            cover = row.get("Cover_Name", "")
+            if cover not in covers:
+                covers[cover] = []
+            
+            covers[cover].append({
+                "product_id": row.get("Product_ID", ""),
+                "product_name": row.get("Product_Name", ""),
+                "units": int(row.get("Units", 0))
+            })
+        
+        covers_list = [{"cover_name": cover, "products": products} for cover, products in covers.items()]
+        return jsonify(covers=covers_list)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/suggest-products/<batch_number>/<cover_name>", methods=["GET"])
+def suggest_products_from_batch(batch_number, cover_name):
+    """Get product suggestions from a specific batch and cover (typically Batch 1, C1)"""
+    try:
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stock_products.empty:
+            return jsonify(suggestions=[])
+        
+        # Find products in the specified batch's first stock (S1) and cover
+        filter_mask = (
+            (stock_products["Batch_Number"] == batch_number) &
+            (stock_products["Stock_Name"] == "S1") &
+            (stock_products["Cover_Name"] == cover_name)
+        )
+        
+        suggestions_data = stock_products[filter_mask]
+        
+        suggestions = []
+        for _, row in suggestions_data.iterrows():
+            suggestions.append({
+                "product_id": row.get("Product_ID", ""),
+                "product_name": row.get("Product_Name", ""),
+                "available_units": int(row.get("Units", 0)),
+                "batch_from": batch_number
+            })
+        
+        return jsonify(suggestions=suggestions)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-batches", methods=["GET"])
+def get_all_batches():
+    """Get all batch numbers for reference"""
+    try:
+        stocks = db.get("Stocks", pd.DataFrame())
+        
+        if stocks.empty:
+            return jsonify(batches=[])
+        
+        batches = stocks["Batch_Number"].unique().tolist()
+        return jsonify(batches=sorted(batches))
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-batch-details/<batch_number>", methods=["GET"])
+def get_batch_details(batch_number):
+    """Get details of all stocks in a batch"""
+    try:
+        stocks = db.get("Stocks", pd.DataFrame())
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stocks.empty:
+            return jsonify(stocks=[])
+        
+        batch_filter = stocks["Batch_Number"] == batch_number
+        batch_stocks = stocks[batch_filter]
+        
+        stocks_list = []
+        for _, stock in batch_stocks.iterrows():
+            stock_id = stock.get("Stock_ID", "")
+            products_filter = stock_products["Stock_ID"] == stock_id
+            products = stock_products[products_filter]
+            
+            stocks_list.append({
+                "stock_id": stock_id,
+                "stock_name": stock.get("Stock_Name", ""),
+                "machine_id": stock.get("Machine_ID", ""),
+                "created_date": stock.get("Created_Date", ""),
+                "status": stock.get("Status", ""),
+                "cover_list": stock.get("Cover_List", ""),
+                "total_products": int(stock.get("Total_Products", 0)),
+                "total_units": int(stock.get("Total_Units", 0)),
+                "products": df_to_safe_dict(products)
+            })
+        
+        return jsonify(stocks=stocks_list)
     except Exception as e:
         return jsonify(error=str(e)), 500
 

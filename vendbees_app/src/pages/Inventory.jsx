@@ -660,8 +660,8 @@ const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving })
     );
 };
 
-// Comprehensive Delivery Recording Form (for recording stock-in from vendor) - All products in PO
-const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
+// Comprehensive Delivery Recording Form (for recording stock-in from vendor) - All products in PO + Custom products
+const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [] }) => {
     const today = new Date().toISOString().split('T')[0];
     
     // poData contains: { po_id, vendor_id, po_date, items: [{Product_ID, Product_Name, No_of_Cases, Units_Per_Case, PO_Price}] }
@@ -680,9 +680,47 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
             units_per_case: item.Units_Per_Case || 1,
             case_count: '', // Empty = not delivered yet, 0 = explicitly not delivered
             mrp: '',
-            po_price: item.PO_Price || ''
+            po_price: item.PO_Price || '',
+            is_custom: false
         }));
     });
+    
+    // Custom products added by admin (for vendor substitutions)
+    const [customProducts, setCustomProducts] = useState([]);
+    const [showCustomProductForm, setShowCustomProductForm] = useState(false);
+    const [newCustomProduct, setNewCustomProduct] = useState({
+        product_id: '',
+        product_name: '',
+        quantity: '',
+        units_per_case: 1,
+        batch: '',
+        mrp: '',
+        po_price: ''
+    });
+    
+    // Get vendor products for dropdown
+    const vendorId = poData?.vendor_id || '';
+    const vendorProducts = products.filter(p => {
+        if (!vendorId) return false;
+        const vendorMatch = vendors.find(v => v.Vendor_ID === vendorId);
+        if (!vendorMatch) return false;
+        return p.Vendor_ID === vendorId || p.Product_ID === vendorMatch.Product_ID;
+    });
+    
+    // Handle product selection for custom product
+    const handleSelectProduct = (productId) => {
+        const selected = products.find(p => p.Product_ID === productId);
+        if (selected) {
+            setNewCustomProduct(prev => ({
+                ...prev,
+                product_id: selected.Product_ID,
+                product_name: selected.Name || '',
+                units_per_case: selected.Units_Per_Case || 1,
+                mrp: selected.MRP || '',
+                po_price: selected.Unit_Cost || ''
+            }));
+        }
+    };
     
     // Update a specific product's field
     const updateProduct = (index, field, value) => {
@@ -691,6 +729,49 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
             updated[index] = { ...updated[index], [field]: value };
             return updated;
         });
+    };
+    
+    // Add custom product (vendor substitution)
+    const handleAddCustomProduct = () => {
+        if (!newCustomProduct.product_name.trim()) {
+            alert('Product Name is required');
+            return;
+        }
+        if (!newCustomProduct.product_id.trim()) {
+            alert('Product ID is required');
+            return;
+        }
+        const quantity = parseInt(newCustomProduct.quantity) || 0;
+        if (quantity <= 0) {
+            alert('Quantity must be greater than 0');
+            return;
+        }
+        
+        setCustomProducts([...customProducts, {
+            product_id: newCustomProduct.product_id.trim(),
+            product_name: newCustomProduct.product_name.trim(),
+            quantity: quantity,
+            units_per_case: parseInt(newCustomProduct.units_per_case) || 1,
+            batch: newCustomProduct.batch.trim(),
+            mrp: parseFloat(newCustomProduct.mrp) || 0,
+            po_price: parseFloat(newCustomProduct.po_price) || 0
+        }]);
+        
+        // Reset form
+        setNewCustomProduct({
+            product_id: '',
+            product_name: '',
+            quantity: '',
+            units_per_case: 1,
+            batch: '',
+            mrp: '',
+            po_price: ''
+        });
+        setShowCustomProductForm(false);
+    };
+    
+    const handleRemoveCustomProduct = (index) => {
+        setCustomProducts(customProducts.filter((_, i) => i !== index));
     };
     
     // Calculate quantity for a product
@@ -704,6 +785,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
     const productsToDeliver = productDetails.filter(p => parseInt(p.case_count) > 0);
     const totalCases = productsToDeliver.reduce((sum, p) => sum + (parseInt(p.case_count) || 0), 0);
     const totalUnits = productsToDeliver.reduce((sum, p) => sum + getQuantity(p), 0);
+    const totalCustomUnits = customProducts.reduce((sum, p) => sum + p.quantity, 0);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -713,12 +795,12 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
             return;
         }
         
-        if (productsToDeliver.length === 0) {
-            alert('Please enter case count for at least one product');
+        if (productsToDeliver.length === 0 && customProducts.length === 0) {
+            alert('Please enter case count for at least one PO product or add a custom product');
             return;
         }
         
-        // Prepare products array - only products with case_count > 0
+        // Prepare PO products array - only products with case_count > 0
         const products = productsToDeliver.map(p => ({
             product_id: p.product_id,
             product_name: p.product_name,
@@ -737,7 +819,16 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
             vendor_id: poData.vendor_id,
             po_date: poData.po_date,
             purchase_date: purchaseDate,
-            products
+            po_products: products,
+            custom_products: customProducts.map(cp => ({
+                product_id: cp.product_id,
+                product_name: cp.product_name,
+                quantity: cp.quantity,
+                units_per_case: cp.units_per_case,
+                batch: cp.batch,
+                mrp: cp.mrp,
+                po_price: cp.po_price
+            }))
         });
     };
 
@@ -914,15 +1005,163 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
                 ))}
             </div>
 
+            {/* Custom Products Section */}
+            <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <div className="text-sm font-medium text-slate-700">Vendor Substitutions / Custom Products</div>
+                        <div className="text-xs text-slate-500">Add products that vendor sent instead of ordered items</div>
+                    </div>
+                    {!showCustomProductForm && (
+                        <button
+                            type="button"
+                            onClick={() => setShowCustomProductForm(true)}
+                            className="px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg text-sm font-medium flex items-center gap-1"
+                        >
+                            <Plus size={16} /> Add Custom Product
+                        </button>
+                    )}
+                </div>
+
+                {/* Custom Product Form */}
+                {showCustomProductForm && (
+                    <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Select Product from Vendor *</label>
+                                <select
+                                    value={newCustomProduct.product_id}
+                                    onChange={(e) => handleSelectProduct(e.target.value)}
+                                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                >
+                                    <option value="">Choose a product...</option>
+                                    {vendorProducts.length > 0 ? (
+                                        vendorProducts.map(p => (
+                                            <option key={p.Product_ID} value={p.Product_ID}>
+                                                {p.Product_ID} - {p.Name}
+                                            </option>
+                                        ))
+                                    ) : (
+                                        <option disabled>No products available for this vendor</option>
+                                    )}
+                                </select>
+                                {!vendorId && <p className="text-xs text-orange-600 mt-1">No vendor selected in PO</p>}
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Quantity *</label>
+                                    <input
+                                        type="number"
+                                        value={newCustomProduct.quantity}
+                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, quantity: e.target.value})}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                        placeholder="Units"
+                                        min="1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Units/Case</label>
+                                    <input
+                                        type="number"
+                                        value={newCustomProduct.units_per_case}
+                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, units_per_case: e.target.value})}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                        min="1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch</label>
+                                    <input
+                                        type="text"
+                                        value={newCustomProduct.batch}
+                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, batch: e.target.value})}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                        placeholder="Batch"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">MRP (₹) - Auto-filled</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={newCustomProduct.mrp}
+                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, mrp: e.target.value})}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500 bg-slate-50"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Price (₹) - Auto-filled</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={newCustomProduct.po_price}
+                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, po_price: e.target.value})}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500 bg-slate-50"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleAddCustomProduct}
+                                    className="flex-1 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
+                                >
+                                    Add Product
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCustomProductForm(false)}
+                                    className="flex-1 px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Custom Products List */}
+                {customProducts.length > 0 && (
+                    <div className="space-y-2">
+                        {customProducts.map((product, index) => (
+                            <div key={index} className="p-3 bg-orange-100 rounded-lg border border-orange-300 flex justify-between items-start">
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-slate-800">{product.product_name}</div>
+                                    <div className="text-xs text-slate-600">ID: {product.product_id} | Qty: {product.quantity} units | Batch: {product.batch || '-'}</div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveCustomProduct(index)}
+                                    className="ml-2 p-1 text-red-600 hover:bg-red-100 rounded"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             {/* Summary */}
-            {productsToDeliver.length > 0 && (
+            {(productsToDeliver.length > 0 || customProducts.length > 0) && (
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200 sticky bottom-0">
                     <div className="text-sm font-medium text-green-800">
-                        Delivery Summary: <strong>{productsToDeliver.length}</strong> products, <strong>{totalCases}</strong> cases ({totalUnits} units)
+                        Delivery Summary: <strong>{productsToDeliver.length + customProducts.length}</strong> products
                     </div>
-                    <div className="text-xs text-green-600 mt-1">
-                        Products with 0 or empty case count will be skipped
-                    </div>
+                    {productsToDeliver.length > 0 && (
+                        <div className="text-xs text-green-600 mt-1">
+                            From PO: {productsToDeliver.length} products, {totalCases} cases ({totalUnits} units)
+                        </div>
+                    )}
+                    {customProducts.length > 0 && (
+                        <div className="text-xs text-orange-600 mt-1">
+                            Custom: {customProducts.length} products, {totalCustomUnits} units
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -930,8 +1169,8 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving }) => {
                 <button type="button" onClick={onCancel} className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium" disabled={saving}>
                     Cancel
                 </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50" disabled={saving || productsToDeliver.length === 0}>
-                    {saving ? 'Recording...' : `Record Delivery (${productsToDeliver.length} products)`}
+                <button type="submit" className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50" disabled={saving || (productsToDeliver.length === 0 && customProducts.length === 0)}>
+                    {saving ? 'Recording...' : `Record Delivery (${productsToDeliver.length + customProducts.length} products)`}
                 </button>
             </div>
         </form>
@@ -1702,7 +1941,7 @@ const Inventory = () => {
                                 >
                                     <option value="All">All Status</option>
                                     <option value="Pending">Pending</option>
-                                    <option value="Partial">Partial Delivery</option>
+
                                     <option value="Delivered">Delivered</option>
                                 </select>
                             </div>
@@ -1725,10 +1964,9 @@ const Inventory = () => {
                     </div>
                 )}
                 {activeTab === 'Purchase Orders' && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <KPI title="Total POs Created" value={filteredOurPOs.filter(p => p._isFirstRow).length} subtext="In Your PO" />
                         <KPI title="Pending POs" value={filteredOurPOs.filter(p => p._isFirstRow && p.Status === 'Pending').length} subtext="Awaiting delivery" />
-                        <KPI title="Partial Deliveries" value={filteredOurPOs.filter(p => p._isFirstRow && p.Status === 'Partial').length} subtext="Incomplete orders" />
                         <KPI title="Vendor Purchases" value={filteredVendorPurchases.length} subtext="Actual deliveries" />
                     </div>
                 )}
@@ -1855,7 +2093,6 @@ const Inventory = () => {
                                                         {row.Status && (
                                                             <span className={clsx("px-2 py-1 rounded text-xs font-medium",
                                                                 row.Status === 'Completed' ? "bg-green-100 text-green-700" :
-                                                                row.Status === 'Partial' ? "bg-yellow-100 text-yellow-700" : 
                                                                 "bg-orange-100 text-orange-700")}>
                                                                 {row.Status}
                                                             </span>
@@ -2034,6 +2271,8 @@ const Inventory = () => {
                 {poDataForDelivery && (
                     <DeliveryRecordingForm
                         poData={poDataForDelivery}
+                        products={products}
+                        vendors={vendors}
                         onSave={async (deliveryData) => {
                             setSaving(true);
                             try {

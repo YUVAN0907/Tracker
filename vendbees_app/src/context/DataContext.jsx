@@ -14,6 +14,9 @@ export const DataProvider = ({ children }) => {
         refills: [],
         vendors: [],
         warehouse: [],
+        purchased_products: [],
+        stocks: [],
+        stock_assignments: [],
         ourPOs: [],
         vendorDeliveries: [],
         vendorPurchasesList: [],
@@ -33,9 +36,12 @@ export const DataProvider = ({ children }) => {
 
     const fetchData = async () => {
         try {
+            console.log('DataContext: Starting fetch from', API_URL);
             const res = await fetch(`${API_URL}/dashboard`);
-            if (!res.ok) throw new Error('Failed to connect to backend');
+            console.log('DataContext: Fetch response status:', res.status);
+            if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to connect to backend`);
             const json = await res.json();
+            console.log('DataContext: Parsed JSON successfully, products:', json.products?.length, 'machines:', json.machines?.length);
 
             // 1. Products Mapping
             const products = (json.products || []).map(p => {
@@ -78,7 +84,9 @@ export const DataProvider = ({ children }) => {
             const stock = (json.stock || []).map(s => ({
                 Machine_ID: String(s.Machine_ID || '').trim(),
                 Product_ID: String(s.Product_ID || '').trim(),
-                Current_Stock: parseFloat(s.Current_Stock || 0) || 0
+                Current_Stock: parseFloat(s.Current_Stock || 0) || 0,
+                Batch: s.Batch || s.batch || null,
+                Stock_ID: s.Stock_ID || s.StockId || s.stockId || null
             })).filter(s => s.Machine_ID && s.Product_ID);
 
             // Calculate Fill Levels
@@ -117,7 +125,9 @@ export const DataProvider = ({ children }) => {
                 Refiller_ID: r.Refiller_ID,
                 Machine_ID: String(r.Machine_ID || '').trim(),
                 Product_ID: String(r.Product_ID || '').trim(),
-                Qty: parseFloat(r.Qty || 0) || 0
+                Qty: parseFloat(r.Qty || 0) || 0,
+                Batch: r.Batch || r.batch || null,
+                Stock_ID: r.Stock_ID || r.stockId || null
             })).filter(r => r.Machine_ID);
 
             // 7. Vendors Mapping
@@ -139,6 +149,39 @@ export const DataProvider = ({ children }) => {
                 Last_Received_Date: w.Last_Received_Date || '',
                 Notes: w.Notes || ''
             })).filter(w => w.Product_ID);
+
+            // 8a. Purchased_Products Mapping (items received from vendors, pending warehouse approval)
+            const purchased_products = (json.purchased_products || []).map(i => ({
+                Product_ID: String(i.Product_ID || '').trim(),
+                Product_Name: i.Product_Name || '',
+                Available_Units: parseInt(i.Available_Units || 0) || 0,
+                Units_Per_Case: parseInt(i.Units_Per_Case || 1) || 1,
+                Batch: i.Batch || '',
+                Received_Date: i.Received_Date || '',
+                Notes: i.Notes || ''
+            })).filter(i => i.Product_ID);
+
+            // 8b. Stocks Mapping
+            const stocks = (json.stocks || []).map(s => ({
+                Stock_ID: s.Stock_ID || '',
+                Stock_Name: s.Stock_Name || '',
+                Created_Date: s.Created_Date || '',
+                Status: s.Status || 'Active',
+                Total_Units: parseInt(s.Total_Units || 0) || 0,
+                Products_Count: parseInt(s.Products_Count || 0) || 0,
+                Products: s.Products || []
+            })).filter(s => s.Stock_ID);
+
+            // 8c. Stock Assignments Mapping
+            const stock_assignments = (json.stock_assignments || []).map(sa => ({
+                Stock_ID: sa.Stock_ID || '',
+                Product_ID: String(sa.Product_ID || '').trim(),
+                Product_Name: sa.Product_Name || '',
+                Units: parseInt(sa.Units || 0) || 0,
+                Assignment_Status: sa.Assignment_Status || 'In_Stock',
+                Machine_ID: sa.Machine_ID || '',
+                Assigned_Date: sa.Assigned_Date || ''
+            }));
 
             // 9. OUR_PO Mapping (with delivery status)
             // Note: PO_ID, Vendor_ID, Created_Date, Total_Amount, Status are only in first row of each PO
@@ -186,18 +229,25 @@ export const DataProvider = ({ children }) => {
                 refills,
                 vendors,
                 warehouse,
+                purchased_products,
+                stocks,
+                stock_assignments,
                 ourPOs,
                 vendorDeliveries,
                 stats: json.metrics || {}
             }));
             setError(null);
             setLoading(false);
+            console.log('DataContext: Data loaded successfully, loading set to false');
 
         } catch (err) {
-            console.error("Failed to fetch data:", err);
+            console.error("DataContext: Failed to fetch data:", err);
+            console.error("DataContext: Error type:", err.constructor.name);
+            console.error("DataContext: Error message:", err.message);
             // Show the actual error message to help debug (e.g. "Failed to fetch" vs "Cannot read property...")
             setError(`Connection Error: ${err.message}`);
             setLoading(false);
+            console.log('DataContext: Error set, loading set to false');
         }
     };
 
@@ -222,12 +272,17 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    const refillProduct = async (machineId, productId, qty) => {
+    const refillProduct = async (machineId, productId, qty, options = {}) => {
         try {
+            const payload = { machineId, productId, qty };
+            if (options.batch) payload.batch = options.batch;
+            if (options.stockId) payload.stockId = options.stockId;
+            if (options.refillerId) payload.refillerId = options.refillerId;
+
             await fetch(`${API_URL}/refill`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ machineId, productId, qty })
+                body: JSON.stringify(payload)
             });
             setRefreshTrigger(prev => prev + 1);
             return true;
@@ -332,6 +387,28 @@ export const DataProvider = ({ children }) => {
         return item ? item.Available_Units : 0;
     };
 
+    // Create Stock with Machine Assignment
+    const createStockWithMachine = async (stockName, machineId, products) => {
+        try {
+            const res = await fetch(`${API_URL}/stocks/create-from-warehouse`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    stock_name: stockName,
+                    machine_id: machineId,
+                    products: products
+                })
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            setRefreshTrigger(prev => prev + 1);
+            return { success: true, stock_id: result.stock_id, message: result.message };
+        } catch (e) {
+            console.error(e);
+            return { success: false, error: e.message };
+        }
+    };
+
     // Multi-Product PO Creation
     const createMultiPO = async (items) => {
         try {
@@ -434,6 +511,7 @@ export const DataProvider = ({ children }) => {
             updateWarehouseItem,
             deleteWarehouseItem,
             getWarehouseStock,
+            createStockWithMachine,
             createMultiPO,
             recordDelivery,
             getPODeliveries,

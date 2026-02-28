@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts';
@@ -59,7 +59,7 @@ const GSTRateSelect = ({ value, onChange, gstRatesMap = {} }) => (
 const Dashboard = () => {
     const { products = [], machines = [], stock = [], stats = {}, sales = [], refills = [], loading, error } = useData() || {};
 
-    const [filters, setFilters] = React.useState({
+    const [filters, setFilters] = useState({
         stockValue: 'All',
         units: 'All',
         outOfStock: 'All',
@@ -229,17 +229,26 @@ const Dashboard = () => {
     }
     weeklyData.reverse(); // Show oldest first
 
-    // Inventory Health Stats
-    let healthyCount = 0, lowCount = 0, criticalCount = 0, totalProducts = 0;
-    stock.forEach(s => {
-        const prod = products.find(p => p.Product_ID === s.Product_ID);
-        if (!prod) return;
-        totalProducts++;
-        if (s.Current_Stock < 10) criticalCount++;
-        else if (s.Current_Stock < prod.Reorder_Level) lowCount++;
-        else healthyCount++;
-    });
-
+    // Inventory Health Stats - per machine
+    const [selectedMachineHealth, setSelectedMachineHealth] = useState('All');
+    
+    const getHealthStats = (machineId) => {
+        let healthyCount = 0, lowCount = 0, criticalCount = 0, totalProducts = 0;
+        const filteredStock = machineId === 'All' ? stock : stock.filter(s => s.Machine_ID === machineId);
+        filteredStock.forEach(s => {
+            const prod = products.find(p => p.Product_ID === s.Product_ID);
+            if (!prod) return;
+            totalProducts++;
+            if (s.Current_Stock < 10) criticalCount++;
+            else if (s.Current_Stock < prod.Reorder_Level) lowCount++;
+            else healthyCount++;
+        });
+        return { healthyCount, lowCount, criticalCount, totalProducts };
+    };
+    
+    const health = getHealthStats(selectedMachineHealth);
+    const { healthyCount, lowCount, criticalCount, totalProducts } = health;
+    
     const healthPercent = totalProducts > 0 ? Math.round((healthyCount / totalProducts) * 100) : 0;
     const lowPercent = totalProducts > 0 ? Math.round((lowCount / totalProducts) * 100) : 0;
     const criticalPercent = totalProducts > 0 ? Math.round((criticalCount / totalProducts) * 100) : 0;
@@ -436,7 +445,19 @@ const Dashboard = () => {
 
                     {/* Inventory Health Overview */}
                     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-                        <h3 className="text-sm font-semibold text-slate-700 mb-6">Inventory Health Overview</h3>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-sm font-semibold text-slate-700">Inventory Health Overview</h3>
+                            <select
+                                value={selectedMachineHealth}
+                                onChange={(e) => setSelectedMachineHealth(e.target.value)}
+                                className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                            >
+                                <option value="All">All Machines</option>
+                                {machines.map(m => (
+                                    <option key={m.Machine_ID} value={m.Machine_ID}>{m.Machine_ID} - {m.Location}</option>
+                                ))}
+                            </select>
+                        </div>
                         
                         {/* Health Status Bars */}
                         <div className="space-y-4 mb-6">
