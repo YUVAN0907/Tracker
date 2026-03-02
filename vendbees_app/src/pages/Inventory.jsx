@@ -698,14 +698,9 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         po_price: ''
     });
     
-    // Get vendor products for dropdown
+    // Get vendor products for dropdown - show all products that could be supplied by this vendor
     const vendorId = poData?.vendor_id || '';
-    const vendorProducts = products.filter(p => {
-        if (!vendorId) return false;
-        const vendorMatch = vendors.find(v => v.Vendor_ID === vendorId);
-        if (!vendorMatch) return false;
-        return p.Vendor_ID === vendorId || p.Product_ID === vendorMatch.Product_ID;
-    });
+    const vendorProducts = vendorId && products ? products.filter(p => p && p.Product_ID) : [];
     
     // Handle product selection for custom product
     const handleSelectProduct = (productId) => {
@@ -2285,6 +2280,27 @@ const Inventory = () => {
                                 if (!result.success) {
                                     throw new Error(result.error);
                                 }
+                                
+                                // Build success message with details
+                                const { po_products_recorded, custom_products_recorded, po_products_skipped, both_sheets_updated } = result;
+                                let successMessage = `✅ Delivery Recorded Successfully!\n\n`;
+                                successMessage += `PO Products: ${po_products_recorded} recorded`;
+                                if (po_products_skipped > 0) {
+                                    successMessage += `, ${po_products_skipped} skipped`;
+                                }
+                                successMessage += `\n`;
+                                if (custom_products_recorded > 0) {
+                                    successMessage += `Custom Products: ${custom_products_recorded} recorded\n`;
+                                }
+                                
+                                if (both_sheets_updated) {
+                                    successMessage += `\n✓ Data inserted in both sheets\n✓ Status updated to "Completed"`;
+                                } else {
+                                    successMessage += `\n⚠ Partial update - Status remains "Pending"`;
+                                }
+                                
+                                alert(successMessage);
+                                
                                 // Track successful delivery for tick indicator
                                 setRecentlyDeliveredPOs(prev => new Set([...prev, poDataForDelivery.po_id]));
                                 setShowDeliveryModal(false);

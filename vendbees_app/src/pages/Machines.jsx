@@ -1,12 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
 import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, BarChart, Bar, Tooltip } from 'recharts';
 import { MapPin, IndianRupee, Box } from 'lucide-react';
 import clsx from 'clsx';
 
-const MachineCard = ({ machine, stockValue }) => (
-    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+const MachineCard = ({ machine, stockValue, isSelected, onClick }) => (
+    <div 
+        onClick={onClick}
+        className={clsx("bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition-all cursor-pointer", 
+            isSelected 
+                ? "border-orange-500 shadow-orange-100 ring-2 ring-orange-300" 
+                : "border-slate-100"
+        )}
+    >
         <div className="flex justify-between items-start mb-4">
             <h3 className="font-bold text-slate-800">{machine.Machine_ID}</h3>
             <div className={clsx("w-2 h-2 rounded-full",
@@ -38,6 +45,7 @@ const MachineCard = ({ machine, stockValue }) => (
 
 const Machines = () => {
     const { products, machines, stock, loading, sellProduct } = useData();
+    const [selectedMachineId, setSelectedMachineId] = useState(machines[0]?.Machine_ID);
 
     if (loading) return null;
 
@@ -52,8 +60,8 @@ const Machines = () => {
         return { name: m.Machine_ID, value: Math.round(value), location: m.Location, fullMachine: m };
     }).sort((a, b) => b.value - a.value);
 
-    // Get Stock for specific machine (VB-101 for demo table)
-    const selectedMachine = machines[0];
+    // Get Stock for specific machine based on selected machine ID
+    const selectedMachine = machines.find(m => m.Machine_ID === selectedMachineId) || machines[0];
     const machineStock = stock.filter(s => s.Machine_ID === selectedMachine?.Machine_ID);
 
     return (
@@ -80,7 +88,13 @@ const Machines = () => {
                 {/* Machine Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {machineValues.map((m, idx) => (
-                        <MachineCard key={idx} machine={m.fullMachine} stockValue={m.value} />
+                        <MachineCard 
+                            key={idx} 
+                            machine={m.fullMachine} 
+                            stockValue={m.value}
+                            isSelected={selectedMachineId === m.fullMachine.Machine_ID}
+                            onClick={() => setSelectedMachineId(m.fullMachine.Machine_ID)}
+                        />
                     ))}
                 </div>
 
@@ -99,7 +113,6 @@ const Machines = () => {
                                     <th className="px-6 py-4 font-medium">Unit Price</th>
                                     <th className="px-6 py-4 font-medium">Total Value</th>
                                     <th className="px-6 py-4 font-medium">Status</th>
-                                    <th className="px-6 py-4 font-medium">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -120,14 +133,6 @@ const Machines = () => {
                                                 <span className={clsx("px-2 py-1 rounded-full text-xs font-medium", statusColor)}>
                                                     {status}
                                                 </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <button
-                                                    onClick={() => sellProduct(s.Machine_ID, s.Product_ID, 1, prod.MRP || 40)}
-                                                    className="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 rounded transition-colors font-semibold"
-                                                >
-                                                    Sell 1
-                                                </button>
                                             </td>
                                         </tr>
                                     );

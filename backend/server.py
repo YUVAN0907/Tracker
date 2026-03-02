@@ -46,6 +46,7 @@ SHEET_MAP = {
     'Warehouse': 'Warehouse_Stock',
     'Purchased_Products': 'Purchased_Products',
     'Stocks': 'Stocks',
+    'Stock_Products': 'Stock_Products',
     'Stock_Assignments': 'Stock_Assignments',
     'OUR_PO': 'OUR_PO'
 }
@@ -154,7 +155,20 @@ def load_data():
     global db, last_sync
 
     try:
-        download_excel()
+        # Try to download from SharePoint
+        try:
+            download_excel()
+        except Exception as e:
+            print(f"⚠ Download from SharePoint failed: {e}")
+            # Check if a cached file exists
+            if os.path.exists(TEMP_EXCEL) and os.path.getsize(TEMP_EXCEL) > 1000:
+                print(f"Using cached Excel file: {TEMP_EXCEL}")
+            else:
+                print(f"No cached file available, creating empty database")
+                # Initialize empty dataframes for all sheets
+                for key in SHEET_MAP.keys():
+                    db[key] = pd.DataFrame()
+                return False
 
         with pd.ExcelFile(TEMP_EXCEL, engine="openpyxl") as xls:
             for key, sheet in SHEET_MAP.items():
@@ -201,6 +215,18 @@ def load_data():
                 our_po = our_po[[col for col in expected_columns if col in our_po.columns]]
             
             db["OUR_PO"] = our_po
+        
+        # Log Stocks sheet info
+        if "Stocks" in db:
+            stocks = db["Stocks"]
+            print(f"✔ Stocks sheet loaded: {len(stocks)} rows")
+            if not stocks.empty:
+                print(f"  Columns: {list(stocks.columns)}")
+                print(f"\n  === SAMPLE DATA FROM STOCKS SHEET (first 5 rows) ===")
+                for i, row in stocks.head(5).iterrows():
+                    print(f"  Row {i}: Batch={row.get('Batch')}, Stock={row.get('Stock')}, cover={row.get('cover')}, product id={row.get('product id')}, product name={row.get('product name')}, units={row.get('units')}")
+                print(f"  ====================================================\n")
+            
         print("✔ SharePoint Excel loaded")
         return True
 
@@ -314,6 +340,18 @@ def dashboard():
                 "Status": common.get("Status", "Pending")
             })
 
+    # Debug logging
+    stocks_df = db.get("Stocks", pd.DataFrame())
+    print(f"DEBUG Dashboard: Stocks sheet has {len(stocks_df)} rows")
+    if not stocks_df.empty:
+        print(f"  Columns: {list(stocks_df.columns)}")
+        print(f"  Column dtypes:\n{stocks_df.dtypes}")
+        print(f"  First 3 rows:")
+        for idx, row in stocks_df.head(3).iterrows():
+            print(f"    Row {idx}: {row.to_dict()}")
+    else:
+        print(f"  WARNING: Stocks DataFrame is empty!")
+    
     return jsonify({
         "products": df_to_safe_dict(products),
         "machines": df_to_safe_dict(machines),
@@ -1089,7 +1127,7 @@ def record_delivery():
         purchased_products = db.get("Purchased_Products", pd.DataFrame())
         if purchased_products.empty:
             purchased_products = pd.DataFrame(columns=[
-                "Product_ID", "Product_Name", "Available_Units", "Units_Per_Case", 
+                "PO_ID", "EXP_Id", "Product_ID", "Product_Name", "Available_Units", "Units_Per_Case", 
                 "Batch", "Received_Date", "Notes"
             ])
         
@@ -1145,7 +1183,12 @@ def record_delivery():
                 "GST FILED": gst_filed if is_first_row else ""
             })
             
+            # Generate EXP_Id as PO_ID + Product_ID
+            exp_id = f"{po_id}_{product_id}"
+            
             new_purchased_items.append({
+                "PO_ID": po_id if is_first_row else "",
+                "EXP_Id": exp_id,
                 "Product_ID": product_id,
                 "Product_Name": product_name,
                 "Available_Units": quantity,
@@ -1197,8 +1240,13 @@ def record_delivery():
                 "GST FILED": ""
             })
             
+            # Generate EXP_Id as PO_ID + Product_ID
+            exp_id = f"{po_id}_{product_id}"
+            
             # Also add to purchased_products
             new_purchased_items.append({
+                "PO_ID": po_id if is_first_row else "",
+                "EXP_Id": exp_id,
                 "Product_ID": product_id,
                 "Product_Name": product_name,
                 "Available_Units": quantity,
@@ -1217,29 +1265,12 @@ def record_delivery():
             db["Purchases"] = pd.concat([purchases, new_df], ignore_index=True)
         
         if new_purchased_items:
-            # Check if products already exist in purchased_products and update availability instead
-            for new_item in new_purchased_items:
-                product_id = new_item["Product_ID"]
-                product_name = new_item["Product_Name"]
-                new_units = new_item["Available_Units"]
-                
-                # Find if product already exists in purchased_products
-                existing_row = purchased_products[
-                    (purchased_products["Product_ID"].astype(str).str.strip() == product_id) &
-                    (purchased_products["Product_Name"].astype(str).str.strip() == product_name)
-                ]
-                
-                if not existing_row.empty:
-                    # Product already exists - increase the availability count
-                    idx = existing_row.index[0]
-                    current_units = int(purchased_products.at[idx, "Available_Units"] or 0)
-                    purchased_products.at[idx, "Available_Units"] = current_units + new_units
-                else:
-                    # Product doesn't exist - add new row
-                    purchased_products = pd.concat([
-                        purchased_products, 
-                        pd.DataFrame([new_item])
-                    ], ignore_index=True)
+            # Add all new items as separate records to track expiry by batch using EXP_Id
+            new_purchased_df = pd.DataFrame(new_purchased_items)
+            purchased_products = pd.concat([
+                purchased_products,
+                new_purchased_df
+            ], ignore_index=True)
             
             db["Purchased_Products"] = purchased_products
         
@@ -1248,7 +1279,7 @@ def record_delivery():
         if not our_po.empty and "Status" not in our_po.columns:
             our_po["Status"] = "Pending"
         
-        if not our_po.empty:
+        if not our_po.empty and new_deliveries and new_purchased_items:
             po_first_row_idx = None
             po_product_rows = []
             current_po = None
@@ -1266,21 +1297,51 @@ def record_delivery():
                 elif current_po == po_id:
                     po_product_rows.append(idx)
             
-            all_delivered = True
+            # Check if data was successfully inserted in both sheets
+            purchases_sheet = db.get("Purchases", pd.DataFrame())
+            purchased_products_sheet = db.get("Purchased_Products", pd.DataFrame())
             
-            for delivery in new_deliveries:
-                product_id = delivery["PRODUCT ID"]
-                delivered_cases = delivery["CASE COUNT"]
-                
-                for row_idx in po_product_rows:
-                    if str(our_po.at[row_idx, "Product_ID"]).strip() == product_id:
-                        ordered_cases = int(our_po.at[row_idx, "No_of_Cases"] or 0)
-                        if delivered_cases < ordered_cases:
-                            all_delivered = False
+            # Verify Purchases sheet has the new entries
+            purchases_has_po = False
+            if not purchases_sheet.empty:
+                mask = purchases_sheet["PO ID"].astype(str).str.strip() == po_id
+                if mask.any():
+                    purchases_has_po = True
+            
+            # Verify Purchased_Products sheet has the new entries
+            purchased_products_has_items = False
+            if not purchased_products_sheet.empty and new_purchased_items:
+                for item in new_purchased_items:
+                    product_id = item.get("Product_ID", "").strip()
+                    mask = purchased_products_sheet["Product_ID"].astype(str).str.strip() == product_id
+                    if mask.any():
+                        purchased_products_has_items = True
                         break
             
+            # Determine if all PO products were fully delivered
+            all_delivered = True
+            if po_products:
+                for delivery in po_products:
+                    product_id = str(delivery.get("product_id", "")).strip()
+                    delivered_cases = int(delivery.get("case_count", 0))
+                    
+                    # Find matching product in OUR_PO
+                    found = False
+                    for row_idx in po_product_rows:
+                        if str(our_po.at[row_idx, "Product_ID"]).strip() == product_id:
+                            ordered_cases = int(our_po.at[row_idx, "No_of_Cases"] or 0)
+                            if delivered_cases < ordered_cases:
+                                all_delivered = False
+                            found = True
+                            break
+                    
+                    # If product not found in OUR_PO, skip it
+                    if not found:
+                        all_delivered = False
+            
+            # Update status: "Completed" if both sheets have data with either PO or custom products recorded
             if po_first_row_idx is not None:
-                if all_delivered:
+                if purchases_has_po and purchased_products_has_items and (po_products_recorded > 0 or custom_products_recorded > 0):
                     our_po.at[po_first_row_idx, "Status"] = "Completed"
                 else:
                     our_po.at[po_first_row_idx, "Status"] = "Pending"
@@ -1289,6 +1350,9 @@ def record_delivery():
         
         save_all()
         
+        # Determine if both sheets were successfully updated
+        both_sheets_updated = (new_deliveries and new_purchased_items and (po_products_recorded > 0 or custom_products_recorded > 0))
+        
         return jsonify(
             success=True,
             message=f"Recorded delivery for PO {po_id}",
@@ -1296,7 +1360,8 @@ def record_delivery():
             custom_products_recorded=custom_products_recorded,
             po_products_skipped=po_products_skipped,
             total_units=total_units_added,
-            purchased_products_updated=True
+            purchased_products_updated=both_sheets_updated,
+            both_sheets_updated=both_sheets_updated
         )
     except Exception as e:
         return jsonify(error=str(e)), 500
@@ -1418,9 +1483,15 @@ def update_stock():
 # --------------------------------------------------
 @app.route("/api/purchased-products/items", methods=["GET"])
 def get_purchased_products():
-    """Get all purchased products awaiting warehouse approval"""
+    """Get all purchased products awaiting warehouse approval - sorted by received date (earliest first for FIFO)"""
     try:
         purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        
+        if not purchased_products.empty:
+            # Sort by Received_Date (earliest first) for FIFO picking
+            purchased_products['Received_Date'] = pd.to_datetime(purchased_products['Received_Date'], errors='coerce')
+            purchased_products = purchased_products.sort_values('Received_Date')
+        
         return jsonify(items=df_to_safe_dict(purchased_products))
     except Exception as e:
         return jsonify(error=str(e)), 500
@@ -2052,112 +2123,155 @@ def create_batch_stocks():
 
 @app.route("/api/stocks/create-batch-full", methods=["POST"])
 def create_batch_full():
-    """Create complete batch with all stocks, covers, and products in one operation"""
+    """Create complete batch with all stocks, covers, and products - matching Excel Stocks sheet structure
+    
+    Excel Structure:
+    Batch | Date | Machine | Stock | cover | cover_status | product_id | product_name | units | Status
+    
+    Each product gets its own row. Batch/Date/Machine/Stock info only in first product of stock.
+    """
     try:
         d = request.json
         batch_number = str(d.get("batch_number", "")).strip()
-        machine_ids = d.get("machine_ids", [])  # Should be 4 machine IDs [M, M2, M3, M4]
+        machine_ids = d.get("machine_ids", [])  # [M1, M2, M3, M4]
         created_date = d.get("created_date", datetime.now().strftime("%Y-%m-%d"))
-        stocks_data = d.get("stocks", {})  # { S1: {machine, covers: {C1: [...products]}}, ... }
+        stocks_data = d.get("stocks", {})  # {S1: {machine, covers: {C1: [products], C2: [...]}}}
         
+        print(f"\n{'='*60}")
+        print(f"DEBUG: create_batch_full called")
+        print(f"batch_number={batch_number}")
+        print(f"machine_ids={machine_ids}")
+        print(f"created_date={created_date}")
+        print(f"stocks_data keys={list(stocks_data.keys())}")
+        
+        # Validation
         if not batch_number:
-            return jsonify(error="Batch number is required"), 400
-        
-        if len(machine_ids) != 4:
-            return jsonify(error="Exactly 4 machine IDs are required for a batch"), 400
-        
+            raise Exception("Batch number is required")
+        if not machine_ids or len(machine_ids) != 4:
+            raise Exception(f"Exactly 4 machine IDs required, got {len(machine_ids) if machine_ids else 0}")
         if not stocks_data:
-            return jsonify(error="At least one stock with covers and products is required"), 400
+            raise Exception("At least one stock with covers and products is required")
         
-        # Initialize sheets if they don't exist
+        # Get Stocks sheet
         stocks = db.get("Stocks", pd.DataFrame())
+        
+        # Define required columns matching Excel structure exactly (with spaces and lowercase)
+        required_columns = ["Batch", "Date", "Machine", "Stock", "cover", "cover status", "product id", "product name", "units", "Status"]
+        
         if stocks.empty:
-            stocks = pd.DataFrame(columns=["Stock_ID", "Batch_Number", "Stock_Name", "Machine_ID", "Created_Date", "Status", "Cover_List", "Total_Products", "Total_Units"])
+            stocks = pd.DataFrame(columns=required_columns)
+        else:
+            # Ensure all required columns exist (check both underscore and space versions)
+            for idx, col in enumerate(required_columns):
+                col_underscore = col.replace(" ", "_")
+                # Check if column exists in either format
+                exists = col in stocks.columns or col_underscore in stocks.columns
+                
+                if not exists:
+                    print(f"DEBUG: Adding missing column '{col}' to Stocks")
+                    stocks[col] = None
+                elif col_underscore in stocks.columns and col not in stocks.columns:
+                    # Rename underscore version to space version
+                    print(f"DEBUG: Renaming '{col_underscore}' to '{col}'")
+                    stocks.rename(columns={col_underscore: col}, inplace=True)
         
-        stock_products = db.get("Stock_Products", pd.DataFrame())
-        if stock_products.empty:
-            stock_products = pd.DataFrame(columns=["Stock_ID", "Batch_Number", "Stock_Name", "Cover_Name", "Product_ID", "Product_Name", "Units", "Created_Date"])
-        
-        created_stocks = []
+        total_rows_added = 0
         stock_names = ["S1", "S2", "S3", "S4"]
         
         # Process each stock (S1, S2, S3, S4)
         for i, stock_name in enumerate(stock_names):
+            if i >= len(machine_ids):
+                print(f"DEBUG: Skipping {stock_name} - not enough machine_ids")
+                break
+            
             machine_id = machine_ids[i]
-            stock_id = f"STK-{batch_number}-{stock_name}"
-            
-            # Check if stock already exists
-            if not stocks.empty and (stocks["Stock_ID"] == stock_id).any():
-                return jsonify(error=f"Stock {stock_id} already exists"), 400
-            
-            # Get data for this stock from the form
             stock_form_data = stocks_data.get(stock_name, {})
-            covers_dict = stock_form_data.get("covers", {})
             
-            # Calculate totals for this stock
-            total_products = 0
-            total_units = 0
-            cover_names = []
+            print(f"\nDEBUG: Processing {stock_name} with machine {machine_id}")
+            
+            if not isinstance(stock_form_data, dict):
+                print(f"  WARNING: Invalid data format for {stock_name}, skipping")
+                continue
+            
+            covers_dict = stock_form_data.get("covers", {})
+            print(f"  Covers: {list(covers_dict.keys())}")
+            
+            first_stock_row = True  # Flag to show batch/date/machine only ONCE per stock
             
             # Process covers and products
             for cover_name, products_list in covers_dict.items():
                 if not products_list:
                     continue
                 
-                cover_names.append(cover_name)
+                print(f"  Processing cover {cover_name} with {len(products_list)} products")
+                first_cover_row = True  # Flag to show cover info only ONCE per cover
                 
                 for product in products_list:
                     product_id = str(product.get("product_id", "")).strip()
                     product_name = str(product.get("product_name", "")).strip()
-                    units = int(product.get("units", 0))
+                    units = product.get("units", 0)
                     
-                    if not product_id or not product_name or units <= 0:
+                    # Validate
+                    if not product_id or not product_name:
+                        print(f"    WARNING: Skipping product with missing ID or name")
                         continue
                     
-                    # Add product entry
-                    new_product_entry = {
-                        "Stock_ID": stock_id,
-                        "Batch_Number": batch_number,
-                        "Stock_Name": stock_name,
-                        "Cover_Name": cover_name,
-                        "Product_ID": product_id,
-                        "Product_Name": product_name,
-                        "Units": units,
-                        "Created_Date": created_date
+                    try:
+                        units = int(units) if units else 0
+                    except (ValueError, TypeError):
+                        units = 0
+                    
+                    if units <= 0:
+                        print(f"    WARNING: Skipping {product_name} - units <= 0")
+                        continue
+                    
+                    # Create row matching Excel structure (with spaces and lowercase)
+                    # IMPORTANT: Batch/Date/Machine/Stock appear only in FIRST product of each STOCK
+                    # Cover/cover status appear only in FIRST product of each COVER
+                    new_row = {
+                        "Batch": batch_number if first_stock_row else "",  # Empty string instead of None for proper Excel display
+                        "Date": created_date if first_stock_row else "",  # Empty string instead of None
+                        "Machine": machine_id if first_stock_row else "",  # Empty string instead of None
+                        "Stock": stock_name if first_stock_row else "",  # Empty string instead of None
+                        "cover": cover_name if first_cover_row else "",  # Empty string instead of None
+                        "cover status": "covered" if first_cover_row else "",  # Empty string for subsequent products in same cover
+                        "product id": product_id,  # With space
+                        "product name": product_name,  # With space
+                        "units": units,
+                        "Status": "Active" if first_stock_row else ""  # Empty string instead of None (Active only for first of stock)
                     }
                     
-                    stock_products = pd.concat([stock_products, pd.DataFrame([new_product_entry])], ignore_index=True)
-                    total_products += 1
-                    total_units += units
-            
-            # Create stock entry
-            new_stock = {
-                "Stock_ID": stock_id,
-                "Batch_Number": batch_number,
-                "Stock_Name": stock_name,
-                "Machine_ID": machine_id,
-                "Created_Date": created_date,
-                "Status": "Active",
-                "Cover_List": ", ".join(cover_names) if cover_names else "",
-                "Total_Products": total_products,
-                "Total_Units": total_units
-            }
-            
-            stocks = pd.concat([stocks, pd.DataFrame([new_stock])], ignore_index=True)
-            created_stocks.append(stock_id)
+                    print(f"    {'[FIRST_STOCK_ROW]' if first_stock_row else ''} {'[FIRST_COVER_ROW]' if first_cover_row else ''} Adding: {product_name} ({units} units) - Batch: {new_row['Batch']}, Stock: {new_row['Stock']}, Cover: {new_row['cover']}")
+                    
+                    stocks = pd.concat([stocks, pd.DataFrame([new_row])], ignore_index=True)
+                    total_rows_added += 1
+                    first_stock_row = False  # Only first product row of this stock gets batch/date/machine
+                    first_cover_row = False  # Only first product row of this cover gets cover name
         
+        print(f"\nDEBUG: Total rows added: {total_rows_added}")
+        
+        if total_rows_added == 0:
+            raise Exception("No products were added to the batch")
+        
+        # Save to database
         db["Stocks"] = stocks
-        db["Stock_Products"] = stock_products
         save_all()
+        
+        print(f"DEBUG: Successfully saved batch {batch_number} with {total_rows_added} rows")
+        print(f"{'='*60}\n")
         
         return jsonify(
             success=True,
             batch_number=batch_number,
-            created_stocks=created_stocks,
-            message=f"Successfully created batch {batch_number} with {len(created_stocks)} stocks and all covers/products"
+            total_rows_added=total_rows_added,
+            message=f"Successfully created batch {batch_number} with {total_rows_added} product rows"
         )
     except Exception as e:
-        return jsonify(error=str(e)), 500
+        print(f"ERROR in create_batch_full: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print(f"{'='*60}\n")
+        return jsonify(error=f"Error creating batch: {str(e)}"), 500
 
 
 @app.route("/api/stocks/add-cover", methods=["POST"])
@@ -2375,8 +2489,711 @@ def get_batch_details(batch_number):
         return jsonify(error=str(e)), 500
 
 
+@app.route("/api/stocks/decrease-purchased-units", methods=["POST"])
+def decrease_purchased_units():
+    """Decrease available units from Purchased_Products and remove row if it hits zero"""
+    try:
+        d = request.json
+        items_to_decrease = d.get("items", [])  # List of {exp_id, units_used}
+        
+        if not items_to_decrease:
+            return jsonify(error="No items provided"), 400
+        
+        purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        
+        if purchased_products.empty:
+            return jsonify(success=True, message="No purchased products to update")
+        
+        rows_deleted = 0
+        rows_updated = 0
+        
+        for item in items_to_decrease:
+            exp_id = str(item.get("exp_id", "")).strip()
+            units_used = int(item.get("units_used", 0))
+            
+            if not exp_id or units_used <= 0:
+                continue
+            
+            # Find row with matching EXP_Id
+            mask = purchased_products["EXP_Id"].astype(str).str.strip() == exp_id
+            
+            if not mask.any():
+                continue
+            
+            idx = mask.idxmax()
+            current_units = int(purchased_products.at[idx, "Available_Units"] or 0)
+            new_units = current_units - units_used
+            
+            if new_units <= 0:
+                # Delete the entire row if units reach zero
+                purchased_products = purchased_products.drop(idx)
+                rows_deleted += 1
+            else:
+                # Update available units
+                purchased_products.at[idx, "Available_Units"] = new_units
+                rows_updated += 1
+        
+        # Reset index after deletions
+        purchased_products = purchased_products.reset_index(drop=True)
+        db["Purchased_Products"] = purchased_products
+        save_all()
+        
+        return jsonify(
+            success=True,
+            rows_updated=rows_updated,
+            rows_deleted=rows_deleted,
+            message=f"Updated {rows_updated} rows, deleted {rows_deleted} empty rows"
+        )
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-previous-patterns", methods=["GET"])
+def get_previous_stock_patterns():
+    """Get previously created stock patterns for copying"""
+    try:
+        stocks = db.get("Stocks", pd.DataFrame())
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stocks.empty:
+            return jsonify(patterns=[])
+        
+        patterns = []
+        
+        # Group by batch and stock combination
+        for _, stock in stocks.iterrows():
+            stock_id = stock.get("Stock_ID", "")
+            stock_name = stock.get("Stock_Name", "")
+            batch_number = stock.get("Batch_Number", "")
+            
+            # Get all products and covers for this stock
+            products_mask = stock_products["Stock_ID"] == stock_id
+            stock_products_data = stock_products[products_mask]
+            
+            # Group by cover
+            covers = {}
+            for _, prod in stock_products_data.iterrows():
+                cover_name = prod.get("Cover_Name", "")
+                if cover_name not in covers:
+                    covers[cover_name] = []
+                
+                covers[cover_name].append({
+                    "product_id": prod.get("Product_ID", ""),
+                    "product_name": prod.get("Product_Name", ""),
+                    "units": int(prod.get("Units", 0))
+                })
+            
+            patterns.append({
+                "pattern_id": f"{batch_number}-{stock_name}",
+                "batch_number": batch_number,
+                "stock_name": stock_name,
+                "label": f"Same as {stock_name} (Batch {batch_number})",
+                "covers": covers,
+                "total_products": int(stock.get("Total_Products", 0)),
+                "total_units": int(stock.get("Total_Units", 0))
+            })
+        
+        return jsonify(patterns=patterns)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-next-cover-name/<stock_id>", methods=["GET"])
+def get_next_cover_name(stock_id):
+    """Get the next cover name in sequence (C, C2, C3, ..., Cn)"""
+    try:
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stock_products.empty:
+            return jsonify(next_cover="C")
+        
+        # Get all covers for this stock
+        stock_mask = stock_products["Stock_ID"] == stock_id
+        stock_covers_data = stock_products[stock_mask]
+        
+        if stock_covers_data.empty:
+            return jsonify(next_cover="C")
+        
+        existing_covers = stock_covers_data["Cover_Name"].unique().tolist()
+        existing_covers = [str(c).strip() for c in existing_covers if c and str(c).strip()]
+        
+        if not existing_covers:
+            return jsonify(next_cover="C")
+        
+        # Generate cover names: C, C2, C3, ..., Cn
+        cover_names = ["C"]
+        for i in range(2, 100):  # Support up to C99
+            cover_names.append(f"C{i}")
+        
+        # Find the first unused cover name
+        for cover in cover_names:
+            if cover not in existing_covers:
+                return jsonify(next_cover=cover)
+        
+        # Fallback (shouldn't reach here)
+        return jsonify(next_cover=f"C{len(existing_covers) + 1}")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-batch-products/<batch_number>", methods=["GET"])
+def get_batch_products(batch_number):
+    """Get all products for a batch"""
+    try:
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stock_products.empty:
+            return jsonify(products=[])
+        
+        # Filter by batch number
+        batch_mask = stock_products["Batch_Number"] == batch_number
+        batch_products_data = stock_products[batch_mask]
+        
+        if batch_products_data.empty:
+            return jsonify(products=[])
+        
+        products = []
+        for _, prod in batch_products_data.iterrows():
+            products.append({
+                "stock_id": prod.get("Stock_ID", ""),
+                "stock_name": prod.get("Stock_Name", ""),
+                "cover_name": prod.get("Cover_Name", ""),
+                "product_id": prod.get("Product_ID", ""),
+                "product_name": prod.get("Product_Name", ""),
+                "units": int(prod.get("Units", 0)),
+                "created_date": prod.get("Created_Date", "")
+            })
+        
+        return jsonify(products=products)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-batch-suggestions", methods=["GET"])
+def get_batch_suggestions():
+    """
+    Get product suggestions for all stock-cover combinations.
+    For any stock-cover-product combination, returns:
+    - Products from previous batches of the SAME stock-cover
+    - Warehouse stock availability for all products
+    
+    Returns dict keyed by 'stock-cover-productId' with available quantities.
+    """
+    try:
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        warehouse_stock = db.get("Warehouse", pd.DataFrame())  # Use "Warehouse" key, not "Warehouse_Stock"
+        stocks = db.get("Stocks", pd.DataFrame())
+        
+        suggestions = {}
+        
+        # Build warehouse stock lookup: product_id -> units
+        warehouse_lookup = {}
+        if not warehouse_stock.empty:
+            for _, row in warehouse_stock.iterrows():
+                product_id = row.get("Product_ID", "")
+                if product_id:
+                    units = int(row.get("Available_Units", 0))
+                    warehouse_lookup[str(product_id)] = units
+        
+        # Get all unique stocks from Stocks table
+        all_stocks = []
+        if not stocks.empty:
+            all_stocks = stocks["Stock_Name"].unique().tolist()
+        
+        # Get all unique stock-cover combinations from stock_products
+        stock_cover_combos = set()
+        if not stock_products.empty:
+            for _, row in stock_products.iterrows():
+                stock_name = row.get("Stock_Name", "")
+                cover_name = row.get("Cover_Name", "")
+                if stock_name and cover_name:
+                    stock_cover_combos.add((stock_name, cover_name))
+        
+        # For each stock, generate possible covers (C, C2, C3, ... up to C99)
+        possible_covers = ["C"]
+        for i in range(2, 100):
+            possible_covers.append(f"C{i}")
+        
+        # Generate suggestions for each combination of (stock, cover, product)
+        # This includes combinations that don't have data yet in stock_products
+        
+        # First, create suggestions entries for each stock-cover combo that has products
+        for stock_name, cover_name in stock_cover_combos:
+            # Get all unique products in this stock-cover across all batches
+            mask = (
+                (stock_products["Stock_Name"] == stock_name) &
+                (stock_products["Cover_Name"] == cover_name)
+            )
+            products_in_combo = stock_products[mask]["Product_ID"].unique()
+            
+            for product_id in products_in_combo:
+                if not product_id:
+                    continue
+                    
+                product_id_str = str(product_id)
+                
+                # Get product name and batches for this product in this stock-cover
+                product_mask = (
+                    (stock_products["Stock_Name"] == stock_name) &
+                    (stock_products["Cover_Name"] == cover_name) &
+                    (stock_products["Product_ID"] == product_id)
+                )
+                product_batches = stock_products[product_mask]
+                
+                product_name = ""
+                batches = []
+                
+                for _, batch_prod in product_batches.iterrows():
+                    if not product_name:
+                        product_name = batch_prod.get("Product_Name", "")
+                    batch_number = batch_prod.get("Batch_Number", "")
+                    units = int(batch_prod.get("Units", 0))
+                    
+                    batches.append({
+                        "batch_number": batch_number,
+                        "units": units
+                    })
+                
+                # Get warehouse units for this product
+                warehouse_units = warehouse_lookup.get(product_id_str, 0)
+                
+                # Store suggestion
+                key = f"{stock_name}-{cover_name}-{product_id_str}"
+                suggestions[key] = {
+                    "product_id": product_id_str,
+                    "product_name": product_name,
+                    "warehouse_units": warehouse_units,
+                    "batches": batches
+                }
+        
+        # Also add suggestions for warehouse-only products (not in any current batch)
+        # For each stock in the system
+        for stock_name in all_stocks:
+            # For all possible covers
+            for cover_name in possible_covers:
+                # For all warehouse products
+                for product_id_str, warehouse_units in warehouse_lookup.items():
+                    if warehouse_units <= 0:
+                        continue
+                    
+                    # Create a key for this stock-cover-product
+                    key = f"{stock_name}-{cover_name}-{product_id_str}"
+                    
+                    # If this key doesn't already exist, create it with warehouse units only
+                    if key not in suggestions:
+                        # Try to find product name from warehouse stock
+                        product_name = ""
+                        if not warehouse_stock.empty:
+                            wh_mask = warehouse_stock["Product_ID"].astype(str) == product_id_str
+                            if wh_mask.any():
+                                product_name = warehouse_stock[wh_mask].iloc[0].get("Product_Name", "")
+                        
+                        suggestions[key] = {
+                            "product_id": product_id_str,
+                            "product_name": product_name,
+                            "warehouse_units": warehouse_units,
+                            "batches": []  # No batches, only warehouse
+                        }
+                    else:
+                        # Key already exists, just ensure warehouse units are set
+                        suggestions[key]["warehouse_units"] = warehouse_units
+        
+        return jsonify(suggestions=suggestions)
+    except Exception as e:
+        print(f"ERROR in get_batch_suggestions: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/update-status", methods=["POST"])
+def update_stock_status():
+    """Update stock status (Active -> Inactive when all units are zero)"""
+    try:
+        d = request.json
+        stock_id = str(d.get("stock_id", "")).strip()
+        new_status = str(d.get("status", "")).strip()
+        
+        if not stock_id:
+            return jsonify(error="Stock ID is required"), 400
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        stock_products = db.get("Stock_Products", pd.DataFrame())
+        
+        if stocks.empty:
+            return jsonify(error="Stocks sheet is empty"), 404
+        
+        # Find stock
+        stock_mask = stocks["Stock_ID"] == stock_id
+        if not stock_mask.any():
+            return jsonify(error=f"Stock {stock_id} not found"), 404
+        
+        stock_idx = stock_mask.idxmax()
+        
+        # Check if all products in this stock have zero units
+        stock_products_mask = stock_products["Stock_ID"] == stock_id
+        stock_products_data = stock_products[stock_products_mask]
+        
+        total_units = 0
+        if not stock_products_data.empty:
+            total_units = int(stock_products_data["Units"].sum() or 0)
+        
+        # Auto-change to Inactive if all units are zero
+        if total_units == 0:
+            new_status = "Inactive"
+        elif total_units > 0 and new_status == "Inactive":
+            # Prevent manual change to Inactive if units still exist
+            return jsonify(error="Cannot mark as Inactive while units still exist"), 400
+        
+        # Update status
+        stocks.at[stock_idx, "Status"] = new_status
+        stocks.at[stock_idx, "Total_Units"] = total_units
+        
+        db["Stocks"] = stocks
+        save_all()
+        
+        return jsonify(
+            success=True,
+            stock_id=stock_id,
+            new_status=new_status,
+            total_units=total_units,
+            message=f"Stock {stock_id} status updated to {new_status}"
+        )
+    except Exception as e:
+        print(f"ERROR in update_stock_status: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/get-suggestions-detailed", methods=["POST"])
+def get_suggestions_detailed():
+    """
+    Get detailed suggestions for a product in a specific stock-cover.
+    Returns 3 sources:
+    a) Previous batches (SAME stock-cover with this product, odd/even grouped, units > 0)
+    b) Warehouse stock
+    c) Purchased products
+    """
+    try:
+        d = request.json
+        stock_name = str(d.get("stock_name", "")).strip()
+        cover_name = str(d.get("cover_name", "")).strip()
+        product_id = str(d.get("product_id", "")).strip()
+        
+        if not stock_name or not cover_name or not product_id:
+            return jsonify(error="stock_name, cover_name, and product_id are required"), 400
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        warehouse_stock = db.get("Warehouse", pd.DataFrame())
+        purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        
+        suggestions = {
+            "previous_batches": [],
+            "warehouse": None,
+            "purchased_products": []
+        }
+        
+        # 1. Get previous batches with this product in the SAME stock-cover combination
+        if not stocks.empty:
+            # First, fill down the Batch, Stock, and cover columns to handle Excel merged cell structure
+            stocks_filled = stocks.copy()
+            stocks_filled["Batch"] = stocks_filled["Batch"].fillna(method='ffill')
+            stocks_filled["Stock"] = stocks_filled["Stock"].fillna(method='ffill')
+            stocks_filled["cover"] = stocks_filled["cover"].fillna(method='ffill')
+            
+            # Convert Batch to string format "Batch X"
+            def format_batch(batch_val):
+                if pd.isna(batch_val):
+                    return ""
+                batch_num = int(float(batch_val))
+                return f"Batch {batch_num}"
+            
+            stocks_filled["Batch"] = stocks_filled["Batch"].apply(format_batch)
+            
+            # Filter by same Stock, same Cover, same Product ID, and units > 0
+            print(f"\n{'='*80}")
+            print(f"DEBUG: get_suggestions_detailed")
+            print(f"  Looking for: Stock={stock_name}, Cover={cover_name}, Product={product_id}")
+            print(f"  Available columns: {list(stocks.columns)}")
+            print(f"  Total rows: {len(stocks_filled)}")
+            print(f"\n  Sample data (after filling down, first 5 rows):")
+            for i, row in stocks_filled.head(5).iterrows():
+                print(f"    Row {i}: Batch={row.get('Batch')}, Stock={row.get('Stock')}, cover={row.get('cover')}, product id={row.get('product id')}, units={row.get('units')}")
+            
+            # Check each filter condition separately
+            print(f"\n  Filter analysis:")
+            stock_match = stocks_filled["Stock"].astype(str).str.strip() == stock_name
+            print(f"    Stock matches ({stock_name}): {stock_match.sum()} rows")
+            if stock_match.sum() > 0:
+                print(f"      Matching rows: {stocks_filled[stock_match]['Stock'].unique().tolist()}")
+            
+            cover_match = stocks_filled["cover"].astype(str).str.strip() == cover_name
+            print(f"    Cover matches ({cover_name}): {cover_match.sum()} rows")
+            if cover_match.sum() > 0:
+                print(f"      Matching rows: {stocks_filled[cover_match]['cover'].unique().tolist()}")
+            
+            product_match = stocks_filled["product id"].astype(str).str.strip() == product_id
+            print(f"    Product matches ({product_id}): {product_match.sum()} rows")
+            if product_match.sum() > 0:
+                print(f"      Sample: {stocks_filled[product_match][['product id', 'product name']].iloc[0].to_dict()}")
+            
+            units_match = stocks_filled["units"] > 0
+            print(f"    Units > 0: {units_match.sum()} rows")
+            
+            mask = stock_match & cover_match & product_match & units_match
+            previous_batches = stocks_filled[mask]
+            
+            print(f"\n  Combined match: {len(previous_batches)} rows")
+            
+            if len(previous_batches) == 0:
+                print(f"\n  No matches found. Here's all unique values for debugging:")
+                print(f"    Unique Stocks: {stocks_filled[stocks_filled['Stock'].notna()]['Stock'].unique().tolist()}")
+                print(f"    Unique Covers: {stocks_filled[stocks_filled['cover'].notna()]['cover'].unique().tolist()}")
+                print(f"    Unique Product IDs: {stocks_filled['product id'].unique().tolist()}")
+            
+            for _, row in previous_batches.iterrows():
+                batch_str = str(row.get("Batch", "")).strip()
+                batch_str = batch_str if batch_str and batch_str != "nan" else ""
+                if batch_str:
+                    batch_num = int(batch_str.replace("Batch", "").strip() or 0)
+                    suggestions["previous_batches"].append({
+                        "batch_number": batch_str,
+                        "stock_name": str(row.get("Stock", "")).strip(),
+                        "cover_name": str(row.get("cover", "")).strip(),
+                        "units_available": int(row.get("units", 0)),
+                        "product_name": str(row.get("product name", "")).strip(),
+                        "batch_num": batch_num
+                    })
+                    print(f"    Added: {batch_str} ({batch_num}), {stock_name}-{cover_name}, units={int(row.get('units', 0))}")
+            print(f"{'='*80}\n")
+        
+        # 2. Get warehouse stock for this product
+        if not warehouse_stock.empty:
+            wh_mask = warehouse_stock["Product_ID"].astype(str) == product_id
+            if wh_mask.any():
+                wh_row = warehouse_stock[wh_mask].iloc[0]
+                units = int(wh_row.get("Available_Units", 0))
+                if units > 0:
+                    suggestions["warehouse"] = {
+                        "units_available": units,
+                        "product_name": wh_row.get("Product_Name", ""),
+                        "product_id": product_id
+                    }
+        
+        # 3. Get purchased products for this product (currently available)
+        if not purchased_products.empty:
+            pp_mask = purchased_products["Product_ID"].astype(str) == product_id
+            if pp_mask.any():
+                matching_products = purchased_products[pp_mask]
+                for _, row in matching_products.iterrows():
+                    units = int(row.get("Available_Units", 0))
+                    if units > 0:
+                        suggestions["purchased_products"].append({
+                            "exp_id": row.get("EXP_Id", ""),
+                            "units_available": units,
+                            "product_name": row.get("Product_Name", ""),
+                            "received_date": row.get("Received_Date", ""),
+                            "po_id": row.get("PO_ID", "")
+                        })
+        
+        return jsonify(suggestions=suggestions)
+    except Exception as e:
+        print(f"ERROR in get_suggestions_detailed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/decrease-from-sources", methods=["POST"])
+def decrease_from_sources():
+    """
+    Decrease units from selected sources when batch is created.
+    Sources can be: previous_batch, warehouse, purchased_product
+    
+    Request format:
+    {
+        "sources": [
+            {"type": "previous_batch", "batch_number": "Batch 1", "stock_name": "S1", "cover_name": "C1", "product_id": "P1", "units": 5},
+            {"type": "warehouse", "product_id": "P1", "units": 10},
+            {"type": "purchased_product", "exp_id": "EXP001", "units": 3}
+        ]
+    }
+    """
+    try:
+        d = request.json
+        sources = d.get("sources", [])
+        
+        if not sources:
+            return jsonify(success=True, message="No sources to decrease")
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        warehouse_stock = db.get("Warehouse", pd.DataFrame())
+        purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        
+        results = {
+            "decreased": [],
+            "failed": []
+        }
+        
+        # Process each source
+        for source in sources:
+            source_type = source.get("type", "")
+            
+            try:
+                if source_type == "previous_batch":
+                    # Decrease from Stocks sheet
+                    batch_number = str(source.get("batch_number", "")).strip()
+                    stock_name = str(source.get("stock_name", "")).strip()
+                    cover_name = str(source.get("cover_name", "")).strip()
+                    product_id = str(source.get("product_id", "")).strip()
+                    units_to_decrease = int(source.get("units", 0))
+                    
+                    print(f"DEBUG: decrease_from_sources - prev batch: {batch_number}, {stock_name}-{cover_name}, product {product_id}, units {units_to_decrease}")
+                    
+                    if stocks.empty:
+                        results["failed"].append({"source": source, "reason": "Stocks sheet is empty"})
+                        continue
+                    
+                    # Fill down Batch, Stock, cover columns to handle Excel merged cell structure
+                    stocks_filled = stocks.copy()
+                    stocks_filled["Batch"] = stocks_filled["Batch"].fillna(method='ffill')
+                    stocks_filled["Stock"] = stocks_filled["Stock"].fillna(method='ffill')
+                    stocks_filled["cover"] = stocks_filled["cover"].fillna(method='ffill')
+                    
+                    # Convert Batch to string format for matching
+                    stocks_filled["Batch_str"] = stocks_filled["Batch"].apply(
+                        lambda x: f"Batch {int(float(x))}" if pd.notna(x) else ""
+                    )
+                    
+                    # Match on Batch, Stock, cover, and product id
+                    mask = (
+                        (stocks_filled["Batch_str"].astype(str).str.strip() == batch_number) &
+                        (stocks_filled["Stock"].astype(str).str.strip() == stock_name) &
+                        (stocks_filled["cover"].astype(str).str.strip() == cover_name) &
+                        (stocks_filled["product id"].astype(str).str.strip() == product_id)
+                    )
+                    
+                    if mask.any():
+                        idx = mask.idxmax()
+                        current_units = int(stocks.at[idx, "units"] or 0)
+                        new_units = max(0, current_units - units_to_decrease)
+                        stocks.at[idx, "units"] = new_units
+                        
+                        print(f"DEBUG: Updated Stocks row {idx}: {current_units} -> {new_units}")
+                        
+                        results["decreased"].append({
+                            "source": "previous_batch",
+                            "batch": batch_number,
+                            "stock": stock_name,
+                            "cover": cover_name,
+                            "product_id": product_id,
+                            "units_decreased": units_to_decrease,
+                            "remaining_units": new_units
+                        })
+                    else:
+                        print(f"DEBUG: No matching row found for {batch_number}, {stock_name}-{cover_name}, {product_id}")
+                        results["failed"].append({"source": source, "reason": "Product not found in batch"})
+                
+                elif source_type == "warehouse":
+                    # Decrease from warehouse stock
+                    product_id = source.get("product_id", "")
+                    units_to_decrease = int(source.get("units", 0))
+                    
+                    if warehouse_stock.empty:
+                        results["failed"].append({"source": source, "reason": "Warehouse sheet is empty"})
+                        continue
+                    
+                    wh_mask = warehouse_stock["Product_ID"].astype(str) == str(product_id)
+                    if wh_mask.any():
+                        idx = wh_mask.idxmax()
+                        current_units = int(warehouse_stock.at[idx, "Available_Units"] or 0)
+                        new_units = max(0, current_units - units_to_decrease)
+                        warehouse_stock.at[idx, "Available_Units"] = new_units
+                        
+                        results["decreased"].append({
+                            "source": "warehouse",
+                            "product_id": product_id,
+                            "units_decreased": units_to_decrease,
+                            "remaining_units": new_units
+                        })
+                    else:
+                        results["failed"].append({"source": source, "reason": "Product not found in warehouse"})
+                
+                elif source_type == "purchased_product":
+                    # Decrease from purchased products
+                    exp_id = str(source.get("exp_id", "")).strip()
+                    units_to_decrease = int(source.get("units", 0))
+                    
+                    if purchased_products.empty:
+                        results["failed"].append({"source": source, "reason": "Purchased_Products sheet is empty"})
+                        continue
+                    
+                    pp_mask = purchased_products["EXP_Id"].astype(str).str.strip() == exp_id
+                    if pp_mask.any():
+                        idx = pp_mask.idxmax()
+                        current_units = int(purchased_products.at[idx, "Available_Units"] or 0)
+                        new_units = current_units - units_to_decrease
+                        
+                        if new_units <= 0:
+                            # Delete the row if units reach zero
+                            purchased_products = purchased_products.drop(idx).reset_index(drop=True)
+                            results["decreased"].append({
+                                "source": "purchased_product",
+                                "exp_id": exp_id,
+                                "units_decreased": units_to_decrease,
+                                "remaining_units": 0,
+                                "deleted": True
+                            })
+                        else:
+                            purchased_products.at[idx, "Available_Units"] = new_units
+                            results["decreased"].append({
+                                "source": "purchased_product",
+                                "exp_id": exp_id,
+                                "units_decreased": units_to_decrease,
+                                "remaining_units": new_units
+                            })
+                    else:
+                        results["failed"].append({"source": source, "reason": f"EXP_Id {exp_id} not found"})
+                
+            except Exception as e:
+                results["failed"].append({"source": source, "reason": str(e)})
+        
+        # Save all changes
+        db["Stocks"] = stocks
+        db["Warehouse"] = warehouse_stock
+        db["Purchased_Products"] = purchased_products
+        save_all()
+        
+        return jsonify(
+            success=True,
+            results=results,
+            message=f"Decreased {len(results['decreased'])} sources, {len(results['failed'])} failed"
+        )
+    except Exception as e:
+        print(f"ERROR in decrease_from_sources: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify(error=str(e)), 500
+
+
 # --------------------------------------------------
-# RUN SERVER
+# MAIN SERVER STARTUP
 # --------------------------------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    # Load initial data
+    print("Loading initial data...")
+    try:
+        if load_data():
+            print(f"✔ Initial sync completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            print(f"⚠ Initial sync failed, but server will continue with cached data (if available)")
+    except Exception as e:
+        print(f"⚠ Exception during initial load: {e}")
+        print("Server will continue with cached data (if available)")
+    
+    # Start Flask server
+    print(f"Starting Flask server on port {PORT}...")
+    app.run(debug=False, host="0.0.0.0", port=PORT)
+
+

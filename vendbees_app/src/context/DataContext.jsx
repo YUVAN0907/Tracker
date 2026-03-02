@@ -41,7 +41,11 @@ export const DataProvider = ({ children }) => {
             console.log('DataContext: Fetch response status:', res.status);
             if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to connect to backend`);
             const json = await res.json();
-            console.log('DataContext: Parsed JSON successfully, products:', json.products?.length, 'machines:', json.machines?.length);
+            console.log('DataContext: Parsed JSON successfully');
+            console.log('  - products:', json.products?.length || 0);
+            console.log('  - machines:', json.machines?.length || 0);
+            console.log('  - stocks:', json.stocks?.length || 0, 'items');
+            console.log('  - stocks data:', json.stocks || []);
 
             // 1. Products Mapping
             const products = (json.products || []).map(p => {
@@ -152,6 +156,8 @@ export const DataProvider = ({ children }) => {
 
             // 8a. Purchased_Products Mapping (items received from vendors, pending warehouse approval)
             const purchased_products = (json.purchased_products || []).map(i => ({
+                PO_ID: String(i.PO_ID || '').trim(),
+                EXP_Id: String(i.EXP_Id || '').trim(),
                 Product_ID: String(i.Product_ID || '').trim(),
                 Product_Name: i.Product_Name || '',
                 Available_Units: parseInt(i.Available_Units || 0) || 0,
@@ -161,16 +167,50 @@ export const DataProvider = ({ children }) => {
                 Notes: i.Notes || ''
             })).filter(i => i.Product_ID);
 
-            // 8b. Stocks Mapping
-            const stocks = (json.stocks || []).map(s => ({
-                Stock_ID: s.Stock_ID || '',
-                Stock_Name: s.Stock_Name || '',
-                Created_Date: s.Created_Date || '',
-                Status: s.Status || 'Active',
-                Total_Units: parseInt(s.Total_Units || 0) || 0,
-                Products_Count: parseInt(s.Products_Count || 0) || 0,
-                Products: s.Products || []
-            })).filter(s => s.Stock_ID);
+            // 8b. Stocks Mapping - Match Excel sheet structure exactly
+            // Excel can return columns with spaces (e.g., 'product id', 'cover status')
+            const stocks = (json.stocks || []).map(s => {
+                // Helper to get value from either column name version, handling NaN/null
+                const getCleanValue = (spaceVersion, underscoreVersion, defaultVal = '') => {
+                    const val = s[spaceVersion] || s[underscoreVersion];
+                    // Check for null, undefined, NaN, or the string "NaN"
+                    if (val === null || val === undefined || Number.isNaN(val) || val === 'NaN') {
+                        return '';
+                    }
+                    return String(val).trim();
+                };
+                
+                return {
+                    Batch: getCleanValue('Batch', 'Batch_Number'),
+                    Date: String(s.Date || s.Created_Date || '').trim(),
+                    Machine: getCleanValue('Machine', 'Machine_ID'),
+                    Stock: getCleanValue('Stock', 'Stock_Name'),
+                    cover: getCleanValue('cover', 'Cover_Name'),
+                    cover_status: getCleanValue('cover status', 'cover_status'),  // Empty if NaN/null
+                    product_id: getCleanValue('product id', 'product_id'),
+                    product_name: getCleanValue('product name', 'product_name'),
+                    units: parseFloat(getCleanValue('units', 'Units') || 0) || 0,
+                    Status: getCleanValue('Status', 'Status'),  // Empty if NaN/null
+                    // Keep old names for compatibility
+                    Stock_ID: getCleanValue('Stock_ID', 'Stock_ID'),
+                    Batch_Number: getCleanValue('Batch_Number', 'Batch'),
+                    Stock_Name: getCleanValue('Stock_Name', 'Stock'),
+                    Cover_Name: getCleanValue('Cover_Name', 'cover'),
+                    Total_Products: parseFloat(getCleanValue('Total_Products', 'Total_Products') || 0) || 0,
+                    Total_Units: parseFloat(getCleanValue('Total_Units', 'Total_Units') || 0) || 0
+                };
+            }).filter(s => {
+                // Include row if it has product_id (all product rows should have this)
+                // OR if it has Batch/Stock_ID (for compatibility with old format)
+                return s.product_id || s.Batch || s.Stock_ID;
+            });
+            
+            if (stocks.length > 0) {
+                console.log('✔ Loaded stocks from Stocks sheet:', stocks.length, 'rows');
+                stocks.slice(0, 10).forEach((s, idx) => {
+                    console.log(`  Row ${idx + 1}: Batch=${s.Batch || '-'}, Stock=${s.Stock || '-'}, Cover=${s.cover || '-'}, Status=${s.Status || '-'}, Cover_Status=${s.cover_status || '-'}, Product=${s.product_name}`);
+                });
+            }
 
             // 8c. Stock Assignments Mapping
             const stock_assignments = (json.stock_assignments || []).map(sa => ({
@@ -494,6 +534,94 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // Get next cover name in sequence (C, C2, C3, ...)
+    // Get stock products for a stock batch
+    const getStockProducts = async (batchNumber) => {
+        try {
+            const res = await fetch(`${API_URL}/stocks/get-batch-products/${batchNumber}`);
+            const result = await res.json();
+            return result.products || [];
+        } catch (e) {
+            console.error('Error getting stock products:', e);
+            return [];
+        }
+    };
+
+    const getNextCoverName = async (stockId) => {
+        try {
+            const res = await fetch(`${API_URL}/stocks/get-next-cover-name/${stockId}`);
+            const result = await res.json();
+            return result.next_cover || 'C';
+        } catch (e) {
+            console.error('Error getting next cover name:', e);
+            return 'C';
+        }
+    };
+
+    // Get previous stock patterns for copying
+    const getPreviousStockPatterns = async () => {
+        try {
+            const res = await fetch(`${API_URL}/stocks/get-previous-patterns`);
+            const result = await res.json();
+            return result.patterns || [];
+        } catch (e) {
+            console.error('Error getting previous stock patterns:', e);
+            return [];
+        }
+    };
+
+    // Decrease available units from purchased products
+    const decreasePurchasedUnits = async (itemsToDecrease) => {
+        try {
+            const res = await fetch(`${API_URL}/stocks/decrease-purchased-units`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: itemsToDecrease })
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            return { success: true, ...result };
+        } catch (e) {
+            console.error(e);
+            return { success: false, error: e.message };
+        }
+    };
+
+    // Update stock batch status
+    const updateStockStatus = async (stockId, newStatus) => {
+        try {
+            const res = await fetch(`${API_URL}/stocks/update-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stock_id: stockId, status: newStatus })
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            return { success: true, ...result };
+        } catch (e) {
+            console.error(e);
+            return { success: false, error: e.message };
+        }
+    };
+
+    // Check and auto-update stock statuses when units become zero
+    const checkAndUpdateStockStatuses = async () => {
+        try {
+            // Get current stocks data
+            const currentStocks = data.stocks || [];
+            
+            // For each stock batch, check if total units are zero and status is still Active
+            for (const stock of currentStocks) {
+                if (stock.Total_Units === 0 && stock.Status === 'Active') {
+                    // Auto-update to Inactive
+                    await updateStockStatus(stock.Stock_ID, 'Inactive');
+                }
+            }
+        } catch (e) {
+            console.error('Error checking stock statuses:', e);
+        }
+    };
+
     const refreshData = () => {
         setRefreshTrigger(prev => prev + 1);
     };
@@ -517,6 +645,12 @@ export const DataProvider = ({ children }) => {
             getPODeliveries,
             fetchVendorPurchases,
             createVendorPurchase,
+            getNextCoverName,
+            getPreviousStockPatterns,
+            decreasePurchasedUnits,
+            getStockProducts,
+            updateStockStatus,
+            checkAndUpdateStockStatuses,
             refreshData 
         }}>
             {children}
