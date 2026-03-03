@@ -14,12 +14,20 @@ from dotenv import load_dotenv
 # --------------------------------------------------
 load_dotenv()
 
-TENANT_ID = os.environ["SP_TENANT_ID"]
-CLIENT_ID = os.environ["SP_CLIENT_ID"]
-CLIENT_SECRET = os.environ["SP_CLIENT_SECRET"]
-SITE_ID = os.environ["SP_SITE_ID"]
-DRIVE_ID = os.environ["SP_DRIVE_ID"]
-FILE_ID = os.environ["SP_FILE_ID"]
+
+
+def get_env(name):
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} not set")
+    return value
+
+TENANT_ID = get_env("SP_TENANT_ID")
+CLIENT_ID = get_env("SP_CLIENT_ID")
+CLIENT_SECRET = get_env("SP_CLIENT_SECRET")
+SITE_ID = get_env("SP_SITE_ID")
+DRIVE_ID = get_env("SP_DRIVE_ID")
+FILE_ID = get_env("SP_FILE_ID")
 
 PORT = 3001
 # Use Windows temp folder to avoid OneDrive sync issues
@@ -247,12 +255,12 @@ def save_all():
 # --------------------------------------------------
 # POLLING THREAD
 # --------------------------------------------------
-def poll_sharepoint():
-    while True:
-        load_data()
-        time.sleep(30)
+# def poll_sharepoint():
+#     while True:
+#         load_data()
+#         time.sleep(30)
 
-threading.Thread(target=poll_sharepoint, daemon=True).start()
+# threading.Thread(target=poll_sharepoint, daemon=True).start()
 load_data()
 
 # --------------------------------------------------
@@ -3194,6 +3202,6 @@ if __name__ == "__main__":
     
     # Start Flask server
     print(f"Starting Flask server on port {PORT}...")
-    app.run(debug=False, host="0.0.0.0", port=PORT)
+   
 
 
