@@ -22,6 +22,7 @@ function App() {
             <Route path="restock/create-batch" element={<CreateBatchPage />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="warehouse" element={<Warehouse />} />
+            <Route path="notifications" element={<Notifications />} />
           </Route>
         </Routes>
       </Router>
