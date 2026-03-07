@@ -9,4 +9,5 @@ COPY . .
 
 ENV PORT=8080
 
-CMD ["gunicorn", "--bind", ":8080", "--workers", "1", "--threads", "8", "server:app"]
+CMD ["gunicorn", "--bind", ":8080", "--workers", "2", "--threads", "8", "server:app"]
+

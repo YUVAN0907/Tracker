@@ -32,7 +32,8 @@ export const DataProvider = ({ children }) => {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     // Use 127.0.0.1 to avoid IPv6/localhost resolution mismatches
-    const API_URL = import.meta.env.VITE_API_URL;
+    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-687188962794.asia-south1.run.app/api';
+
 
     const fetchData = async () => {
         try {

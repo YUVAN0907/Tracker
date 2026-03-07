@@ -1,6 +1,7 @@
 import os
 import time
 import threading
+from unittest import result
 import requests
 import pandas as pd
 import numpy as np
@@ -14,7 +15,7 @@ from dotenv import load_dotenv
 # --------------------------------------------------
 load_dotenv()
 
-
+excel_lock = threading.Lock()
 
 def get_env(name):
     value = os.getenv(name)
@@ -63,6 +64,13 @@ db = {}
 last_sync = 0
 
 # --------------------------------------------------
+# CACHE CONFIG
+# --------------------------------------------------
+dashboard_cache = None
+dashboard_cache_time = 0
+CACHE_TTL = 30  # seconds
+
+# --------------------------------------------------
 # SHAREPOINT AUTH
 # --------------------------------------------------
 def get_access_token():
@@ -80,26 +88,37 @@ def get_access_token():
 # --------------------------------------------------
 # SHAREPOINT FILE OPS
 # --------------------------------------------------
-def download_excel():
+def download_excel(max_retries=3):
     token = get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
     url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/drives/{DRIVE_ID}/items/{FILE_ID}/content"
-    # Use streaming to avoid file corruption on Windows
-    r = requests.get(url, headers=headers, stream=True)
-    r.raise_for_status()
-    
-    # Write using streaming chunks
-    total_size = 0
-    with open(TEMP_EXCEL, "wb") as f:
-        for chunk in r.iter_content(chunk_size=8192):
-            f.write(chunk)
-            total_size += len(chunk)
-    
-    # Verify file was written
-    if total_size < 1000:
-        raise Exception(f"Downloaded file too small: {total_size} bytes")
-    
-    print(f"✔ Downloaded Excel to {TEMP_EXCEL} ({total_size} bytes)")
+
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(url, headers=headers, stream=True, timeout=30)
+            r.raise_for_status()
+
+            total_size = 0
+
+            with open(TEMP_EXCEL, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        total_size += len(chunk)
+
+            if total_size < 1000:
+                raise Exception(f"Downloaded file too small: {total_size} bytes")
+
+            print(f"✔ Downloaded Excel ({total_size} bytes)")
+            return
+
+        except Exception as e:
+            print(f"⚠ Download attempt {attempt+1} failed: {e}")
+
+            if attempt == max_retries - 1:
+                raise
+
+            time.sleep(2 * (attempt + 1))
 
 def upload_excel(max_retries=3, retry_delay=2):
     """Upload Excel to SharePoint with retry logic for locked files"""
@@ -247,10 +266,12 @@ def load_data():
 # --------------------------------------------------
 def save_all():
     """Save data to Excel and upload to SharePoint. Raises exception if file is locked."""
-    with pd.ExcelWriter(TEMP_EXCEL, engine="openpyxl", mode="w") as writer:
-        for key, sheet in SHEET_MAP.items():
-            db.get(key, pd.DataFrame()).to_excel(writer, sheet_name=sheet, index=False)
-    upload_excel()
+    with excel_lock:
+        with pd.ExcelWriter(TEMP_EXCEL, engine="openpyxl", mode="w") as writer:
+            
+            for key, sheet in SHEET_MAP.items():
+                db.get(key, pd.DataFrame()).to_excel(writer, sheet_name=sheet, index=False)
+        upload_excel()
 
 # --------------------------------------------------
 # POLLING THREAD
@@ -261,13 +282,33 @@ def save_all():
 #         time.sleep(30)
 
 # threading.Thread(target=poll_sharepoint, daemon=True).start()
-load_data()
 
+# Load initial data
+print("Loading initial data...")
+load_data()  # Initial load on startup
 # --------------------------------------------------
 # ROUTES
 # --------------------------------------------------
+
+
+@app.route("/api/refresh", methods=["POST"])
+def refresh_cache():
+    global dashboard_cache, dashboard_cache_time
+
+    load_data()
+    dashboard_cache = None
+    dashboard_cache_time = 0
+
+    return jsonify(success=True, message="Cache refreshed")
+
 @app.route("/api/dashboard")
 def dashboard():
+    global dashboard_cache, dashboard_cache_time
+
+     # Return cached response if still valid
+    if dashboard_cache and (time.time() - dashboard_cache_time) < CACHE_TTL:
+        return jsonify(dashboard_cache)
+
     products = db.get("Products", pd.DataFrame())
     machines = db.get("Machines", pd.DataFrame())
     stock = db.get("Stock", pd.DataFrame())
@@ -360,7 +401,7 @@ def dashboard():
     else:
         print(f"  WARNING: Stocks DataFrame is empty!")
     
-    return jsonify({
+    result = {
         "products": df_to_safe_dict(products),
         "machines": df_to_safe_dict(machines),
         "stock": df_to_safe_dict(stock),
@@ -379,7 +420,13 @@ def dashboard():
             "activeMachines": int((machines["Status"] == "Active").sum()) if not machines.empty else 0,
             "outOfStock": int((stock["Current_Stock"] <= 0).sum()) if not stock.empty else 0
         }
-    })
+    }
+
+    dashboard_cache = result
+    dashboard_cache_time = time.time()
+
+    return jsonify(result)          
+    
 
 @app.route("/api/add-product", methods=["POST"])
 def add_product():
@@ -3189,19 +3236,19 @@ def decrease_from_sources():
 # MAIN SERVER STARTUP
 # --------------------------------------------------
 if __name__ == "__main__":
-    # Load initial data
-    print("Loading initial data...")
-    try:
-        if load_data():
-            print(f"✔ Initial sync completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        else:
-            print(f"⚠ Initial sync failed, but server will continue with cached data (if available)")
-    except Exception as e:
-        print(f"⚠ Exception during initial load: {e}")
-        print("Server will continue with cached data (if available)")
+    
+    # try:
+    #     if load_data():
+    #         print(f"✔ Initial sync completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    #     else:
+    #         print(f"⚠ Initial sync failed, but server will continue with cached data (if available)")
+    # except Exception as e:
+    #     print(f"⚠ Exception during initial load: {e}")
+    #     print("Server will continue with cached data (if available)")
     
     # Start Flask server
     print(f"Starting Flask server on port {PORT}...")
+    # app.run(host="0.0.0.0", port=PORT, debug=True)
    
 
 
