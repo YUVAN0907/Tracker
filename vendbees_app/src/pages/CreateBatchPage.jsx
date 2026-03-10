@@ -25,6 +25,8 @@ const CreateBatchPage = () => {
     const [suggestionTab, setSuggestionTab] = useState('purchased'); // 'batches', 'warehouse', 'purchased'
     const [selectedSourceUnits, setSelectedSourceUnits] = useState({}); // Track selected units for each source
     const [pendingSources, setPendingSources] = useState([]); // Track what will be decreased when batch is created
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false); // Loading state for suggestions
+    const [suggestionError, setSuggestionError] = useState(null); // Error message from suggestions
     const [stocksData, setStocksData] = useState({
         'S1': { machine: '', covers: {} },
         'S2': { machine: '', covers: {} },
@@ -159,6 +161,7 @@ const CreateBatchPage = () => {
             if (!groupInfo) {
                 // No batch number yet, just add the product
                 console.log('No batch number, adding product directly');
+                alert(`⚠️ Enter a Batch Number first to use suggestions.\\n\\nFor now, adding "${product.Product_Name}" to ${stock}-${cover} without suggestions. You can edit units manually.`);
                 addProductDirectly(stock, cover, product);
                 return;
             }
@@ -166,23 +169,39 @@ const CreateBatchPage = () => {
             const productId = product.Product_ID;
             console.log(`🔍 Fetching detailed suggestions for ${stock}-${cover}-${productId}`);
             
+            // Show loading state
+            setLoadingSuggestions(true);
+            setSuggestionError(null);
+            setPendingProduct({ stock, cover, product });
+            setDetailedSuggestions({ previous_batches: [], warehouse: null, purchased_products: [] });
+            
             // Fetch detailed suggestions from backend
             try {
+                console.log(`📡 Calling API: ${API_URL}/stocks/get-suggestions-detailed`);
                 const suggestionResponse = await fetch(`${API_URL}/stocks/get-suggestions-detailed`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         stock_name: stock,
                         cover_name: cover,
-                        product_id: productId
+                        product_id: productId,
+                        current_batch_number: batchNumber
                     })
                 });
                 
+                console.log(`✅ API Response status: ${suggestionResponse.status}`);
+                
                 if (!suggestionResponse.ok) {
-                    throw new Error('Failed to fetch suggestions');
+                    throw new Error(`Server error ${suggestionResponse.status}: ${suggestionResponse.statusText}`);
                 }
                 
                 const suggestionData = await suggestionResponse.json();
+                console.log('📦 API Response:', suggestionData);
+                
+                if (suggestionData.error) {
+                    throw new Error(`Backend error: ${suggestionData.error}`);
+                }
+                
                 const suggestions = suggestionData.suggestions;
                 
                 console.log('💾 Detailed suggestions:', suggestions);
@@ -194,49 +213,51 @@ const CreateBatchPage = () => {
                 const hasPurchased = suggestions.purchased_products && suggestions.purchased_products.length > 0;
                 
                 if (hasBatches || hasWarehouse || hasPurchased) {
-                    // Filter batches by group (odd/even) and must be BEFORE current batch
-                    let applicableBatches = [];
-                    if (hasBatches) {
-                        applicableBatches = suggestions.previous_batches.filter(batch => {
-                            const batchNum = batch.batch_num || parseInt(batch.batch_number.match(/\d+/)?.[0] || 0);
-                            const isOdd = batchNum % 2 === 1;
-                            const isSameGrouping = isOdd === groupInfo.isOddBatch;
-                            const isBeforeCurrent = batchNum < groupInfo.batchNum;
-                            
-                            console.log(`  Batch ${batch.batch_number}: num=${batchNum}, odd/even=${isOdd}, sameGroup=${isSameGrouping}, before=${isBeforeCurrent}`);
-                            
-                            return isSameGrouping && isBeforeCurrent;
-                        });
-                    }
+                    // Backend already filters by group and batch number, so just use the results
+                    const availableSources = {
+                        previous_batches: suggestions.previous_batches || [],
+                        warehouse: hasWarehouse ? suggestions.warehouse : null,
+                        purchased_products: suggestions.purchased_products || []
+                    };
                     
-                    console.log(`✨ Applicable batches: ${applicableBatches.length}/${suggestions.previous_batches.length}, Warehouse: ${hasWarehouse}, Purchased: ${hasPurchased}`);
+                    // Check if we have at least one source
+                    const hasAnySources = availableSources.previous_batches.length > 0 || 
+                                         availableSources.warehouse !== null || 
+                                         availableSources.purchased_products.length > 0;
                     
-                    // Show dialog if there are batches OR warehouse units OR purchased products
-                    if (applicableBatches.length > 0 || hasWarehouse || hasPurchased) {
-                        console.log('🎯 Showing suggestion dialog with 3 tabs');
-                        setPendingProduct({ stock, cover, product });
-                        setSuggestedBatches(applicableBatches);
-                        setDetailedSuggestions({
-                            previous_batches: applicableBatches,
-                            warehouse: suggestions.warehouse,
-                            purchased_products: suggestions.purchased_products || []
-                        });
-                        setSuggestionTab('purchased');
+                    if (hasAnySources) {
+                        console.log('🎯 Showing suggestion dialog with available sources');
+                        setDetailedSuggestions(availableSources);
+                        setSuggestionTab('purchased'); // Default to purchased products
                         setSelectedSourceUnits({});
+                        setLoadingSuggestions(false);
+                        setSuggestionError(null);
                         return;
                     }
                 }
+                
+                // No sources available - show error
+                setLoadingSuggestions(false);
+                setSuggestionError(`No sources available for ${product.Product_Name}. 
+                
+You can:
+1. Enter units manually (if needed)
+2. Check warehouse has stock
+3. Add to purchased products first
+(Previous batches must match batch number parity)`);
+                // Keep dialog open with error message for user review
+                
             } catch (error) {
-                console.error('Error fetching suggestions:', error);
-                // Fall through to add directly if suggestion fetch fails
+                console.error('❌ Error fetching suggestions:', error);
+                console.error('Error stack:', error.stack);
+                setLoadingSuggestions(false);
+                setSuggestionError(error.message || 'Failed to load suggestions. Please try again.');
+                // Keep dialog open to show error
             }
-            
-            // No suggestions, add product directly
-            console.log('No applicable suggestions, adding directly');
-            addProductDirectly(stock, cover, product);
         } catch (error) {
-            console.error('Error in handleAddProduct:', error);
-            addProductDirectly(stock, cover, product);
+            console.error('❌ Error in handleAddProduct:', error);
+            setLoadingSuggestions(false);
+            setSuggestionError('An unexpected error occurred');
         }
     };
 
@@ -450,48 +471,7 @@ const CreateBatchPage = () => {
         setStocksData(updatedStocks);
     };
 
-    const handleCopyPattern = (stock, pattern) => {
-        const updatedStocks = { ...stocksData };
-        
-        Object.entries(pattern.covers).forEach(([coverName, products]) => {
-            if (!updatedStocks[stock].covers[coverName]) {
-                updatedStocks[stock].covers[coverName] = [];
-            }
-            products.forEach(product => {
-                if (!updatedStocks[stock].covers[coverName].find(p => p.product_id === product.product_id)) {
-                    updatedStocks[stock].covers[coverName].push({
-                        product_id: product.product_id,
-                        product_name: product.product_name,
-                        units: product.units
-                    });
-                }
-            });
-        });
-        
-        setStocksData(updatedStocks);
-        setShowPatternDropdown(null);
-    };
 
-    const handleCopySameBatchPattern = (fromStock, toStock) => {
-        const updatedStocks = { ...stocksData };
-        
-        Object.entries(stocksData[fromStock].covers).forEach(([coverName, products]) => {
-            if (!updatedStocks[toStock].covers[coverName]) {
-                updatedStocks[toStock].covers[coverName] = [];
-            }
-            products.forEach(product => {
-                if (!updatedStocks[toStock].covers[coverName].find(p => p.product_id === product.product_id)) {
-                    updatedStocks[toStock].covers[coverName].push({
-                        product_id: product.product_id,
-                        product_name: product.product_name,
-                        units: product.units
-                    });
-                }
-            });
-        });
-        
-        setStocksData(updatedStocks);
-    };
 
     const filteredProducts = purchased_products.filter(p =>
         p.Product_Name?.toLowerCase().includes(filterQuery.toLowerCase()) ||
@@ -591,57 +571,114 @@ const CreateBatchPage = () => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
             {/* Suggestion Dialog - 3 Tab System */}
-            {pendingProduct && detailedSuggestions && (
+            {pendingProduct && detailedSuggestions !== null && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { 
-                    setPendingProduct(null); 
-                    setDetailedSuggestions(null);
-                    setSelectedSourceUnits({});
+                    if (!loadingSuggestions && !suggestionError) {
+                        setPendingProduct(null); 
+                        setDetailedSuggestions(null);
+                        setSelectedSourceUnits({});
+                        setSuggestionError(null);
+                    }
                 }}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold text-slate-800 mb-2">
-                            💡 {pendingProduct.product.Product_Name} - Select Source
-                        </h3>
-                        
-                        <p className="text-sm text-slate-700 mb-6">
-                            Adding to <strong>{pendingProduct.stock}-{pendingProduct.cover}</strong> ({groupInfo?.groupLabel})
-                        </p>
+                        {loadingSuggestions ? (
+                            <div className="flex flex-col items-center justify-center py-12">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
+                                <p className="text-slate-600 font-medium">Loading suggestions...</p>
+                                <p className="text-slate-500 text-sm mt-2">Adding {pendingProduct?.product.Product_Name}</p>
+                            </div>
+                        ) : suggestionError ? (
+                            <div className="flex flex-col items-center justify-center py-12">
+                                <div className="text-red-500 text-4xl mb-4">⚠️</div>
+                                <h3 className="text-lg font-bold text-slate-800 mb-2">Unable to Load Suggestions</h3>
+                                <p className="text-slate-600 mb-6 text-center max-w-md">{suggestionError}</p>
+                                <p className="text-sm text-slate-500 mb-6 max-w-md text-center">
+                                    Make sure the backend server is running and the database is accessible.
+                                </p>
+                                <div className="space-y-3 w-full max-w-xs">
+                                    <button
+                                        onClick={() => {
+                                            setLoadingSuggestions(true);
+                                            setSuggestionError(null);
+                                            handleAddProduct(pendingProduct.stock, pendingProduct.cover, pendingProduct.product);
+                                        }}
+                                        className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
+                                    >
+                                        🔄 Retry Loading Suggestions
+                                    </button>
+                                    <button
+                                        onClick={() => { 
+                                            setPendingProduct(null); 
+                                            setDetailedSuggestions(null);
+                                            setSelectedSourceUnits({});
+                                            setSuggestionError(null);
+                                        }}
+                                        className="w-full px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 className="text-lg font-bold text-slate-800 mb-2">
+                                    💡 {pendingProduct.product.Product_Name} - Select Source
+                                </h3>
+                                
+                                <p className="text-sm text-slate-700 mb-2">
+                                    Adding to <strong>{pendingProduct.stock}-{pendingProduct.cover}</strong> ({groupInfo?.groupLabel})
+                                </p>
+                                
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-sm text-blue-800">
+                                    <strong>📌 How it works:</strong> Select which source to take units from (Previous Batch, Warehouse, or Purchased Products). 
+                                    When you create the batch, units will be decreased from the selected source to maintain consistency.
+                                </div>
 
-                        {/* Tabs */}
-                        <div className="flex gap-2 border-b border-slate-200 mb-6">
-                            <button
-                                onClick={() => setSuggestionTab('purchased')}
-                                className={clsx(
-                                    "px-4 py-2 font-medium border-b-2 transition-colors",
-                                    suggestionTab === 'purchased'
-                                        ? "border-orange-500 text-orange-600"
-                                        : "border-transparent text-slate-600 hover:text-slate-800"
-                                )}
-                            >
-                                📥 Purchased Products {detailedSuggestions.purchased_products.length > 0 && `(${detailedSuggestions.purchased_products.length})`}
-                            </button>
-                            <button
-                                onClick={() => setSuggestionTab('warehouse')}
-                                className={clsx(
-                                    "px-4 py-2 font-medium border-b-2 transition-colors",
-                                    suggestionTab === 'warehouse'
-                                        ? "border-green-500 text-green-600"
-                                        : "border-transparent text-slate-600 hover:text-slate-800"
-                                )}
-                            >
-                                🏭 Warehouse Stock {detailedSuggestions.warehouse && `(${detailedSuggestions.warehouse.units_available})`}
-                            </button>
-                            <button
-                                onClick={() => setSuggestionTab('batches')}
-                                className={clsx(
-                                    "px-4 py-2 font-medium border-b-2 transition-colors",
-                                    suggestionTab === 'batches'
-                                        ? "border-blue-500 text-blue-600"
-                                        : "border-transparent text-slate-600 hover:text-slate-800"
-                                )}
-                            >
-                                📦 Previous Batches {detailedSuggestions.previous_batches.length > 0 && `(${detailedSuggestions.previous_batches.length})`}
-                            </button>
-                        </div>
+                                {/* Tabs - Only show for available sources */}
+                                <div className="flex gap-2 border-b border-slate-200 mb-6">
+                                    {/* Purchased Products Tab - Always shown (default source) */}
+                                    <button
+                                        onClick={() => setSuggestionTab('purchased')}
+                                        className={clsx(
+                                            "px-4 py-2 font-medium border-b-2 transition-colors",
+                                            suggestionTab === 'purchased'
+                                                ? "border-orange-500 text-orange-600"
+                                                : "border-transparent text-slate-600 hover:text-slate-800"
+                                        )}
+                                    >
+                                        📥 Purchased Products {detailedSuggestions.purchased_products.length > 0 && `(${detailedSuggestions.purchased_products.length})`}
+                                    </button>
+                                    
+                                    {/* Warehouse Stock Tab - Only if available */}
+                                    {detailedSuggestions.warehouse && detailedSuggestions.warehouse.units_available > 0 && (
+                                        <button
+                                            onClick={() => setSuggestionTab('warehouse')}
+                                            className={clsx(
+                                                "px-4 py-2 font-medium border-b-2 transition-colors",
+                                                suggestionTab === 'warehouse'
+                                                    ? "border-green-500 text-green-600"
+                                                    : "border-transparent text-slate-600 hover:text-slate-800"
+                                            )}
+                                        >
+                                            🏭 Warehouse Stock ({detailedSuggestions.warehouse.units_available})
+                                        </button>
+                                    )}
+                                    
+                                    {/* Previous Batches Tab - Only if available */}
+                                    {detailedSuggestions.previous_batches.length > 0 && (
+                                        <button
+                                            onClick={() => setSuggestionTab('batches')}
+                                            className={clsx(
+                                                "px-4 py-2 font-medium border-b-2 transition-colors",
+                                                suggestionTab === 'batches'
+                                                    ? "border-blue-500 text-blue-600"
+                                                    : "border-transparent text-slate-600 hover:text-slate-800"
+                                            )}
+                                        >
+                                            📦 Previous Batches (${detailedSuggestions.previous_batches.length})
+                                        </button>
+                                    )}
+                                </div>
 
                         {/* Tab Content */}
                         <div className="mb-6">
@@ -657,38 +694,57 @@ const CreateBatchPage = () => {
                                             {detailedSuggestions.previous_batches.map((batch, idx) => (
                                                 <div key={idx} className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition">
                                                     <div className="flex justify-between items-start mb-3">
-                                                        <div>
-                                                            <div className="font-bold text-blue-900">{batch.batch_number}</div>
-                                                            <div className="text-xs text-blue-600 mt-1">{batch.stock_name}-{batch.cover_name}</div>
+                                                        <div className="flex-1">
+                                                            <div className="font-bold text-blue-900 text-lg">{batch.batch_number}</div>
+                                                            <div className="text-xs text-blue-600 mt-1">Stock: {batch.stock_name} | Cover: {batch.cover_name}</div>
                                                         </div>
-                                                        <span className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded font-semibold">
-                                                            {batch.units_available} units
-                                                        </span>
+                                                        <div className="text-right">
+                                                            <div className="text-lg bg-blue-100 text-blue-800 px-4 py-2 rounded font-bold border-2 border-blue-300">
+                                                                {batch.units_available} units
+                                                            </div>
+                                                            <div className="text-xs text-blue-600 mt-1">Available</div>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <div className="mb-2">
+                                                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                            Units to add (Max: {batch.units_available})
+                                                        </label>
                                                         <input
                                                             type="number"
                                                             min="1"
                                                             max={batch.units_available}
                                                             defaultValue={Math.min(5, batch.units_available)}
                                                             id={`batch-units-${idx}`}
-                                                            className="flex-1 px-3 py-2 border border-blue-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                                            placeholder="Units"
-                                                        />
-                                                        <button
-                                                            onClick={() => {
-                                                                const units = parseInt(document.getElementById(`batch-units-${idx}`).value) || 0;
-                                                                if (units > 0) {
-                                                                    handleUsePreviousBatchProduct(batch, units);
+                                                            className="w-full px-3 py-2 border-2 border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                                                            placeholder="Enter units"
+                                                            onChange={(e) => {
+                                                                const val = parseInt(e.target.value) || 0;
+                                                                if (val > batch.units_available) {
+                                                                    e.target.value = batch.units_available;
                                                                 }
                                                             }}
-                                                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium text-sm transition-colors whitespace-nowrap"
-                                                        >
-                                                            Use
-                                                        </button>
+                                                        />
                                                     </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            const input = document.getElementById(`batch-units-${idx}`);
+                                                            const units = parseInt(input.value) || 0;
+                                                            if (units > batch.units_available) {
+                                                                alert(`❌ Cannot use more than ${batch.units_available} units from this batch`);
+                                                                input.value = batch.units_available;
+                                                                return;
+                                                            }
+                                                            if (units > 0) {
+                                                                handleUsePreviousBatchProduct(batch, units);
+                                                            }
+                                                        }}
+                                                        className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium text-sm transition-colors"
+                                                    >
+                                                        ✅ Use {batch.units_available} Units from Batch {batch.batch_number}
+                                                    </button>
                                                 </div>
                                             ))}
+
                                         </div>
                                     )}
                                 </div>
@@ -704,36 +760,54 @@ const CreateBatchPage = () => {
                                     ) : (
                                         <div className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition">
                                             <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <div className="font-bold text-green-900">{detailedSuggestions.warehouse.product_name}</div>
-                                                    <div className="text-xs text-green-600 mt-1">Warehouse Stock</div>
+                                                <div className="flex-1">
+                                                    <div className="font-bold text-green-900 text-lg">{detailedSuggestions.warehouse.product_name}</div>
+                                                    <div className="text-xs text-green-600 mt-1">📦 Warehouse Stock</div>
                                                 </div>
-                                                <span className="text-sm bg-green-100 text-green-700 px-3 py-1 rounded font-semibold">
-                                                    {detailedSuggestions.warehouse.units_available} units available
-                                                </span>
+                                                <div className="text-right">
+                                                    <div className="text-lg bg-green-100 text-green-800 px-4 py-2 rounded font-bold border-2 border-green-300">
+                                                        {detailedSuggestions.warehouse.units_available} units
+                                                    </div>
+                                                    <div className="text-xs text-green-600 mt-1">Available</div>
+                                                </div>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="mb-2">
+                                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                    Units to add (Max: {detailedSuggestions.warehouse.units_available})
+                                                </label>
                                                 <input
                                                     type="number"
                                                     min="1"
                                                     max={detailedSuggestions.warehouse.units_available}
                                                     defaultValue={Math.min(5, detailedSuggestions.warehouse.units_available)}
                                                     id="warehouse-units"
-                                                    className="flex-1 px-3 py-2 border border-green-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
-                                                    placeholder="Units"
-                                                />
-                                                <button
-                                                    onClick={() => {
-                                                        const units = parseInt(document.getElementById('warehouse-units').value) || 0;
-                                                        if (units > 0) {
-                                                            handleUseWarehouseProduct(units);
+                                                    className="w-full px-3 py-2 border-2 border-green-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400"
+                                                    placeholder="Enter units"
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value) || 0;
+                                                        if (val > detailedSuggestions.warehouse.units_available) {
+                                                            e.target.value = detailedSuggestions.warehouse.units_available;
                                                         }
                                                     }}
-                                                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium text-sm transition-colors whitespace-nowrap"
-                                                >
-                                                    Use
-                                                </button>
+                                                />
                                             </div>
+                                            <button
+                                                onClick={() => {
+                                                    const input = document.getElementById('warehouse-units');
+                                                    const units = parseInt(input.value) || 0;
+                                                    if (units > detailedSuggestions.warehouse.units_available) {
+                                                        alert(`❌ Cannot use more than ${detailedSuggestions.warehouse.units_available} units from warehouse`);
+                                                        input.value = detailedSuggestions.warehouse.units_available;
+                                                        return;
+                                                    }
+                                                    if (units > 0) {
+                                                        handleUseWarehouseProduct(units);
+                                                    }
+                                                }}
+                                                className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium text-sm transition-colors"
+                                            >
+                                                ✅ Use {detailedSuggestions.warehouse.units_available} Units from Warehouse
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -751,37 +825,57 @@ const CreateBatchPage = () => {
                                             {detailedSuggestions.purchased_products.map((item, idx) => (
                                                 <div key={idx} className="p-4 border-2 border-orange-200 rounded-lg hover:bg-orange-50 transition">
                                                     <div className="flex justify-between items-start mb-3">
-                                                        <div>
-                                                            <div className="font-bold text-orange-900">{item.po_id || 'PO Unknown'}</div>
-                                                            <div className="text-xs text-orange-600 mt-1">EXP: {item.exp_id}</div>
-                                                            <div className="text-xs text-orange-600">Received: {item.received_date}</div>
+                                                        <div className="flex-1">
+                                                            <div className="font-bold text-orange-900 text-lg">{item.product_name}</div>
+                                                            <div className="text-xs text-orange-600 mt-1">
+                                                                🏷️ EXP ID: <span className="font-mono font-semibold">{item.exp_id}</span>
+                                                            </div>
+                                                            <div className="text-xs text-orange-600">📅 Received: {item.received_date}</div>
                                                         </div>
-                                                        <span className="text-sm bg-orange-100 text-orange-700 px-3 py-1 rounded font-semibold">
-                                                            {item.units_available} units
-                                                        </span>
+                                                        <div className="text-right">
+                                                            <div className="text-lg bg-orange-100 text-orange-800 px-4 py-2 rounded font-bold border-2 border-orange-300">
+                                                                {item.units_available} units
+                                                            </div>
+                                                            <div className="text-xs text-orange-600 mt-1">Available</div>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <div className="mb-2">
+                                                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                            Units to add (Max: {item.units_available})
+                                                        </label>
                                                         <input
                                                             type="number"
                                                             min="1"
                                                             max={item.units_available}
                                                             defaultValue={Math.min(5, item.units_available)}
                                                             id={`purchased-units-${idx}`}
-                                                            className="flex-1 px-3 py-2 border border-orange-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
-                                                            placeholder="Units"
-                                                        />
-                                                        <button
-                                                            onClick={() => {
-                                                                const units = parseInt(document.getElementById(`purchased-units-${idx}`).value) || 0;
-                                                                if (units > 0) {
-                                                                    handleUsePurchasedProduct(item, units);
+                                                            className="w-full px-3 py-2 border-2 border-orange-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
+                                                            placeholder="Enter units"
+                                                            onChange={(e) => {
+                                                                const val = parseInt(e.target.value) || 0;
+                                                                if (val > item.units_available) {
+                                                                    e.target.value = item.units_available;
                                                                 }
                                                             }}
-                                                            className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded font-medium text-sm transition-colors whitespace-nowrap"
-                                                        >
-                                                            Use
-                                                        </button>
+                                                        />
                                                     </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            const input = document.getElementById(`purchased-units-${idx}`);
+                                                            const units = parseInt(input.value) || 0;
+                                                            if (units > item.units_available) {
+                                                                alert(`❌ Cannot use more than ${item.units_available} units from this item`);
+                                                                input.value = item.units_available;
+                                                                return;
+                                                            }
+                                                            if (units > 0) {
+                                                                handleUsePurchasedProduct(item, units);
+                                                            }
+                                                        }}
+                                                        className="w-full px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded font-medium text-sm transition-colors"
+                                                    >
+                                                        ✅ Use {item.units_available} Units from {item.exp_id}
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -791,6 +885,9 @@ const CreateBatchPage = () => {
                         </div>
 
                         <div className="border-t border-slate-200 pt-4 space-y-3">
+                            <p className="text-sm text-slate-600 text-center mb-3">
+                                Select a source above and click "Use" to add units from that source
+                            </p>
                             <button
                                 onClick={() => { 
                                     setPendingProduct(null); 
@@ -802,6 +899,8 @@ const CreateBatchPage = () => {
                                 Cancel
                             </button>
                         </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -855,7 +954,7 @@ const CreateBatchPage = () => {
                         <h2 className="text-lg font-semibold text-slate-800 mb-4">Batch Details</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Batch Number *</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Batch Number * <span className="text-orange-600">(Required for suggestions)</span></label>
                                 <input
                                     type="text"
                                     value={batchNumber}
@@ -863,6 +962,7 @@ const CreateBatchPage = () => {
                                     placeholder="e.g., Batch 1, Batch 2, Batch 3"
                                     className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-200"
                                 />
+                                <p className="text-xs text-slate-500 mt-1">💡 Enter batch number to enable product suggestions</p>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">Created Date *</label>
@@ -931,65 +1031,6 @@ const CreateBatchPage = () => {
                                     Machine: <span className="font-bold text-slate-800">{stocksData[activeStock].machine || 'Not Selected'}</span>
                                 </p>
                             </div>
-
-                            {/* Copy Pattern from Same Batch */}
-                            {(() => {
-                                const availableStocks = ['S1', 'S2', 'S3', 'S4']
-                                    .filter(s => s !== activeStock && Object.keys(stocksData[s].covers).length > 0);
-                                
-                                return availableStocks.length > 0 && (
-                                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                                        <h5 className="font-medium text-purple-900 mb-3">Copy Pattern from Same Batch</h5>
-                                        <div className="flex flex-wrap gap-2">
-                                            {availableStocks.map(sourceStock => (
-                                                <button
-                                                    key={sourceStock}
-                                                    type="button"
-                                                    onClick={() => handleCopySameBatchPattern(sourceStock, activeStock)}
-                                                    className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium transition-colors"
-                                                >
-                                                    Copy {sourceStock} to {activeStock}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-
-                            {/* Copy Previous Pattern from Other Batches */}
-                            {previousPatterns.length > 0 && (
-                                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                                    <h5 className="font-medium text-green-900 mb-3">Copy Previous Stock Pattern (Optional)</h5>
-                                    <div className="relative">
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPatternDropdown(showPatternDropdown === activeStock ? null : activeStock)}
-                                            className="w-full px-3 py-2 border border-green-300 rounded-lg text-sm text-left flex items-center justify-between hover:bg-green-100"
-                                        >
-                                            <span className="text-green-700">Select a pattern to copy...</span>
-                                            <ChevronDown size={16} className="text-green-600" />
-                                        </button>
-
-                                        {showPatternDropdown === activeStock && (
-                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-green-300 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
-                                                {previousPatterns.map(pattern => (
-                                                    <button
-                                                        key={pattern.pattern_id}
-                                                        type="button"
-                                                        onClick={() => handleCopyPattern(activeStock, pattern)}
-                                                        className="w-full text-left px-3 py-2 hover:bg-green-50 text-sm border-b border-green-100 last:border-b-0"
-                                                    >
-                                                        <div className="font-medium text-slate-800">{pattern.label}</div>
-                                                        <div className="text-xs text-slate-500">
-                                                            {pattern.total_products} products • {pattern.total_units} units
-                                                        </div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
 
                             {/* Add Cover Section */}
                             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">

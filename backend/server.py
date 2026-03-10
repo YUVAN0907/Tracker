@@ -1,7 +1,7 @@
-import os
+﻿import os
 import time
 import threading
-from unittest import result
+import tempfile
 import requests
 import pandas as pd
 import numpy as np
@@ -15,25 +15,19 @@ from dotenv import load_dotenv
 # --------------------------------------------------
 load_dotenv()
 
-excel_lock = threading.Lock()
-
-def get_env(name):
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(f"{name} not set")
-    return value
-
-TENANT_ID = get_env("SP_TENANT_ID")
-CLIENT_ID = get_env("SP_CLIENT_ID")
-CLIENT_SECRET = get_env("SP_CLIENT_SECRET")
-SITE_ID = get_env("SP_SITE_ID")
-DRIVE_ID = get_env("SP_DRIVE_ID")
-FILE_ID = get_env("SP_FILE_ID")
+TENANT_ID = os.environ["SP_TENANT_ID"]
+CLIENT_ID = os.environ["SP_CLIENT_ID"]
+CLIENT_SECRET = os.environ["SP_CLIENT_SECRET"]
+SITE_ID = os.environ["SP_SITE_ID"]
+DRIVE_ID = os.environ["SP_DRIVE_ID"]
+FILE_ID = os.environ["SP_FILE_ID"]
 
 PORT = 3001
 # Use Windows temp folder to avoid OneDrive sync issues
-import tempfile
 TEMP_EXCEL = os.path.join(tempfile.gettempdir(), "vendbees_temp_update.xlsx")
+
+# Add lock to prevent concurrent downloads
+LOAD_LOCK = threading.Lock()
 
 # --------------------------------------------------
 # FLASK APP
@@ -64,13 +58,6 @@ db = {}
 last_sync = 0
 
 # --------------------------------------------------
-# CACHE CONFIG
-# --------------------------------------------------
-dashboard_cache = None
-dashboard_cache_time = 0
-CACHE_TTL = 30  # seconds
-
-# --------------------------------------------------
 # SHAREPOINT AUTH
 # --------------------------------------------------
 def get_access_token():
@@ -88,40 +75,62 @@ def get_access_token():
 # --------------------------------------------------
 # SHAREPOINT FILE OPS
 # --------------------------------------------------
-def download_excel(max_retries=3):
+def download_excel():
     token = get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
     url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/drives/{DRIVE_ID}/items/{FILE_ID}/content"
-
-    for attempt in range(max_retries):
+    
+    # Remove old file if it exists to avoid partial file issues
+    if os.path.exists(TEMP_EXCEL):
         try:
-            r = requests.get(url, headers=headers, stream=True, timeout=30)
-            r.raise_for_status()
-
-            total_size = 0
-
-            with open(TEMP_EXCEL, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        total_size += len(chunk)
-
-            if total_size < 1000:
-                raise Exception(f"Downloaded file too small: {total_size} bytes")
-
-            print(f"✔ Downloaded Excel ({total_size} bytes)")
-            return
-
+            os.remove(TEMP_EXCEL)
+            time.sleep(0.2)  # Small delay after deletion
         except Exception as e:
-            print(f"⚠ Download attempt {attempt+1} failed: {e}")
-
-            if attempt == max_retries - 1:
-                raise
-
-            time.sleep(2 * (attempt + 1))
+            print(f"⚠️  Could not remove old file: {e}")
+    
+    # Use streaming to avoid file corruption on Windows
+    r = requests.get(url, headers=headers, stream=True)
+    r.raise_for_status()
+    
+    # Write using streaming chunks
+    total_size = 0
+    with open(TEMP_EXCEL, "wb") as f:
+        for chunk in r.iter_content(chunk_size=8192):
+            if chunk:  # Filter out keep-alive new chunks
+                f.write(chunk)
+                total_size += len(chunk)
+        f.flush()  # Force flush to disk
+        os.fsync(f.fileno())  # Ensure file is synced to disk
+    
+    # Verify file was written
+    if total_size < 5000:
+        raise Exception(f"Downloaded file too small: {total_size} bytes")
+    
+    # Verify ZIP header
+    with open(TEMP_EXCEL, "rb") as f:
+        header = f.read(4)
+        print(f"   File header (hex): {header.hex()}")
+        if header != b'PK\x03\x04':
+            print(f"   ⚠️  WARNING: File doesn't start with ZIP signature, got {header}")
+            # Try to read first 100 bytes to debug
+            f.seek(0)
+            first_bytes = f.read(100)
+            print(f"   First 100 bytes: {first_bytes[:100]}")
+    
+    # Additional wait to ensure file is fully available
+    time.sleep(0.5)
+    
+    print(f"✔ Downloaded Excel to {TEMP_EXCEL} ({total_size} bytes)")
 
 def upload_excel(max_retries=3, retry_delay=2):
     """Upload Excel to SharePoint with retry logic for locked files"""
+    
+    # Verify file exists before attempting upload
+    if not os.path.exists(TEMP_EXCEL):
+        raise Exception(f"[CRITICAL] Temp Excel file does not exist: {TEMP_EXCEL}")
+    
+    file_size = os.path.getsize(TEMP_EXCEL)
+    
     for attempt in range(max_retries):
         try:
             token = get_access_token()
@@ -130,13 +139,20 @@ def upload_excel(max_retries=3, retry_delay=2):
                 "Content-Type": "application/octet-stream"
             }
             url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/drives/{DRIVE_ID}/items/{FILE_ID}/content"
+            
+            # Verify file still exists and is readable
+            if not os.path.exists(TEMP_EXCEL):
+                raise Exception(f"[CRITICAL] Temp file disappeared: {TEMP_EXCEL}")
+            
+            if not os.access(TEMP_EXCEL, os.R_OK):
+                raise Exception(f"[CRITICAL] Temp file not readable: {TEMP_EXCEL}")
+            
             with open(TEMP_EXCEL, "rb") as f:
                 r = requests.put(url, headers=headers, data=f)
             
             if r.status_code == 423:
                 # File is locked - retry after delay
                 if attempt < max_retries - 1:
-                    print(f"⚠ File locked, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
                     time.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
                     continue
@@ -145,6 +161,8 @@ def upload_excel(max_retries=3, retry_delay=2):
             
             r.raise_for_status()
             return True
+        except FileNotFoundError as e:
+            raise
         except requests.exceptions.HTTPError as e:
             if "423" in str(e) and attempt < max_retries - 1:
                 print(f"⚠ File locked, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
@@ -153,6 +171,70 @@ def upload_excel(max_retries=3, retry_delay=2):
                 continue
             raise
     return False
+
+def save_all():
+    """Save all dataframes to Excel file and upload to SharePoint"""
+    try:
+        # Get temp directory
+        temp_dir = tempfile.gettempdir()
+        
+        # Ensure temp directory exists
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir, exist_ok=True)
+        
+        # Remove old file if it exists
+        if os.path.exists(TEMP_EXCEL):
+            try:
+                os.remove(TEMP_EXCEL)
+            except Exception as old_file_err:
+                pass
+        
+        # Prepare all data first (outside the context manager)
+        sheets_to_write = {}
+        for key, sheet_name in SHEET_MAP.items():
+            if key in db:
+                df = db[key]
+                if not df.empty:
+                    # Make a copy and fix column names
+                    df_copy = df.copy()
+                    df_copy.columns = df_copy.columns.astype(str)
+                    sheets_to_write[sheet_name] = df_copy
+        
+        # Now write all at once
+        try:
+            with pd.ExcelWriter(TEMP_EXCEL, engine="openpyxl") as writer:
+                for sheet_name, df in sheets_to_write.items():
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+        except Exception as write_error:
+            import traceback
+            traceback.print_exc()
+            raise
+        
+        # Verify file was created
+        if not os.path.exists(TEMP_EXCEL):
+            raise Exception(f"[CRITICAL] Excel file was NOT created at {TEMP_EXCEL}")
+        
+        # Skip polling before upload
+        skip_polling_for(15)
+        
+        # Upload to SharePoint
+        try:
+            upload_result = upload_excel()
+            if not upload_result:
+                raise Exception("upload_excel returned False")
+        except Exception as upload_error:
+            import traceback
+            traceback.print_exc()
+            raise
+        
+        print(f"[OK] save_all() completed successfully\n")
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] save_all() failed: {e}\n")
+        import traceback
+        traceback.print_exc()
+        raise
 
 # --------------------------------------------------
 # HELPERS
@@ -180,135 +262,195 @@ def df_to_safe_dict(df):
 # --------------------------------------------------
 def load_data():
     global db, last_sync
-
-    try:
-        # Try to download from SharePoint
-        try:
-            download_excel()
-        except Exception as e:
-            print(f"⚠ Download from SharePoint failed: {e}")
-            # Check if a cached file exists
-            if os.path.exists(TEMP_EXCEL) and os.path.getsize(TEMP_EXCEL) > 1000:
-                print(f"Using cached Excel file: {TEMP_EXCEL}")
-            else:
-                print(f"No cached file available, creating empty database")
-                # Initialize empty dataframes for all sheets
-                for key in SHEET_MAP.keys():
-                    db[key] = pd.DataFrame()
-                return False
-
-        with pd.ExcelFile(TEMP_EXCEL, engine="openpyxl") as xls:
-            for key, sheet in SHEET_MAP.items():
-                if sheet in xls.sheet_names:
-                    df = clean_df(pd.read_excel(xls, sheet))
-
-                    if key == "Products" and "PRODUCT_ID" in df.columns:
-                        df = df[df["PRODUCT_ID"].notna()]
-
-                    db[key] = df.reset_index(drop=True)
-                else:
-                    db[key] = pd.DataFrame()
-
-        if "Sales" in db and "Date" in db["Sales"].columns:
-            db["Sales"]["Date"] = pd.to_datetime(
-                db["Sales"]["Date"], errors="coerce"
-            ).dt.strftime("%Y-%m-%d")
-
-        # Ensure OUR_PO has correct columns (add missing ones in memory only - don't save on load)
-        if "OUR_PO" in db:
-            our_po = db["OUR_PO"]
-            expected_columns = [
-                "PO_ID", "Vendor_ID", "Created_Date", "Total_Amount", "Product_ID", "Product_Name", 
-                "No_of_Cases", "Units_Per_Case", "PO_Price", "Line_Total", "Status"
-            ]
-            
-            # Only add missing columns in memory (no save on load to avoid corruption)
-            if our_po.empty:
-                our_po = pd.DataFrame(columns=expected_columns)
-            else:
-                for col in expected_columns:
-                    if col not in our_po.columns:
-                        if col == "Status":
-                            our_po[col] = "Pending"
-                        elif col == "Line_Total":
-                            our_po[col] = our_po.apply(
-                                lambda r: int(r.get("No_of_Cases", 0) or 0) * int(r.get("Units_Per_Case", 1) or 1), 
-                                axis=1
-                            )
-                        else:
-                            our_po[col] = None  # Use None instead of empty string
-                
-                # Ensure column order (in memory)
-                our_po = our_po[[col for col in expected_columns if col in our_po.columns]]
-            
-            db["OUR_PO"] = our_po
+    
+    # Acquire lock to prevent concurrent downloads
+    with LOAD_LOCK:
+        max_retries = 3
+        retry_delays = [2, 3, 5]  # Increased delays for file lock timeout
         
-        # Log Stocks sheet info
-        if "Stocks" in db:
-            stocks = db["Stocks"]
-            print(f"✔ Stocks sheet loaded: {len(stocks)} rows")
-            if not stocks.empty:
-                print(f"  Columns: {list(stocks.columns)}")
-                print(f"\n  === SAMPLE DATA FROM STOCKS SHEET (first 5 rows) ===")
-                for i, row in stocks.head(5).iterrows():
-                    print(f"  Row {i}: Batch={row.get('Batch')}, Stock={row.get('Stock')}, cover={row.get('cover')}, product id={row.get('product id')}, product name={row.get('product name')}, units={row.get('units')}")
-                print(f"  ====================================================\n")
+        for attempt in range(max_retries):
+            try:
+                download_excel()
+                
+                # Wait longer to ensure file is fully available after download
+                delay = retry_delays[attempt]
+                print(f"⏳ Waiting {delay}s for file to be available...")
+                time.sleep(delay)
+                
+                # Verify file exists and has reasonable size
+                if not os.path.exists(TEMP_EXCEL):
+                    raise Exception(f"Excel file not found at {TEMP_EXCEL}")
+                
+                file_size = os.path.getsize(TEMP_EXCEL)
+                if file_size < 5000:
+                    raise Exception(f"Excel file too small ({file_size} bytes), likely incomplete")
+                
+                print(f"📁 Opening Excel file ({file_size} bytes)...")
             
-        print("✔ SharePoint Excel loaded")
-        return True
+                # Copy file to a temporary location to avoid file locking issues
+                import shutil
+                temp_copy = os.path.join(tempfile.gettempdir(), f"vendbees_read_{attempt}.xlsx")
+                try:
+                    shutil.copy2(TEMP_EXCEL, temp_copy)
+                    excel_to_read = temp_copy
+                except Exception as e:
+                    print(f"   Could not create temp copy: {e}, will try to read original...")
+                    excel_to_read = TEMP_EXCEL
+                
+                # Try to open and read the Excel file
+                try:
+                    # Try using openpyxl directly first
+                    print(f"   Attempting to read with openpyxl...")
+                    from openpyxl import load_workbook
+                    
+                    wb = load_workbook(excel_to_read, data_only=True)
+                    
+                    # Convert workbook to dataframes
+                    for key, sheet in SHEET_MAP.items():
+                        sheet_name = sheet
+                        if sheet_name in wb.sheetnames:
+                            ws = wb[sheet_name]
+                            # Convert worksheet to dataframe
+                            df = pd.DataFrame([cell.value for cell in row] for row in ws.iter_rows(values_only=True))
+                            if not df.empty:
+                                # Use first row as header
+                                df.columns = df.iloc[0]
+                                df = df[1:]
+                                df = clean_df(df)
+                            
+                            if key == "Products" and "PRODUCT_ID" in df.columns:
+                                df = df[df["PRODUCT_ID"].notna()]
 
-    except Exception as e:
-        print("❌ Load failed:", e)
-        return False
+                            db[key] = df.reset_index(drop=True)
+                        else:
+                            db[key] = pd.DataFrame()
+                    
+                    wb.close()
+                    
+                except Exception as openpyxl_err:
+                    print(f"   openpyxl failed: {openpyxl_err}")
+                    print(f"   Trying pandas ExcelFile as fallback...")
+                    
+                    with pd.ExcelFile(excel_to_read, engine="openpyxl") as xls:
+                        for key, sheet in SHEET_MAP.items():
+                            if sheet in xls.sheet_names:
+                                df = clean_df(pd.read_excel(xls, sheet))
 
-# --------------------------------------------------
-# SAVE BACK TO SHAREPOINT
-# --------------------------------------------------
-def save_all():
-    """Save data to Excel and upload to SharePoint. Raises exception if file is locked."""
-    with excel_lock:
-        with pd.ExcelWriter(TEMP_EXCEL, engine="openpyxl", mode="w") as writer:
-            
-            for key, sheet in SHEET_MAP.items():
-                db.get(key, pd.DataFrame()).to_excel(writer, sheet_name=sheet, index=False)
-        upload_excel()
+                                if key == "Products" and "PRODUCT_ID" in df.columns:
+                                    df = df[df["PRODUCT_ID"].notna()]
 
+                                db[key] = df.reset_index(drop=True)
+                            else:
+                                db[key] = pd.DataFrame()
+
+                    if "Sales" in db and "Date" in db["Sales"].columns:
+                        db["Sales"]["Date"] = pd.to_datetime(
+                            db["Sales"]["Date"], errors="coerce"
+                        ).dt.strftime("%Y-%m-%d")
+
+                    # Ensure OUR_PO has correct columns (add missing ones in memory only - don't save on load)
+                    if "OUR_PO" in db:
+                        our_po = db["OUR_PO"]
+                        expected_columns = [
+                            "PO_ID", "Vendor_ID", "Created_Date", "Total_Amount", "Product_ID", "Product_Name", 
+                            "No_of_Cases", "Units_Per_Case", "PO_Price", "Line_Total", "Status"
+                        ]
+                        
+                        # Only add missing columns in memory (no save on load to avoid corruption)
+                        if our_po.empty:
+                            our_po = pd.DataFrame(columns=expected_columns)
+                        else:
+                            for col in expected_columns:
+                                if col not in our_po.columns:
+                                    if col == "Status":
+                                        our_po[col] = "Pending"
+                                    elif col == "Line_Total":
+                                        our_po[col] = our_po.apply(
+                                            lambda r: int(r.get("No_of_Cases", 0) or 0) * int(r.get("Units_Per_Case", 1) or 1), 
+                                            axis=1
+                                        )
+                                    else:
+                                        our_po[col] = None  # Use None instead of empty string
+                            
+                            # Ensure column order (in memory)
+                            our_po = our_po[[col for col in expected_columns if col in our_po.columns]]
+                        
+                        db["OUR_PO"] = our_po
+                    
+                    # Log Stocks sheet info
+                    if "Stocks" in db:
+                        stocks = db["Stocks"]
+                        print(f"✔ Stocks sheet loaded: {len(stocks)} rows")
+                        if not stocks.empty:
+                            print(f"  Columns: {list(stocks.columns)}")
+                    last_sync = time.time()
+                    
+                    # Cleanup temp copy
+                    if excel_to_read != TEMP_EXCEL and os.path.exists(temp_copy):
+                        try:
+                            os.remove(temp_copy)
+                        except:
+                            pass
+                    
+                    return True
+                    
+                except Exception as e:
+                    # Cleanup temp copy on error
+                    if excel_to_read != TEMP_EXCEL and os.path.exists(temp_copy):
+                        try:
+                            os.remove(temp_copy)
+                        except:
+                            pass
+                    raise
+                    
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "permission" in error_msg:
+                    print(f"⚠️  File locked (attempt {attempt + 1}): {e}")
+                elif "zip" in error_msg:
+                    print(f"⚠️  File corrupted/incomplete (attempt {attempt + 1}): {e}")
+                else:
+                    print(f"⚠️  Load attempt {attempt + 1} failed: {e}")
+                
+                if attempt < max_retries - 1:
+                    current_delay = retry_delays[attempt]
+                    print(f"   Retrying in {current_delay}s...")
+                else:
+                    print(f"❌ Load failed (after {max_retries} attempts): {e}")
+                    return False
 # --------------------------------------------------
 # POLLING THREAD
 # --------------------------------------------------
-# def poll_sharepoint():
-#     while True:
-#         load_data()
-#         time.sleep(30)
+last_poll_time = time.time()
+poll_skip_until = time.time()
 
-# threading.Thread(target=poll_sharepoint, daemon=True).start()
+def poll_sharepoint():
+    global last_poll_time, poll_skip_until
+    while True:
+        # Skip polling if recently asked to skip (e.g., after save_all)
+        if time.time() < poll_skip_until:
+            print(f"[*] Skipping poll (within skip window)")
+            time.sleep(5)
+            continue
+        
+        load_data()
+        last_poll_time = time.time()
+        time.sleep(30)
 
-# Load initial data
-print("Loading initial data...")
-load_data()  # Initial load on startup
+def skip_polling_for(seconds):
+    """Tell polling thread to skip for N seconds"""
+    global poll_skip_until
+    poll_skip_until = time.time() + seconds
+    print(f"[*] Polling will be skipped for {seconds}s")
+
+threading.Thread(target=poll_sharepoint, daemon=True).start()
+load_data()
+
 # --------------------------------------------------
 # ROUTES
 # --------------------------------------------------
-
-
-@app.route("/api/refresh", methods=["POST"])
-def refresh_cache():
-    global dashboard_cache, dashboard_cache_time
-
-    load_data()
-    dashboard_cache = None
-    dashboard_cache_time = 0
-
-    return jsonify(success=True, message="Cache refreshed")
-
 @app.route("/api/dashboard")
 def dashboard():
-    global dashboard_cache, dashboard_cache_time
-
-     # Return cached response if still valid
-    if dashboard_cache and (time.time() - dashboard_cache_time) < CACHE_TTL:
-        return jsonify(dashboard_cache)
-
     products = db.get("Products", pd.DataFrame())
     machines = db.get("Machines", pd.DataFrame())
     stock = db.get("Stock", pd.DataFrame())
@@ -401,7 +543,7 @@ def dashboard():
     else:
         print(f"  WARNING: Stocks DataFrame is empty!")
     
-    result = {
+    return jsonify({
         "products": df_to_safe_dict(products),
         "machines": df_to_safe_dict(machines),
         "stock": df_to_safe_dict(stock),
@@ -420,13 +562,7 @@ def dashboard():
             "activeMachines": int((machines["Status"] == "Active").sum()) if not machines.empty else 0,
             "outOfStock": int((stock["Current_Stock"] <= 0).sum()) if not stock.empty else 0
         }
-    }
-
-    dashboard_cache = result
-    dashboard_cache_time = time.time()
-
-    return jsonify(result)          
-    
+    })
 
 @app.route("/api/add-product", methods=["POST"])
 def add_product():
@@ -2194,7 +2330,7 @@ def create_batch_full():
         
         print(f"\n{'='*60}")
         print(f"DEBUG: create_batch_full called")
-        print(f"batch_number={batch_number}")
+        print(f"batch_number={batch_number} (type: {type(batch_number).__name__})")
         print(f"machine_ids={machine_ids}")
         print(f"created_date={created_date}")
         print(f"stocks_data keys={list(stocks_data.keys())}")
@@ -2206,6 +2342,13 @@ def create_batch_full():
             raise Exception(f"Exactly 4 machine IDs required, got {len(machine_ids) if machine_ids else 0}")
         if not stocks_data:
             raise Exception("At least one stock with covers and products is required")
+        
+        # Convert batch_number to numeric for consistency with existing data (1.0, 2.0 format)
+        try:
+            batch_num_float = float(batch_number)
+            batch_number_for_db = batch_num_float
+        except (ValueError, TypeError):
+            batch_number_for_db = batch_number  # Keep as string if not numeric
         
         # Get Stocks sheet
         stocks = db.get("Stocks", pd.DataFrame())
@@ -2233,6 +2376,13 @@ def create_batch_full():
         total_rows_added = 0
         stock_names = ["S1", "S2", "S3", "S4"]
         
+        # Track if this is the first row of the ENTIRE batch (not just first of each stock)
+        first_row_overall = True
+        # Track first row per stock (for Stock name - only appears once per stock like Machine)
+        first_row_per_stock = {stock: True for stock in stock_names}
+        
+        print(f"DEBUG: Processing {len(stock_names)} stocks: {stock_names}")
+        
         # Process each stock (S1, S2, S3, S4)
         for i, stock_name in enumerate(stock_names):
             if i >= len(machine_ids):
@@ -2242,7 +2392,8 @@ def create_batch_full():
             machine_id = machine_ids[i]
             stock_form_data = stocks_data.get(stock_name, {})
             
-            print(f"\nDEBUG: Processing {stock_name} with machine {machine_id}")
+            print(f"\nDEBUG: [STOCK {i}] Processing {stock_name} with machine {machine_id}")
+            print(f"DEBUG:   stock_form_data={stock_form_data}")
             
             if not isinstance(stock_form_data, dict):
                 print(f"  WARNING: Invalid data format for {stock_name}, skipping")
@@ -2251,15 +2402,13 @@ def create_batch_full():
             covers_dict = stock_form_data.get("covers", {})
             print(f"  Covers: {list(covers_dict.keys())}")
             
-            first_stock_row = True  # Flag to show batch/date/machine only ONCE per stock
-            
             # Process covers and products
             for cover_name, products_list in covers_dict.items():
                 if not products_list:
                     continue
                 
                 print(f"  Processing cover {cover_name} with {len(products_list)} products")
-                first_cover_row = True  # Flag to show cover info only ONCE per cover
+                first_cover_row = True  # Flag to show cover info only once per cover
                 
                 for product in products_list:
                     product_id = str(product.get("product_id", "")).strip()
@@ -2280,30 +2429,55 @@ def create_batch_full():
                         print(f"    WARNING: Skipping {product_name} - units <= 0")
                         continue
                     
-                    # Create row matching Excel structure (with spaces and lowercase)
-                    # IMPORTANT: Batch/Date/Machine/Stock appear only in FIRST product of each STOCK
-                    # Cover/cover status appear only in FIRST product of each COVER
+                    # Create row matching Excel structure:
+                    # Batch only in FIRST row of ENTIRE batch
+                    # Machine and Stock only in FIRST row per stock
+                    # Cover info only in first row of each cover
                     new_row = {
-                        "Batch": batch_number if first_stock_row else "",  # Empty string instead of None for proper Excel display
-                        "Date": created_date if first_stock_row else "",  # Empty string instead of None
-                        "Machine": machine_id if first_stock_row else "",  # Empty string instead of None
-                        "Stock": stock_name if first_stock_row else "",  # Empty string instead of None
-                        "cover": cover_name if first_cover_row else "",  # Empty string instead of None
-                        "cover status": "covered" if first_cover_row else "",  # Empty string for subsequent products in same cover
+                        "Batch": batch_number_for_db if first_row_overall else None,  # Only first row of entire batch
+                        "Date": created_date if first_row_overall else None,  # Only first row of entire batch
+                        "Machine": machine_id if first_row_per_stock[stock_name] else None,  # Only first row per stock
+                        "Stock": stock_name if first_row_per_stock[stock_name] else None,  # Only first row per stock
+                        "cover": cover_name if first_cover_row else None,
+                        "cover status": "covered" if first_cover_row else None,  # Default value - with space
                         "product id": product_id,  # With space
                         "product name": product_name,  # With space
                         "units": units,
-                        "Status": "Active" if first_stock_row else ""  # Empty string instead of None (Active only for first of stock)
+                        "Status": "Active" if first_row_overall else None  # Only first row of entire batch
                     }
                     
-                    print(f"    {'[FIRST_STOCK_ROW]' if first_stock_row else ''} {'[FIRST_COVER_ROW]' if first_cover_row else ''} Adding: {product_name} ({units} units) - Batch: {new_row['Batch']}, Stock: {new_row['Stock']}, Cover: {new_row['cover']}")
+                    print(f"    Adding: {product_name} ({units} units)")
                     
                     stocks = pd.concat([stocks, pd.DataFrame([new_row])], ignore_index=True)
                     total_rows_added += 1
-                    first_stock_row = False  # Only first product row of this stock gets batch/date/machine
-                    first_cover_row = False  # Only first product row of this cover gets cover name
+                    first_row_overall = False  # Mark first row as used (globally for entire batch)
+                    first_row_per_stock[stock_name] = False  # Mark this stock's first row as used
+                    first_cover_row = False
         
         print(f"\nDEBUG: Total rows added: {total_rows_added}")
+        
+        # DEBUG: Show what we're about to save
+        print(f"DEBUG: Stocks dataframe before save:")
+        print(f"  Total rows in stocks: {len(stocks)}")
+        print(f"  Last 4 rows:")
+        print(stocks[['Batch', 'Stock', 'product id', 'units']].tail(4))
+        print(f"  Checking if batch numbers exist for new rows:")
+        new_batch_rows = stocks[stocks['Batch'] == batch_number_for_db]
+        print(f"    Rows with Batch {batch_number_for_db}: {len(new_batch_rows)}")
+        print(f"    Stock values: {new_batch_rows['Stock'].tolist()}")
+        
+        # Write debug to file
+        import os
+        debug_file = os.path.join(os.environ.get('TEMP', 'C:\\temp'), 'batch_debug.log')
+        with open(debug_file, "a") as f:
+            f.write(f"\n\n{'='*60}\nBatch {batch_number} Creation Debug\n{'='*60}\n")
+            f.write(f"Total rows added: {total_rows_added}\n")
+            f.write(f"Total rows in stocks DF: {len(stocks)}\n")
+            f.write(f"batch_number_for_db = {batch_number_for_db} (type: {type(batch_number_for_db).__name__})\n")
+            f.write(f"Last 4 rows before save:\n")
+            f.write(stocks[['Batch', 'Stock', 'product id', 'units']].tail(4).to_string())
+            f.write(f"\n\nRows with Batch {batch_number_for_db}: {len(new_batch_rows)}\n")
+            f.write(f"Stock values for new batch: {new_batch_rows['Stock'].tolist()}\n")
         
         if total_rows_added == 0:
             raise Exception("No products were added to the batch")
@@ -2559,7 +2733,6 @@ def decrease_purchased_units():
         if purchased_products.empty:
             return jsonify(success=True, message="No purchased products to update")
         
-        rows_deleted = 0
         rows_updated = 0
         
         for item in items_to_decrease:
@@ -2580,26 +2753,356 @@ def decrease_purchased_units():
             new_units = current_units - units_used
             
             if new_units <= 0:
-                # Delete the entire row if units reach zero
-                purchased_products = purchased_products.drop(idx)
-                rows_deleted += 1
+                # Don't delete - just set units to 0
+                purchased_products.at[idx, "Available_Units"] = 0
+                rows_updated += 1
             else:
                 # Update available units
                 purchased_products.at[idx, "Available_Units"] = new_units
                 rows_updated += 1
         
-        # Reset index after deletions
-        purchased_products = purchased_products.reset_index(drop=True)
         db["Purchased_Products"] = purchased_products
         save_all()
         
         return jsonify(
             success=True,
             rows_updated=rows_updated,
-            rows_deleted=rows_deleted,
-            message=f"Updated {rows_updated} rows, deleted {rows_deleted} empty rows"
+            message=f"Updated {rows_updated} rows (no rows deleted, units set to 0 instead)"
         )
     except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/api/stocks/decrease-from-sources", methods=["POST"])
+def decrease_from_sources():
+    """Decrease available units from multiple sources (previous batches, warehouse, purchased products)
+    
+    Expected sources format:
+    [
+        {type: 'previous_batch', batch_number: 'B1', stock_name: 'S1', cover_name: 'C1', product_id: 'P1', units: 10},
+        {type: 'warehouse', product_id: 'P1', units: 5},
+        {type: 'purchased_product', exp_id: 'EXP123', product_id: 'P1', units: 3}
+    ]
+    """
+    try:
+        d = request.json
+        sources = d.get("sources", [])  # List of sources to decrease from
+        
+        if not sources:
+            return jsonify(success=True, results={'processed': [], 'failed': []}, message="No sources to process")
+        
+        stocks = db.get("Stocks", pd.DataFrame())
+        warehouse = db.get("Warehouse_Stock", pd.DataFrame())
+        purchased_products = db.get("Purchased_Products", pd.DataFrame())
+        
+        results = {'processed': [], 'failed': []}
+        
+        for source in sources:
+            source_type = source.get("type", "").lower()
+            units_to_decrease = int(source.get("units", 0))
+            product_id = source.get("product_id", "")
+            
+            if not source_type or units_to_decrease <= 0 or not product_id:
+                results['failed'].append({
+                    'source': source,
+                    'reason': 'Invalid source data: missing type, units, or product_id'
+                })
+                continue
+            
+            try:
+                if source_type == 'previous_batch':
+                    # Decrease from Stocks sheet for a specific batch/stock/cover
+                    batch_number = source.get("batch_number", "")
+                    stock_name = source.get("stock_name", "")
+                    cover_name = source.get("cover_name", "")
+                    
+                    if not batch_number or not stock_name or not cover_name:
+                        results['failed'].append({
+                            'source': source,
+                            'reason': 'Missing batch_number, stock_name, or cover_name'
+                        })
+                        continue
+                    
+                    # Normalize batch_number for comparison (convert to float then back to match format in DB)
+                    try:
+                        batch_num_normalized = float(batch_number)
+                    except (ValueError, TypeError):
+                        batch_num_normalized = batch_number
+                    
+                    # Find the row in Stocks sheet matching all criteria
+                    # Stocks sheet format: Batch, Date, Machine, Stock, cover, cover status, product id, product name, units, Status
+                    
+                    # First, infer Batch, Stock, and Cover for rows where they might be NaN
+                    # Batch: only first row of entire batch has Batch filled
+                    # Stock: only first product of each stock has Stock filled  
+                    # Cover: only first product of each cover has cover filled
+                    stocks_inferred = stocks.copy()
+                    current_batch = None
+                    current_stock = None
+                    current_cover = None
+                    for idx in stocks_inferred.index:
+                        batch_val = stocks_inferred.at[idx, "Batch"]
+                        stock_val = stocks_inferred.at[idx, "Stock"]
+                        cover_val = stocks_inferred.at[idx, "cover"]
+                        
+                        # Infer batch
+                        if pd.notna(batch_val):
+                            current_batch = batch_val
+                        elif current_batch is not None:
+                            stocks_inferred.at[idx, "Batch"] = current_batch
+                        
+                        # Infer stock (reset when Batch changes or when we explicitly see a new stock)
+                        if pd.notna(stock_val):
+                            current_stock = stock_val
+                        elif current_stock is not None and pd.notna(current_batch):
+                            stocks_inferred.at[idx, "Stock"] = current_stock
+                        
+                        # Infer cover (reset when Batch changes or when we explicitly see a new cover)
+                        if pd.notna(cover_val):
+                            current_cover = cover_val
+                        elif current_cover is not None and pd.notna(current_batch):
+                            stocks_inferred.at[idx, "cover"] = current_cover
+                    
+                    # Convert all batch values to float for comparison to handle "1" vs "1.0" vs 1.0
+                    batch_mask = pd.to_numeric(stocks_inferred["Batch"], errors='coerce') == batch_num_normalized
+                    stock_mask = stocks_inferred["Stock"].astype(str).str.strip() == stock_name
+                    cover_mask = stocks_inferred["cover"].astype(str).str.strip() == cover_name
+                    product_mask = stocks_inferred["product id"].astype(str).str.strip() == product_id
+                    
+                    # First try direct match (for rows where Stock is not NaN)
+                    combined_mask = batch_mask & stock_mask & cover_mask & product_mask
+                    
+                    # If direct match fails, try inferring stock using Machine column (each stock assigned to specific machine)
+                    if not combined_mask.any():
+                        # Try matching batch, cover, and product_id only (ignoring stock)
+                        fallback_mask = batch_mask & cover_mask & product_mask
+                        
+                        if fallback_mask.any():
+                            # Build a machine-to-stock mapping for this batch
+                            # Each stock is assigned to exactly one machine, so Machine column can be used to infer stock
+                            batch_val_for_mapping = stocks_inferred.iloc[fallback_mask.idxmax()]["Batch"]
+                            batch_rows = stocks_inferred[pd.to_numeric(stocks_inferred["Batch"], errors='coerce') == pd.to_numeric(batch_val_for_mapping, errors='coerce')]
+                            
+                            machine_to_stock = {}
+                            for _, row in batch_rows.iterrows():
+                                machine = safe_value(row.get("Machine"))
+                                stock = safe_value(row.get("Stock"))
+                                if machine and stock and stock in ['S1', 'S2', 'S3', 'S4']:
+                                    machine_to_stock[machine] = stock
+                            
+                            # Now find which machine/stock this product belongs to by searching nearby rows
+                            matching_indices = fallback_mask[fallback_mask].index
+                            valid_idx = None
+                            
+                            for idx_candidate in matching_indices:
+                                # Search in a window around this row to find the Machine value
+                                # Since each stock section is ~15+ rows, look back to find it
+                                window_start = max(0, idx_candidate - 20)
+                                window_end = min(len(stocks_inferred), idx_candidate + 5)
+                                
+                                # Search backward from idx_candidate to find nearest Machine
+                                found_machine = None
+                                for search_idx in range(idx_candidate, window_start - 1, -1):
+                                    machine_val = safe_value(stocks_inferred.at[search_idx, "Machine"])
+                                    if machine_val and machine_val in machine_to_stock:
+                                        # Make sure this machine is in the same batch
+                                        batch_check = stocks_inferred.at[search_idx, "Batch"]
+                                        if pd.to_numeric(batch_check, errors='coerce') == batch_num_normalized:
+                                            found_machine = machine_val
+                                            break
+                                
+                                if found_machine and found_machine in machine_to_stock:
+                                    inferred_stock = machine_to_stock[found_machine]
+                                    if inferred_stock == stock_name:
+                                        valid_idx = idx_candidate
+                                        break
+                            
+                            if valid_idx is not None:
+                                combined_mask = pd.Series([False] * len(stocks))
+                                combined_mask.iloc[valid_idx] = True
+                    
+                    if not combined_mask.any():
+                        results['failed'].append({
+                            'source': source,
+                            'reason': f"Product {product_id} not found in batch {batch_number}/{stock_name}/{cover_name}"
+                        })
+                        continue
+                    
+                    # Get the index from the ORIGINAL stocks dataframe, not the inferred one
+                    idx_in_original = combined_mask.idxmax()
+                    idx = idx_in_original
+                    current_units = int(stocks.at[idx, "units"] or 0)
+                    new_units = current_units - units_to_decrease
+                    
+                    if new_units <= 0:
+                        # Don't delete the row - just set units to 0
+                        stocks.at[idx, "units"] = 0
+                    else:
+                        # Update units
+                        stocks.at[idx, "units"] = new_units
+                    
+                    results['processed'].append({
+                        'type': 'previous_batch',
+                        'batch': batch_number,
+                        'stock': stock_name,
+                        'cover': cover_name,
+                        'product_id': product_id,
+                        'units_decreased': units_to_decrease,
+                        'row_deleted': False,
+                        'units_now_zero': new_units <= 0
+                    })
+                
+                elif source_type == 'warehouse':
+                    # Decrease from Warehouse_Stock sheet
+                    # Find matching product in warehouse (assuming product_id is in an ID column)
+                    warehouse_mask = warehouse["Product_ID"].astype(str).str.strip() == product_id if "Product_ID" in warehouse.columns else pd.Series([False] * len(warehouse))
+                    
+                    if not warehouse_mask.any():
+                        results['failed'].append({
+                            'source': source,
+                            'reason': f"Product {product_id} not found in warehouse"
+                        })
+                        continue
+                    
+                    idx = warehouse_mask.idxmax()
+                    current_units = int(warehouse.at[idx, "Available_Units"] or 0)
+                    new_units = current_units - units_to_decrease
+                    
+                    if new_units <= 0:
+                        # Don't delete - just set units to 0
+                        warehouse.at[idx, "Available_Units"] = 0
+                    else:
+                        # Update available units
+                        warehouse.at[idx, "Available_Units"] = new_units
+                    
+                    results['processed'].append({
+                        'type': 'warehouse',
+                        'product_id': product_id,
+                        'units_decreased': units_to_decrease,
+                        'row_deleted': new_units <= 0
+                    })
+                
+                elif source_type == 'purchased_product':
+                    # Decrease from Purchased_Products sheet
+                    exp_id = source.get("exp_id", "")
+                    
+                    if not exp_id:
+                        results['failed'].append({
+                            'source': source,
+                            'reason': 'Missing exp_id for purchased_product'
+                        })
+                        continue
+                    
+                    # Find row with matching EXP_Id
+                    mask = purchased_products["EXP_Id"].astype(str).str.strip() == exp_id
+                    
+                    if not mask.any():
+                        results['failed'].append({
+                            'source': source,
+                            'reason': f"EXP_Id {exp_id} not found in purchased products"
+                        })
+                        continue
+                    
+                    idx = mask.idxmax()
+                    current_units = int(purchased_products.at[idx, "Available_Units"] or 0)
+                    new_units = current_units - units_to_decrease
+                    
+                    if new_units <= 0:
+                        # Don't delete - just set units to 0
+                        purchased_products.at[idx, "Available_Units"] = 0
+                    else:
+                        # Update available units
+                        purchased_products.at[idx, "Available_Units"] = new_units
+                    
+                    results['processed'].append({
+                        'type': 'purchased_product',
+                        'exp_id': exp_id,
+                        'product_id': product_id,
+                        'units_decreased': units_to_decrease,
+                        'row_deleted': False,
+                        'units_now_zero': new_units <= 0
+                    })
+                
+                else:
+                    results['failed'].append({
+                        'source': source,
+                        'reason': f"Unknown source type: {source_type}"
+                    })
+            
+            except Exception as source_error:
+                results['failed'].append({
+                    'source': source,
+                    'reason': f"Error processing source: {str(source_error)}"
+                })
+        
+        # Reset indices after any deletions
+        stocks = stocks.reset_index(drop=True)
+        warehouse = warehouse.reset_index(drop=True)
+        purchased_products = purchased_products.reset_index(drop=True)
+        
+        # After all decreases, check which batches should be marked as Inactive
+        # Only mark a batch as Inactive if ALL its products have 0 units
+        if not stocks.empty:
+            # First, infer Batch column (only first row of batch has it filled, rest are NaN)
+            stocks_with_inferred_batch = stocks.copy()
+            current_batch = None
+            for idx in stocks_with_inferred_batch.index:
+                batch_val = stocks_with_inferred_batch.at[idx, "Batch"]
+                if pd.notna(batch_val):
+                    current_batch = batch_val
+                elif current_batch is not None:
+                    stocks_with_inferred_batch.at[idx, "Batch"] = current_batch
+            
+            # Get unique batch numbers (now all rows have batch inferred)
+            unique_batches = pd.to_numeric(stocks_with_inferred_batch["Batch"], errors='coerce').dropna().unique()
+            
+            for batch_num in unique_batches:
+                # Get all rows for this batch (including inferred batch values)
+                batch_mask = pd.to_numeric(stocks_with_inferred_batch["Batch"], errors='coerce') == batch_num
+                batch_rows = stocks_with_inferred_batch[batch_mask]
+                
+                if len(batch_rows) > 0:
+                    # Check if ALL products in this batch have 0 units
+                    batch_units = pd.to_numeric(batch_rows["units"], errors='coerce').fillna(0)
+                    all_units_zero = (batch_units == 0).all()
+                    
+                    # Mark batch as Inactive ONLY if ALL products have 0 units
+                    if all_units_zero:
+                        # Find first row of this batch and set Status to "Inactive"
+                        # Get the index from the ORIGINAL stocks dataframe
+                        first_row_idx = batch_rows.index[0]
+                        stocks.at[first_row_idx, "Status"] = "Inactive"
+                    else:
+                        # Ensure batch is marked as Active if any product still has units
+                        first_row_idx = batch_rows.index[0]
+                        stocks.at[first_row_idx, "Status"] = "Active"
+        
+        # Save all updates
+        db["Stocks"] = stocks
+        db["Warehouse_Stock"] = warehouse
+        db["Purchased_Products"] = purchased_products
+        save_all()
+        
+        # Determine success/partial success
+        all_failed = len(results['failed']) > 0 and len(results['processed']) == 0
+        
+        if all_failed:
+            return jsonify(
+                success=False,
+                results=results,
+                message=f"Failed to process {len(results['failed'])} sources"
+            ), 400
+        else:
+            return jsonify(
+                success=True,
+                results=results,
+                message=f"Processed {len(results['processed'])} sources, {len(results['failed'])} failed"
+            )
+    
+    except Exception as e:
+        print(f"ERROR in decrease_from_sources: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify(error=str(e)), 500
 
 
@@ -2724,143 +3227,6 @@ def get_batch_products(batch_number):
         return jsonify(error=str(e)), 500
 
 
-@app.route("/api/stocks/get-batch-suggestions", methods=["GET"])
-def get_batch_suggestions():
-    """
-    Get product suggestions for all stock-cover combinations.
-    For any stock-cover-product combination, returns:
-    - Products from previous batches of the SAME stock-cover
-    - Warehouse stock availability for all products
-    
-    Returns dict keyed by 'stock-cover-productId' with available quantities.
-    """
-    try:
-        stock_products = db.get("Stock_Products", pd.DataFrame())
-        warehouse_stock = db.get("Warehouse", pd.DataFrame())  # Use "Warehouse" key, not "Warehouse_Stock"
-        stocks = db.get("Stocks", pd.DataFrame())
-        
-        suggestions = {}
-        
-        # Build warehouse stock lookup: product_id -> units
-        warehouse_lookup = {}
-        if not warehouse_stock.empty:
-            for _, row in warehouse_stock.iterrows():
-                product_id = row.get("Product_ID", "")
-                if product_id:
-                    units = int(row.get("Available_Units", 0))
-                    warehouse_lookup[str(product_id)] = units
-        
-        # Get all unique stocks from Stocks table
-        all_stocks = []
-        if not stocks.empty:
-            all_stocks = stocks["Stock_Name"].unique().tolist()
-        
-        # Get all unique stock-cover combinations from stock_products
-        stock_cover_combos = set()
-        if not stock_products.empty:
-            for _, row in stock_products.iterrows():
-                stock_name = row.get("Stock_Name", "")
-                cover_name = row.get("Cover_Name", "")
-                if stock_name and cover_name:
-                    stock_cover_combos.add((stock_name, cover_name))
-        
-        # For each stock, generate possible covers (C, C2, C3, ... up to C99)
-        possible_covers = ["C"]
-        for i in range(2, 100):
-            possible_covers.append(f"C{i}")
-        
-        # Generate suggestions for each combination of (stock, cover, product)
-        # This includes combinations that don't have data yet in stock_products
-        
-        # First, create suggestions entries for each stock-cover combo that has products
-        for stock_name, cover_name in stock_cover_combos:
-            # Get all unique products in this stock-cover across all batches
-            mask = (
-                (stock_products["Stock_Name"] == stock_name) &
-                (stock_products["Cover_Name"] == cover_name)
-            )
-            products_in_combo = stock_products[mask]["Product_ID"].unique()
-            
-            for product_id in products_in_combo:
-                if not product_id:
-                    continue
-                    
-                product_id_str = str(product_id)
-                
-                # Get product name and batches for this product in this stock-cover
-                product_mask = (
-                    (stock_products["Stock_Name"] == stock_name) &
-                    (stock_products["Cover_Name"] == cover_name) &
-                    (stock_products["Product_ID"] == product_id)
-                )
-                product_batches = stock_products[product_mask]
-                
-                product_name = ""
-                batches = []
-                
-                for _, batch_prod in product_batches.iterrows():
-                    if not product_name:
-                        product_name = batch_prod.get("Product_Name", "")
-                    batch_number = batch_prod.get("Batch_Number", "")
-                    units = int(batch_prod.get("Units", 0))
-                    
-                    batches.append({
-                        "batch_number": batch_number,
-                        "units": units
-                    })
-                
-                # Get warehouse units for this product
-                warehouse_units = warehouse_lookup.get(product_id_str, 0)
-                
-                # Store suggestion
-                key = f"{stock_name}-{cover_name}-{product_id_str}"
-                suggestions[key] = {
-                    "product_id": product_id_str,
-                    "product_name": product_name,
-                    "warehouse_units": warehouse_units,
-                    "batches": batches
-                }
-        
-        # Also add suggestions for warehouse-only products (not in any current batch)
-        # For each stock in the system
-        for stock_name in all_stocks:
-            # For all possible covers
-            for cover_name in possible_covers:
-                # For all warehouse products
-                for product_id_str, warehouse_units in warehouse_lookup.items():
-                    if warehouse_units <= 0:
-                        continue
-                    
-                    # Create a key for this stock-cover-product
-                    key = f"{stock_name}-{cover_name}-{product_id_str}"
-                    
-                    # If this key doesn't already exist, create it with warehouse units only
-                    if key not in suggestions:
-                        # Try to find product name from warehouse stock
-                        product_name = ""
-                        if not warehouse_stock.empty:
-                            wh_mask = warehouse_stock["Product_ID"].astype(str) == product_id_str
-                            if wh_mask.any():
-                                product_name = warehouse_stock[wh_mask].iloc[0].get("Product_Name", "")
-                        
-                        suggestions[key] = {
-                            "product_id": product_id_str,
-                            "product_name": product_name,
-                            "warehouse_units": warehouse_units,
-                            "batches": []  # No batches, only warehouse
-                        }
-                    else:
-                        # Key already exists, just ensure warehouse units are set
-                        suggestions[key]["warehouse_units"] = warehouse_units
-        
-        return jsonify(suggestions=suggestions)
-    except Exception as e:
-        print(f"ERROR in get_batch_suggestions: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify(error=str(e)), 500
-
-
 @app.route("/api/stocks/update-status", methods=["POST"])
 def update_stock_status():
     """Update stock status (Active -> Inactive when all units are zero)"""
@@ -2921,138 +3287,288 @@ def update_stock_status():
         return jsonify(error=str(e)), 500
 
 
+@app.route("/api/stocks/get-batch-suggestions", methods=["GET"])
+def get_batch_suggestions():
+    """Get batch suggestions for all stock-cover-product combinations.
+    Returns a dict keyed by 'stock-cover-productId' with warehouse_units for each.
+    """
+    try:
+        stocks = db.get("Stocks", pd.DataFrame())
+        warehouse = db.get("Warehouse", pd.DataFrame())
+        
+        suggestions = {}
+        
+        if not stocks.empty:
+            for _, row in stocks.iterrows():
+                stock_name = safe_value(row.get("Stock", "")) or ""
+                cover_name = safe_value(row.get("cover", "")) or ""
+                product_id = str(safe_value(row.get("product id", "")) or "")
+                product_name = safe_value(row.get("product name", "")) or ""
+                
+                # Skip if no product_id
+                if not product_id:
+                    continue
+                
+                # Build key as stock-cover-productId
+                key = f"{stock_name}-{cover_name}-{product_id}"
+                
+                # Get warehouse units for this product
+                warehouse_units = 0
+                if not warehouse.empty:
+                    wh_mask = warehouse["Product_ID"].astype(str) == product_id
+                    if wh_mask.any():
+                        warehouse_units = int(warehouse.loc[wh_mask, "Available_Units"].iloc[0] or 0)
+                
+                suggestions[key] = {
+                    "product_name": product_name,
+                    "warehouse_units": warehouse_units,
+                    "batches": []
+                }
+        
+        return jsonify(suggestions=suggestions)
+    except Exception as e:
+        print(f"ERROR in get_batch_suggestions: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify(error=str(e)), 500
+
+
+def safe_value(val, default=""):
+    """Convert NaN and None to appropriate defaults. Returns None for null values."""
+    if pd.isna(val):
+        return None if default == "" else default
+    val_str = str(val).strip()
+    if val_str.lower() in ('nan', 'none', ''):
+        return None
+    return val_str if isinstance(val, str) else val
+
+
 @app.route("/api/stocks/get-suggestions-detailed", methods=["POST"])
 def get_suggestions_detailed():
-    """
-    Get detailed suggestions for a product in a specific stock-cover.
-    Returns 3 sources:
-    a) Previous batches (SAME stock-cover with this product, odd/even grouped, units > 0)
-    b) Warehouse stock
-    c) Purchased products
+    """Get detailed suggestions for a product in a specific stock/cover.
+    Filters batches by even/odd grouping and returns only previous batches (batch_num < current_batch_num).
+    Returns: {previous_batches, warehouse, purchased_products}
     """
     try:
         d = request.json
         stock_name = str(d.get("stock_name", "")).strip()
         cover_name = str(d.get("cover_name", "")).strip()
         product_id = str(d.get("product_id", "")).strip()
-        
-        if not stock_name or not cover_name or not product_id:
-            return jsonify(error="stock_name, cover_name, and product_id are required"), 400
+        current_batch_number = str(d.get("current_batch_number", "")).strip()
         
         stocks = db.get("Stocks", pd.DataFrame())
-        warehouse_stock = db.get("Warehouse", pd.DataFrame())
+        warehouse = db.get("Warehouse", pd.DataFrame())
         purchased_products = db.get("Purchased_Products", pd.DataFrame())
         
-        suggestions = {
-            "previous_batches": [],
-            "warehouse": None,
-            "purchased_products": []
-        }
+        # Extract current batch number and determine odd/even grouping
+        current_batch_num = 0
+        is_current_odd = None
+        if current_batch_number:
+            try:
+                # Handle formats like "1", "1.0", "batch_1" by extracting the number before the decimal
+                import re
+                match = re.search(r'(\d+)(?:\.(\d+))?', str(current_batch_number))
+                if match:
+                    # Get the integer part
+                    current_batch_num = int(match.group(1))
+                    is_current_odd = current_batch_num % 2 == 1
+            except:
+                current_batch_num = 0
         
-        # 1. Get previous batches with this product in the SAME stock-cover combination
+        # 1. Find previous batches containing this product
+        previous_batches = []
         if not stocks.empty:
-            # First, fill down the Batch, Stock, and cover columns to handle Excel merged cell structure
-            stocks_filled = stocks.copy()
-            stocks_filled["Batch"] = stocks_filled["Batch"].fillna(method='ffill')
-            stocks_filled["Stock"] = stocks_filled["Stock"].fillna(method='ffill')
-            stocks_filled["cover"] = stocks_filled["cover"].fillna(method='ffill')
+            stocks_copy = stocks.copy()
             
-            # Convert Batch to string format "Batch X"
-            def format_batch(batch_val):
-                if pd.isna(batch_val):
-                    return ""
-                batch_num = int(float(batch_val))
-                return f"Batch {batch_num}"
+            # First pass: Fill NaN batch numbers by forward-filling from previous valid batch
+            # This handles cases where S2, S3, S4 rows don't have batch numbers but belong to a batch
+            current_batch = None
+            for idx in stocks_copy.index:
+                batch_val = stocks_copy.at[idx, "Batch"]
+                if pd.notna(batch_val):
+                    current_batch = batch_val
+                elif current_batch is not None and pd.isna(batch_val):
+                    # Infer batch from previous row
+                    stocks_copy.at[idx, "Batch"] = current_batch
             
-            stocks_filled["Batch"] = stocks_filled["Batch"].apply(format_batch)
+            # Second pass: Fill NaN stock names by forward-filling within stock groups
+            # This handles cases where C2, C3 rows don't have stock but belong to a stock group
+            current_stock = None
+            for idx in stocks_copy.index:
+                stock_val = stocks_copy.at[idx, "Stock"]
+                cover_val = stocks_copy.at[idx, "cover"]
+                
+                if pd.notna(stock_val):
+                    # Store current stock
+                    current_stock = stock_val
+                elif pd.notna(cover_val) and current_stock is not None:
+                    # If cover exists and stock is known, infer stock (but reset on blank cover rows)
+                    stocks_copy.at[idx, "Stock"] = current_stock
+                elif pd.isna(cover_val):
+                    # Reset on blank rows
+                    current_stock = None
             
-            # Filter by same Stock, same Cover, same Product ID, and units > 0
-            print(f"\n{'='*80}")
-            print(f"DEBUG: get_suggestions_detailed")
-            print(f"  Looking for: Stock={stock_name}, Cover={cover_name}, Product={product_id}")
-            print(f"  Available columns: {list(stocks.columns)}")
-            print(f"  Total rows: {len(stocks_filled)}")
-            print(f"\n  Sample data (after filling down, first 5 rows):")
-            for i, row in stocks_filled.head(5).iterrows():
-                print(f"    Row {i}: Batch={row.get('Batch')}, Stock={row.get('Stock')}, cover={row.get('cover')}, product id={row.get('product id')}, units={row.get('units')}")
+            # Third pass: Fill NaN product IDs by forward-filling within same stock
+            # This handles cases where C2, C3 rows don't have product_id but belong to same product
+            current_product_id = None
+            current_stock = None
+            for idx in stocks_copy.index:
+                product_id_val = stocks_copy.at[idx, "product id"]
+                stock_val = stocks_copy.at[idx, "Stock"]
+                
+                if pd.notna(product_id_val):
+                    # Store current product and stock
+                    current_product_id = product_id_val
+                    current_stock = stock_val
+                elif pd.notna(stock_val) and stock_val == current_stock and current_product_id is not None:
+                    # If same stock and product is known, infer product_id
+                    stocks_copy.at[idx, "product id"] = current_product_id
+                elif pd.isna(stock_val):
+                    # Reset if stock changed
+                    current_stock = None
+                    current_product_id = None
             
-            # Check each filter condition separately
-            print(f"\n  Filter analysis:")
-            stock_match = stocks_filled["Stock"].astype(str).str.strip() == stock_name
-            print(f"    Stock matches ({stock_name}): {stock_match.sum()} rows")
-            if stock_match.sum() > 0:
-                print(f"      Matching rows: {stocks_filled[stock_match]['Stock'].unique().tolist()}")
+            # Find all stocks containing this product
+            product_mask = stocks_copy["product id"].astype(str) == product_id
+            stocks_with_product = stocks_copy[product_mask]
             
-            cover_match = stocks_filled["cover"].astype(str).str.strip() == cover_name
-            print(f"    Cover matches ({cover_name}): {cover_match.sum()} rows")
-            if cover_match.sum() > 0:
-                print(f"      Matching rows: {stocks_filled[cover_match]['cover'].unique().tolist()}")
-            
-            product_match = stocks_filled["product id"].astype(str).str.strip() == product_id
-            print(f"    Product matches ({product_id}): {product_match.sum()} rows")
-            if product_match.sum() > 0:
-                print(f"      Sample: {stocks_filled[product_match][['product id', 'product name']].iloc[0].to_dict()}")
-            
-            units_match = stocks_filled["units"] > 0
-            print(f"    Units > 0: {units_match.sum()} rows")
-            
-            mask = stock_match & cover_match & product_match & units_match
-            previous_batches = stocks_filled[mask]
-            
-            print(f"\n  Combined match: {len(previous_batches)} rows")
-            
-            if len(previous_batches) == 0:
-                print(f"\n  No matches found. Here's all unique values for debugging:")
-                print(f"    Unique Stocks: {stocks_filled[stocks_filled['Stock'].notna()]['Stock'].unique().tolist()}")
-                print(f"    Unique Covers: {stocks_filled[stocks_filled['cover'].notna()]['cover'].unique().tolist()}")
-                print(f"    Unique Product IDs: {stocks_filled['product id'].unique().tolist()}")
-            
-            for _, row in previous_batches.iterrows():
-                batch_str = str(row.get("Batch", "")).strip()
-                batch_str = batch_str if batch_str and batch_str != "nan" else ""
-                if batch_str:
-                    batch_num = int(batch_str.replace("Batch", "").strip() or 0)
-                    suggestions["previous_batches"].append({
+            # Get unique batches containing this product from THE SAME STOCK AND SAME COVER
+            unique_batches = {}
+            for idx, stock_row in stocks_with_product.iterrows():
+                batch_number = stock_row.get("Batch", "")
+                stock_name_from_db = stock_row.get("Stock", "")
+                cover_from_db = stock_row.get("cover", "")
+                available_units = int(stock_row.get("units", 0) or 0)
+                
+                # Handle blank stock - infer from nearby C rows that come BEFORE this row
+                # This handles C2, C3, etc. rows where stock might be blank/NaN
+                stock_is_blank = pd.isna(stock_name_from_db) or (isinstance(stock_name_from_db, str) and stock_name_from_db.strip() == '')
+                
+                if stock_is_blank and cover_from_db in ['C2', 'C3', 'C4', 'C5']:
+                    # Find the corresponding C (not C2, C3, etc) row for same product that comes BEFORE this row
+                    # This ensures we get the RIGHT stock (S2-C before S2-C2, not S1-C)
+                    try:
+                        current_idx_pos = list(stocks_copy.index).index(idx)
+                        # Search backwards up to 10 rows to find nearest C row
+                        c_rows_before = stocks_copy.iloc[max(0, current_idx_pos - 10):current_idx_pos]
+                        c_matches = c_rows_before[(c_rows_before["product id"].astype(str) == product_id) & 
+                                                  (c_rows_before["cover"] == 'C')]
+                        if not c_matches.empty:
+                            # Use stock from the nearest C row before this row (last one in the range)
+                            inferred_stock = safe_value(c_matches.iloc[-1].get("Stock"))
+                            if inferred_stock:
+                                stock_name_from_db = inferred_stock
+                            # Also infer batch if needed
+                            if pd.isna(batch_number):
+                                inferred_batch = c_matches.iloc[-1].get("Batch")
+                                if pd.notna(inferred_batch):
+                                    batch_number = inferred_batch
+                    except:
+                        pass  # If index lookup fails, continue with blank stock
+                
+                # Skip rows with invalid batch numbers or stock names
+                if pd.isna(batch_number):
+                    continue
+                
+                batch_str = safe_value(batch_number, "Unknown") or "Unknown"
+                # Ensure batch_str is always a string (not a float)
+                batch_str = str(batch_str)
+                stock_name_from_db = safe_value(stock_name_from_db, "") or ""
+                cover_from_db = safe_value(cover_from_db, "") or ""
+                
+                # Skip if no valid stock or batch, or no available units
+                if not stock_name_from_db or not batch_str or batch_str == "Unknown" or available_units <= 0:
+                    continue
+                
+                # IMPORTANT: Only include batches from the SAME STOCK AND SAME COVER
+                if stock_name_from_db != stock_name:
+                    continue
+                
+                if cover_from_db != cover_name:
+                    continue
+                
+                # Extract batch number and apply grouping filter
+                try:
+                    # Handle formats like "1", "1.0", "batch_1" by extracting the integer part
+                    import re
+                    match = re.search(r'(\d+)(?:\.(\d+))?', str(batch_str))
+                    if match:
+                        batch_num = int(match.group(1))
+                    else:
+                        batch_num = 0
+                except:
+                    batch_num = 0
+                
+                # IMPORTANT: Apply even/odd grouping filter
+                # Only show batches from the same odd/even group as current batch
+                if is_current_odd is not None:
+                    batch_is_odd = batch_num % 2 == 1
+                    if batch_is_odd != is_current_odd:
+                        continue  # Skip batches from different group
+                    
+                    # Only show batches that come BEFORE current batch in the same group
+                    if batch_num >= current_batch_num:
+                        continue
+                
+                # Create unique key from batch + stock combination (strict cover filter applied above)
+                batch_key = f"{batch_str}-{stock_name_from_db}"
+                
+                if batch_key not in unique_batches:
+                    unique_batches[batch_key] = {
                         "batch_number": batch_str,
-                        "stock_name": str(row.get("Stock", "")).strip(),
-                        "cover_name": str(row.get("cover", "")).strip(),
-                        "units_available": int(row.get("units", 0)),
-                        "product_name": str(row.get("product name", "")).strip(),
-                        "batch_num": batch_num
-                    })
-                    print(f"    Added: {batch_str} ({batch_num}), {stock_name}-{cover_name}, units={int(row.get('units', 0))}")
-            print(f"{'='*80}\n")
+                        "batch_num": batch_num,
+                        "stock_name": stock_name_from_db,
+                        "cover_name": cover_from_db,
+                        "product_id": product_id,
+                        "units_available": available_units
+                    }
+            
+            previous_batches = list(unique_batches.values())
+            # Sort by batch number descending (most recent first)
+            previous_batches.sort(key=lambda x: x["batch_num"], reverse=True)
         
-        # 2. Get warehouse stock for this product
-        if not warehouse_stock.empty:
-            wh_mask = warehouse_stock["Product_ID"].astype(str) == product_id
+        # 2. Get warehouse availability for this product
+        warehouse_info = None
+        if not warehouse.empty:
+            wh_mask = warehouse["Product_ID"].astype(str) == product_id
             if wh_mask.any():
-                wh_row = warehouse_stock[wh_mask].iloc[0]
-                units = int(wh_row.get("Available_Units", 0))
-                if units > 0:
-                    suggestions["warehouse"] = {
-                        "units_available": units,
-                        "product_name": wh_row.get("Product_Name", ""),
-                        "product_id": product_id
+                wh_row = warehouse[wh_mask].iloc[0]
+                available_units = int(wh_row.get("Available_Units", 0) or 0)
+                if available_units > 0:
+                    warehouse_info = {
+                        "product_id": product_id,
+                        "product_name": safe_value(wh_row.get("Product_Name", "")) or "",
+                        "units_available": available_units,
+                        "units_per_case": int(wh_row.get("Units_Per_Case", 1) or 1)
                     }
         
-        # 3. Get purchased products for this product (currently available)
+        # 3. Get purchased products for this product (most common first)
+        purchased_items = []
         if not purchased_products.empty:
             pp_mask = purchased_products["Product_ID"].astype(str) == product_id
-            if pp_mask.any():
-                matching_products = purchased_products[pp_mask]
-                for _, row in matching_products.iterrows():
-                    units = int(row.get("Available_Units", 0))
-                    if units > 0:
-                        suggestions["purchased_products"].append({
-                            "exp_id": row.get("EXP_Id", ""),
-                            "units_available": units,
-                            "product_name": row.get("Product_Name", ""),
-                            "received_date": row.get("Received_Date", ""),
-                            "po_id": row.get("PO_ID", "")
-                        })
+            pp_data = purchased_products[pp_mask]
+            
+            for _, pp_row in pp_data.iterrows():
+                available_units = int(pp_row.get("Available_Units", 0) or 0)
+                if available_units > 0:
+                    batch_val = safe_value(pp_row.get("Batch", "")) or ""
+                    # Ensure batch is always a string
+                    batch_val = str(batch_val) if batch_val else ""
+                    purchased_items.append({
+                        "exp_id": safe_value(pp_row.get("EXP_Id", "")) or "",
+                        "product_id": product_id,
+                        "product_name": safe_value(pp_row.get("Product_Name", "")) or "",
+                        "batch": batch_val,
+                        "available_units": available_units,
+                        "units_per_case": int(pp_row.get("Units_Per_Case", 1) or 1),
+                        "received_date": safe_value(pp_row.get("Received_Date", "")) or ""
+                    })
         
-        return jsonify(suggestions=suggestions)
+        return jsonify(suggestions={
+            "previous_batches": previous_batches,
+            "warehouse": warehouse_info,
+            "purchased_products": purchased_items
+        })
     except Exception as e:
         print(f"ERROR in get_suggestions_detailed: {str(e)}")
         import traceback
@@ -3060,195 +3576,8 @@ def get_suggestions_detailed():
         return jsonify(error=str(e)), 500
 
 
-@app.route("/api/stocks/decrease-from-sources", methods=["POST"])
-def decrease_from_sources():
-    """
-    Decrease units from selected sources when batch is created.
-    Sources can be: previous_batch, warehouse, purchased_product
-    
-    Request format:
-    {
-        "sources": [
-            {"type": "previous_batch", "batch_number": "Batch 1", "stock_name": "S1", "cover_name": "C1", "product_id": "P1", "units": 5},
-            {"type": "warehouse", "product_id": "P1", "units": 10},
-            {"type": "purchased_product", "exp_id": "EXP001", "units": 3}
-        ]
-    }
-    """
-    try:
-        d = request.json
-        sources = d.get("sources", [])
-        
-        if not sources:
-            return jsonify(success=True, message="No sources to decrease")
-        
-        stocks = db.get("Stocks", pd.DataFrame())
-        warehouse_stock = db.get("Warehouse", pd.DataFrame())
-        purchased_products = db.get("Purchased_Products", pd.DataFrame())
-        
-        results = {
-            "decreased": [],
-            "failed": []
-        }
-        
-        # Process each source
-        for source in sources:
-            source_type = source.get("type", "")
-            
-            try:
-                if source_type == "previous_batch":
-                    # Decrease from Stocks sheet
-                    batch_number = str(source.get("batch_number", "")).strip()
-                    stock_name = str(source.get("stock_name", "")).strip()
-                    cover_name = str(source.get("cover_name", "")).strip()
-                    product_id = str(source.get("product_id", "")).strip()
-                    units_to_decrease = int(source.get("units", 0))
-                    
-                    print(f"DEBUG: decrease_from_sources - prev batch: {batch_number}, {stock_name}-{cover_name}, product {product_id}, units {units_to_decrease}")
-                    
-                    if stocks.empty:
-                        results["failed"].append({"source": source, "reason": "Stocks sheet is empty"})
-                        continue
-                    
-                    # Fill down Batch, Stock, cover columns to handle Excel merged cell structure
-                    stocks_filled = stocks.copy()
-                    stocks_filled["Batch"] = stocks_filled["Batch"].fillna(method='ffill')
-                    stocks_filled["Stock"] = stocks_filled["Stock"].fillna(method='ffill')
-                    stocks_filled["cover"] = stocks_filled["cover"].fillna(method='ffill')
-                    
-                    # Convert Batch to string format for matching
-                    stocks_filled["Batch_str"] = stocks_filled["Batch"].apply(
-                        lambda x: f"Batch {int(float(x))}" if pd.notna(x) else ""
-                    )
-                    
-                    # Match on Batch, Stock, cover, and product id
-                    mask = (
-                        (stocks_filled["Batch_str"].astype(str).str.strip() == batch_number) &
-                        (stocks_filled["Stock"].astype(str).str.strip() == stock_name) &
-                        (stocks_filled["cover"].astype(str).str.strip() == cover_name) &
-                        (stocks_filled["product id"].astype(str).str.strip() == product_id)
-                    )
-                    
-                    if mask.any():
-                        idx = mask.idxmax()
-                        current_units = int(stocks.at[idx, "units"] or 0)
-                        new_units = max(0, current_units - units_to_decrease)
-                        stocks.at[idx, "units"] = new_units
-                        
-                        print(f"DEBUG: Updated Stocks row {idx}: {current_units} -> {new_units}")
-                        
-                        results["decreased"].append({
-                            "source": "previous_batch",
-                            "batch": batch_number,
-                            "stock": stock_name,
-                            "cover": cover_name,
-                            "product_id": product_id,
-                            "units_decreased": units_to_decrease,
-                            "remaining_units": new_units
-                        })
-                    else:
-                        print(f"DEBUG: No matching row found for {batch_number}, {stock_name}-{cover_name}, {product_id}")
-                        results["failed"].append({"source": source, "reason": "Product not found in batch"})
-                
-                elif source_type == "warehouse":
-                    # Decrease from warehouse stock
-                    product_id = source.get("product_id", "")
-                    units_to_decrease = int(source.get("units", 0))
-                    
-                    if warehouse_stock.empty:
-                        results["failed"].append({"source": source, "reason": "Warehouse sheet is empty"})
-                        continue
-                    
-                    wh_mask = warehouse_stock["Product_ID"].astype(str) == str(product_id)
-                    if wh_mask.any():
-                        idx = wh_mask.idxmax()
-                        current_units = int(warehouse_stock.at[idx, "Available_Units"] or 0)
-                        new_units = max(0, current_units - units_to_decrease)
-                        warehouse_stock.at[idx, "Available_Units"] = new_units
-                        
-                        results["decreased"].append({
-                            "source": "warehouse",
-                            "product_id": product_id,
-                            "units_decreased": units_to_decrease,
-                            "remaining_units": new_units
-                        })
-                    else:
-                        results["failed"].append({"source": source, "reason": "Product not found in warehouse"})
-                
-                elif source_type == "purchased_product":
-                    # Decrease from purchased products
-                    exp_id = str(source.get("exp_id", "")).strip()
-                    units_to_decrease = int(source.get("units", 0))
-                    
-                    if purchased_products.empty:
-                        results["failed"].append({"source": source, "reason": "Purchased_Products sheet is empty"})
-                        continue
-                    
-                    pp_mask = purchased_products["EXP_Id"].astype(str).str.strip() == exp_id
-                    if pp_mask.any():
-                        idx = pp_mask.idxmax()
-                        current_units = int(purchased_products.at[idx, "Available_Units"] or 0)
-                        new_units = current_units - units_to_decrease
-                        
-                        if new_units <= 0:
-                            # Delete the row if units reach zero
-                            purchased_products = purchased_products.drop(idx).reset_index(drop=True)
-                            results["decreased"].append({
-                                "source": "purchased_product",
-                                "exp_id": exp_id,
-                                "units_decreased": units_to_decrease,
-                                "remaining_units": 0,
-                                "deleted": True
-                            })
-                        else:
-                            purchased_products.at[idx, "Available_Units"] = new_units
-                            results["decreased"].append({
-                                "source": "purchased_product",
-                                "exp_id": exp_id,
-                                "units_decreased": units_to_decrease,
-                                "remaining_units": new_units
-                            })
-                    else:
-                        results["failed"].append({"source": source, "reason": f"EXP_Id {exp_id} not found"})
-                
-            except Exception as e:
-                results["failed"].append({"source": source, "reason": str(e)})
-        
-        # Save all changes
-        db["Stocks"] = stocks
-        db["Warehouse"] = warehouse_stock
-        db["Purchased_Products"] = purchased_products
-        save_all()
-        
-        return jsonify(
-            success=True,
-            results=results,
-            message=f"Decreased {len(results['decreased'])} sources, {len(results['failed'])} failed"
-        )
-    except Exception as e:
-        print(f"ERROR in decrease_from_sources: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify(error=str(e)), 500
-
-
 # --------------------------------------------------
-# MAIN SERVER STARTUP
+# RUN SERVER
 # --------------------------------------------------
 if __name__ == "__main__":
-    
-    # try:
-    #     if load_data():
-    #         print(f"✔ Initial sync completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    #     else:
-    #         print(f"⚠ Initial sync failed, but server will continue with cached data (if available)")
-    # except Exception as e:
-    #     print(f"⚠ Exception during initial load: {e}")
-    #     print("Server will continue with cached data (if available)")
-    
-    # Start Flask server
-    print(f"Starting Flask server on port {PORT}...")
-    # app.run(host="0.0.0.0", port=PORT, debug=True)
-   
-
-
+    app.run(host="0.0.0.0", port=PORT, debug=False)
