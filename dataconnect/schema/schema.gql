@@ -1,0 +1,189 @@
+# ==============================
+# BASE TABLES
+# ==============================
+
+type Vendor @table(key: "vendorId") {
+  vendorId: String!
+  vendorName: String
+  address: String
+  mobileNumber: String
+  secondaryNumber: String
+  email: String
+  gstNo: String
+}
+
+type Product @table(key: "productId") {
+  productId: String!
+  productName: String
+  category: String
+
+  vendorId: String!
+  mrp: Float
+  quantity: String
+  units: Int
+  gst: Float
+  eanNo: String
+  selfLife: Int
+
+  vendor: Vendor! @ref(fields: "vendorId") 
+}
+
+type Machine @table(key: "machineId") {
+  machineId: String!
+  location: String
+  status: String
+}
+
+# ==============================
+# PURCHASE TABLES
+# ==============================
+type PurchaseOrder @table(key: "poId") {
+  poId: String!
+
+  vendorId: String!
+  productId: String!
+
+  createdDate: Timestamp
+  totalAmount: Float
+  noOfCases: Int
+  unitsPerCase: Int
+  poPrice: Float
+  lineTotal: Float
+  status: String
+
+  vendor: Vendor! @ref(fields: "vendorId")
+  product: Product! @ref(fields: "productId")
+}
+
+type VendorPurchase @table(key: "purchaseId") {
+  purchaseId: UUID! @default(expr: "uuidV4()")
+
+  poId: String!
+  vendorId: String!
+  productId: String!
+
+  batch: Int
+  unitsPerCase : Int
+  caseCount: Int
+  totalUnits: Int
+  mrp: Float
+  poPrice: Float
+  paymentMode: String
+  paymentStatus: String
+  gstFiled: Boolean
+
+  purchaseOrder: PurchaseOrder! @ref(fields: "poId")
+  vendor: Vendor! @ref(fields: "vendorId")
+  product: Product! @ref(fields: "productId")
+}
+
+type PurchasedProduct @table(key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+
+  poId: String
+  productId: String
+
+  unitsPerCase: Int
+  caseLabel: String
+  unitsInCase: Int
+  mfd: Timestamp
+  expd: Timestamp
+  availableUnits: Int
+  batch: Int
+  receivedDate: Timestamp
+  notes: String
+
+  product: Product @ref(fields: "productId")
+}
+
+# ==============================
+# WAREHOUSE INVENTORY
+# ==============================
+
+type WarehouseInventory @table(key: "productId") {
+  productId: String!
+  availableUnits: Int
+  unitsPerCase: Int
+  lastReceivedDate: Timestamp
+  notes: String
+
+  product: Product! @ref(fields: "productId")
+}
+
+# ==============================
+# MACHINE STOCK TABLES
+# ==============================
+
+type MachineInventory @table(key: ["machineId", "productId"]) {
+  machineId: String!
+  productId: String!
+  currentStock: Int
+
+  machine: Machine! @ref(fields: "machineId")
+  product: Product! @ref(fields: "productId")
+}
+
+type MachineStockAssignment @table(key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+
+  batch: Int
+  assignedDate: Timestamp
+
+  machineId: String!
+  stockLabel: String!
+  coverLabel: String!
+
+  coverStatus: String
+
+  productId: String!
+  units: Int
+
+  status: String
+
+  machine: Machine! @ref(fields: "machineId")
+  product: Product! @ref(fields: "productId")
+}
+
+# ==============================
+# SALES & OPERATIONS
+# ==============================
+
+enum SaleStatus {
+  SUCCESS
+  PAYMENT_FAILED
+  DISPENSE_FAILED
+  PAY_SERVICE_DOWN
+  SESSION_EXPIRED
+}
+
+type Sale @table(key: "saleId") {
+  saleId: UUID! @default(expr: "uuidV4()")
+
+  machineId: String!
+  slot: String
+  productId: String!
+
+  quantitySold: Int
+  mrp: Float
+
+  status: SaleStatus!
+
+  transactionAt: Timestamp
+
+  machine: Machine! @ref(fields: "machineId")
+  product: Product! @ref(fields: "productId")
+}
+
+type RefillLog @table(key: "refillId") {
+  refillId: UUID! @default(expr: "uuidV4()")
+
+  date: Timestamp
+  refillerId: String
+  machineId: String!
+  productId: String!
+  coverCount: Int
+  quantity: Int
+
+  machine: Machine! @ref(fields: "machineId")
+  product: Product! @ref(fields: "productId")
+}

@@ -1,0 +1,13 @@
+specVersion: "v1"
+serviceId: "vendbees-60d7b-service"
+location: "asia-south1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "vendbees-60d7b-2-database"
+      cloudSql:
+        instanceId: "vendbees-60d7b-2-instance"
+        # schemaValidation: "STRICT"     # STRICT mode makes Postgres schema match Data Connect exactly.
+        # schemaValidation: "COMPATIBLE" # COMPATIBLE mode makes Postgres schema compatible with Data Connect.
+connectorDirs: ["./connector"]
