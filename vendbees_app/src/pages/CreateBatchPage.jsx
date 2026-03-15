@@ -33,7 +33,7 @@ const CreateBatchPage = () => {
         'S3': { machine: '', covers: {} },
         'S4': { machine: '', covers: {} }
     });
-    const API_URL = 'http://127.0.0.1:3001/api';
+    const API_URL = 'http://127.0.0.1:3002/api';
 
     // Load suggestions on mount
     useEffect(() => {

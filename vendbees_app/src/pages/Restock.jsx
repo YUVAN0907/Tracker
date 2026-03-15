@@ -24,7 +24,7 @@ const Restock = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
     const [notification, setNotification] = useState(null);
-    const API_URL = 'http://127.0.0.1:3001/api';
+    const API_URL = 'http://127.0.0.1:3002/api';
 
     // Log when stocks data changes
     useEffect(() => {

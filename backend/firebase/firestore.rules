@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default: deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Products collection
+    match /Products/{productId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Machines collection
+    match /Machines/{machineId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Stock (Current_Stock) collection
+    match /Stock/{stockId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Sales collection
+    match /Sales/{saleId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Purchases (Vendor_Purchase) collection
+    match /Purchases/{purchaseId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Refills collection
+    match /Refills/{refillId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Vendors collection
+    match /Vendors/{vendorId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Warehouse collection
+    match /Warehouse/{warehouseId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Purchased_Products collection
+    match /Purchased_Products/{ppId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Stocks (batch stocks) collection
+    match /Stocks/{stockEntryId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Stock_Products collection
+    match /Stock_Products/{spId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Stock_Assignments collection
+    match /Stock_Assignments/{saId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // OUR_PO collection
+    match /OUR_PO/{poId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

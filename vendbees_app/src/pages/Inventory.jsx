@@ -1484,7 +1484,7 @@ const Inventory = () => {
     const [loadingPOItems, setLoadingPOItems] = useState(false);
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
 
-    const API_URL = 'http://127.0.0.1:3001/api';
+    const API_URL = 'http://127.0.0.1:3002/api';
 
     // Fetch vendor purchases when tab changes
     useEffect(() => {

@@ -31,10 +31,8 @@ export const DataProvider = ({ children }) => {
     const [error, setError] = useState(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    // Use 127.0.0.1 to avoid IPv6/localhost resolution mismatches
-    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-687188962794.asia-south1.run.app/api';
-
-
+    // Use the local Firebase backend running on port 3002
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002/api';
     const fetchData = async () => {
         try {
             console.log('DataContext: Starting fetch from', API_URL);
