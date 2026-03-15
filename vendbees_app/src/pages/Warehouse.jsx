@@ -103,7 +103,7 @@ const AddStockForm = ({ products, onSave, onCancel, saving }) => {
             {form.units_received && form.units_per_case && (
                 <div className="bg-blue-50 p-3 rounded-lg text-sm">
                     <span className="text-blue-600">
-                        Receiving <strong>{Math.floor(form.units_received / form.units_per_case)}</strong> full case(s) 
+                        Receiving <strong>{Math.floor(form.units_received / form.units_per_case)}</strong> full case(s)
                         + <strong>{form.units_received % form.units_per_case}</strong> loose units
                     </span>
                 </div>
@@ -503,7 +503,7 @@ const Warehouse = () => {
                                     const fullCases = Math.floor(item.Available_Units / item.Units_Per_Case);
                                     const looseUnits = item.Available_Units % item.Units_Per_Case;
                                     const isLowStock = item.Available_Units > 0 && item.Available_Units < item.Units_Per_Case;
-                                    
+
                                     return (
                                         <tr key={item.Product_ID || idx} className="border-b border-slate-50 hover:bg-slate-50/50">
                                             <td className="px-6 py-4">
@@ -513,7 +513,7 @@ const Warehouse = () => {
                                             <td className="px-6 py-4">
                                                 <span className={clsx("font-semibold",
                                                     item.Available_Units === 0 ? "text-red-500" :
-                                                    isLowStock ? "text-yellow-600" : "text-slate-800")}>
+                                                        isLowStock ? "text-yellow-600" : "text-slate-800")}>
                                                     {item.Available_Units}
                                                 </span>
                                             </td>
@@ -524,7 +524,15 @@ const Warehouse = () => {
                                                 {looseUnits > 0 && <span className="text-orange-500">{looseUnits} loose</span>}
                                                 {item.Available_Units === 0 && <span className="text-red-400">None</span>}
                                             </td>
-                                            <td className="px-6 py-4 text-slate-500">{item.Last_Received_Date || '-'}</td>
+                                            <td className="px-6 py-4 text-slate-500">
+                                                {item.Last_Received_Date ? new Date(item.Last_Received_Date).toLocaleString(undefined, {
+                                                    year: 'numeric',
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                }) : '-'}
+                                            </td>
                                             <td className="px-6 py-4 text-slate-500 max-w-[150px] truncate" title={item.Notes}>{item.Notes || '-'}</td>
                                             <td className="px-6 py-4">
                                                 <div className="flex gap-2">
@@ -532,7 +540,7 @@ const Warehouse = () => {
                                                         onClick={() => setTransferItem(item)}
                                                         disabled={item.Available_Units === 0}
                                                         className={clsx("flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
-                                                            item.Available_Units === 0 
+                                                            item.Available_Units === 0
                                                                 ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                                                                 : "bg-green-50 text-green-600 hover:bg-green-100")}
                                                         title="Transfer to Machine"

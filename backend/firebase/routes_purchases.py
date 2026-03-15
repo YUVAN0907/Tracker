@@ -58,7 +58,7 @@ mutation InsertPurchasedProduct(
 
 GET_PO_QUERY = """
 query GetPOStatus($poId: String!) {
-  purchaseOrder(id: $poId) {
+  purchaseOrder(key: { poId: $poId }) {
     status
   }
 }
@@ -66,7 +66,7 @@ query GetPOStatus($poId: String!) {
 
 UPDATE_PO_STATUS_MUTATION = """
 mutation UpdatePOStatus($poId: String!, $status: String!) {
-  purchaseOrder_update(id: $poId, data: { status: $status }) 
+  purchaseOrder_update(key: { poId: $poId }, data: { status: $status }) 
 }
 """
 
@@ -80,7 +80,8 @@ def get_vendor_purchases():
 def record_delivery():
     data = request.json
     try:
-        po_id = str(data.get('po_id', '')).strip()
+        po_id = str(data.get('po_id', data.get('PO_ID', ''))).strip()
+        vendor_id_parent = str(data.get('vendor_id', data.get('Vendor_ID', ''))).strip()
         items = data.get('items', [])
         
         if not po_id or not items:
@@ -88,13 +89,13 @@ def record_delivery():
 
         # Create vendor purchase record AND purchased product for each item
         for item in items:
-            product_id = str(item.get('product_id', '')).strip()
-            vendor_id = str(item.get('vendor_id', '')).strip()
-            cases_rec = int(item.get('cases_received', 0))
-            units_per_case = int(item.get('units_per_case', 1))
-            mrp = float(item.get('mrp', 0))
-            po_price = float(item.get('po_price', 0))
-            batch = item.get('batch')
+            product_id = str(item.get('product_id', item.get('Product_ID', ''))).strip()
+            vendor_id = str(item.get('vendor_id', item.get('Vendor_ID', vendor_id_parent))).strip()
+            cases_rec = int(item.get('cases_received', item.get('Cases_Received', 0)))
+            units_per_case = int(item.get('units_per_case', item.get('Units_Per_Case', 1)))
+            mrp = float(item.get('mrp', item.get('MRP', 0)))
+            po_price = float(item.get('po_price', item.get('PO_Price', 0)))
+            batch = item.get('batch', item.get('Batch'))
             try: batch = int(batch)
             except: batch = 1
 

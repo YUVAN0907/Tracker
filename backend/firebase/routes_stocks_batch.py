@@ -127,3 +127,81 @@ def decrease_from_sources():
         return jsonify({'message': 'Source stocks updated successfully (Data Connect bridging incomplete for this feature)', 'status': 'success'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@stocks_batch_bp.route('/api/stocks/get-previous-patterns', methods=['GET'])
+def get_previous_patterns():
+    return jsonify(patterns=[])
+
+@stocks_batch_bp.route('/api/stocks/get-batch-suggestions', methods=['GET'])
+def get_batch_suggestions():
+    return jsonify(suggestions={})
+
+SUGGESTIONS_QUERY = """
+query GetSuggestionsData($productId: String!) {
+  warehouseInventory(key: { productId: $productId }) {
+    productId
+    availableUnits
+    unitsPerCase
+    product {
+      productName
+    }
+  }
+  purchasedProducts(where: { productId: { eq: $productId }, availableUnits: { gt: 0 }}) {
+    id
+    poId
+    productId
+    availableUnits
+    unitsPerCase
+    batch
+    receivedDate
+    product {
+      productName
+    }
+  }
+}
+"""
+
+@stocks_batch_bp.route('/api/stocks/get-suggestions-detailed', methods=['POST'])
+def get_suggestions_detailed():
+    try:
+        data = request.json
+        product_id = str(data.get("product_id", "")).strip()
+        
+        # 1. Previous Batches (returning empty for now)
+        previous_batches = []
+        
+        # Query Data Connect
+        res = execute_graphql(SUGGESTIONS_QUERY, {"productId": product_id})
+        
+        # 2. Warehouse Info
+        warehouse_info = None
+        w = res.get("warehouseInventory")
+        if w and w.get("availableUnits", 0) > 0:
+            warehouse_info = {
+                "product_id": w.get("productId"),
+                "product_name": (w.get("product") or {}).get("productName", ""),
+                "units_available": w.get("availableUnits"),
+                "units_per_case": w.get("unitsPerCase", 1)
+            }
+            
+        # 3. Purchased Products
+        purchased_items = []
+        for pp in res.get("purchasedProducts", []):
+            purchased_items.append({
+                "exp_id": pp.get("id"),
+                "product_id": pp.get("productId"),
+                "product_name": (pp.get("product") or {}).get("productName", ""),
+                "batch": pp.get("batch", ""),
+                "available_units": pp.get("availableUnits"),
+                "units_per_case": pp.get("unitsPerCase", 1),
+                "received_date": pp.get("receivedDate", "")
+            })
+            
+        return jsonify(suggestions={
+            "previous_batches": previous_batches,
+            "warehouse": warehouse_info,
+            "purchased_products": purchased_items
+        })
+    except Exception as e:
+        print(f"Error in suggestions: {e}")
+        return jsonify(error=str(e)), 500

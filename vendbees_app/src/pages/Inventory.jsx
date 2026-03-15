@@ -176,7 +176,7 @@ const POForm = ({ products, vendors, warehouse, onSave, onCancel, saving }) => {
 
     const selectedProduct = products.find(p => p.Product_ID === form.product_id);
     const warehouseStock = warehouse.find(w => w.Product_ID === form.product_id);
-    
+
     // Get vendor for selected product based on product name pattern
     const suggestedVendor = useMemo(() => {
         if (!selectedProduct) return null;
@@ -229,7 +229,7 @@ const POForm = ({ products, vendors, warehouse, onSave, onCancel, saving }) => {
 
             {/* Warehouse Recommendation */}
             {form.product_id && (
-                <div className={clsx("p-4 rounded-lg border", 
+                <div className={clsx("p-4 rounded-lg border",
                     warehouseAvailable > 0 ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200")}>
                     <div className="flex items-start gap-3">
                         <Warehouse size={20} className={warehouseAvailable > 0 ? "text-green-600" : "text-slate-400"} />
@@ -359,7 +359,7 @@ const POForm = ({ products, vendors, warehouse, onSave, onCancel, saving }) => {
 const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving }) => {
     // Global vendor selection - filter products by this vendor
     const [selectedVendor, setSelectedVendor] = useState('');
-    
+
     const [items, setItems] = useState([{
         id: 1,
         product_id: '',
@@ -460,7 +460,7 @@ const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving })
     const handleSubmit = (e) => {
         e.preventDefault();
         // Format for API - include vendor_id in each item
-        const validItems = items.filter(item => 
+        const validItems = items.filter(item =>
             item.product_id && item.no_of_cases && item.units_per_case
         ).map(item => {
             return {
@@ -525,7 +525,7 @@ const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving })
                                         </button>
                                     )}
                                 </div>
-                                
+
                                 <div>
                                     <label className="block text-xs font-medium text-slate-600 mb-1">Product *</label>
                                     <select
@@ -663,13 +663,13 @@ const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving })
 // Comprehensive Delivery Recording Form (for recording stock-in from vendor) - All products in PO + Custom products
 const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [] }) => {
     const today = new Date().toISOString().split('T')[0];
-    
+
     // poData contains: { po_id, vendor_id, po_date, items: [{Product_ID, Product_Name, No_of_Cases, Units_Per_Case, PO_Price}] }
     const [purchaseDate, setPurchaseDate] = useState(today);
     const [paymentMode, setPaymentMode] = useState('');
     const [paymentStatus, setPaymentStatus] = useState('Completed');
     const [gstFiled, setGstFiled] = useState('No');
-    
+
     // Initialize product details from PO items
     const [productDetails, setProductDetails] = useState(() => {
         return (poData?.items || []).map(item => ({
@@ -684,7 +684,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             is_custom: false
         }));
     });
-    
+
     // Custom products added by admin (for vendor substitutions)
     const [customProducts, setCustomProducts] = useState([]);
     const [showCustomProductForm, setShowCustomProductForm] = useState(false);
@@ -697,11 +697,11 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         mrp: '',
         po_price: ''
     });
-    
+
     // Get vendor products for dropdown - show all products that could be supplied by this vendor
     const vendorId = poData?.vendor_id || '';
     const vendorProducts = vendorId && products ? products.filter(p => p && p.Product_ID) : [];
-    
+
     // Handle product selection for custom product
     const handleSelectProduct = (productId) => {
         const selected = products.find(p => p.Product_ID === productId);
@@ -716,7 +716,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             }));
         }
     };
-    
+
     // Update a specific product's field
     const updateProduct = (index, field, value) => {
         setProductDetails(prev => {
@@ -725,7 +725,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             return updated;
         });
     };
-    
+
     // Add custom product (vendor substitution)
     const handleAddCustomProduct = () => {
         if (!newCustomProduct.product_name.trim()) {
@@ -741,7 +741,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             alert('Quantity must be greater than 0');
             return;
         }
-        
+
         setCustomProducts([...customProducts, {
             product_id: newCustomProduct.product_id.trim(),
             product_name: newCustomProduct.product_name.trim(),
@@ -751,7 +751,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             mrp: parseFloat(newCustomProduct.mrp) || 0,
             po_price: parseFloat(newCustomProduct.po_price) || 0
         }]);
-        
+
         // Reset form
         setNewCustomProduct({
             product_id: '',
@@ -764,18 +764,18 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         });
         setShowCustomProductForm(false);
     };
-    
+
     const handleRemoveCustomProduct = (index) => {
         setCustomProducts(customProducts.filter((_, i) => i !== index));
     };
-    
+
     // Calculate quantity for a product
     const getQuantity = (product) => {
         const cases = parseInt(product.case_count) || 0;
         const units = parseInt(product.units_per_case) || 1;
         return cases * units;
     };
-    
+
     // Count products being delivered
     const productsToDeliver = productDetails.filter(p => parseInt(p.case_count) > 0);
     const totalCases = productsToDeliver.reduce((sum, p) => sum + (parseInt(p.case_count) || 0), 0);
@@ -784,17 +784,17 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        
+
         if (!purchaseDate) {
             alert('Please enter Purchase Date');
             return;
         }
-        
+
         if (productsToDeliver.length === 0 && customProducts.length === 0) {
             alert('Please enter case count for at least one PO product or add a custom product');
             return;
         }
-        
+
         // Prepare PO products array - only products with case_count > 0
         const products = productsToDeliver.map(p => ({
             product_id: p.product_id,
@@ -808,7 +808,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             payment_status: paymentStatus,
             gst_filed: gstFiled
         }));
-        
+
         onSave({
             po_id: poData.po_id,
             vendor_id: poData.vendor_id,
@@ -905,7 +905,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             <div className="space-y-3">
                 <div className="text-sm font-medium text-slate-700">Products in this PO ({productDetails.length} items)</div>
                 <div className="text-xs text-slate-500">Enter details for delivered products. Leave Case Count empty or 0 for items not delivered.</div>
-                
+
                 {productDetails.map((product, index) => (
                     <div key={index} className={clsx(
                         "p-4 rounded-lg border",
@@ -926,7 +926,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                 )}
                             </div>
                         </div>
-                        
+
                         {/* Product Fields */}
                         <div className="grid grid-cols-6 gap-2">
                             <div>
@@ -1048,7 +1048,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                     <input
                                         type="number"
                                         value={newCustomProduct.quantity}
-                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, quantity: e.target.value})}
+                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, quantity: e.target.value })}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
                                         placeholder="Units"
                                         min="1"
@@ -1059,7 +1059,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                     <input
                                         type="number"
                                         value={newCustomProduct.units_per_case}
-                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, units_per_case: e.target.value})}
+                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, units_per_case: e.target.value })}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
                                         min="1"
                                     />
@@ -1069,7 +1069,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                     <input
                                         type="text"
                                         value={newCustomProduct.batch}
-                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, batch: e.target.value})}
+                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, batch: e.target.value })}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
                                         placeholder="Batch"
                                     />
@@ -1082,7 +1082,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                         type="number"
                                         step="0.01"
                                         value={newCustomProduct.mrp}
-                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, mrp: e.target.value})}
+                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, mrp: e.target.value })}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500 bg-slate-50"
                                         placeholder="0.00"
                                     />
@@ -1093,7 +1093,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                         type="number"
                                         step="0.01"
                                         value={newCustomProduct.po_price}
-                                        onChange={(e) => setNewCustomProduct({...newCustomProduct, po_price: e.target.value})}
+                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, po_price: e.target.value })}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500 bg-slate-50"
                                         placeholder="0.00"
                                     />
@@ -1199,7 +1199,7 @@ const NewVendorPurchaseForm = ({ products, vendors, onSave, onCancel, saving }) 
     const updateItem = (idx, field, value) => {
         const newItems = [...items];
         newItems[idx][field] = value;
-        
+
         // Auto-fill product details when product is selected
         if (field === 'product_id' && value) {
             const product = products.find(p => p.Product_ID === value);
@@ -1301,7 +1301,7 @@ const NewVendorPurchaseForm = ({ products, vendors, onSave, onCancel, saving }) 
                         <Plus size={14} /> Add Product
                     </button>
                 </div>
-                
+
                 <div className="space-y-3 max-h-[300px] overflow-y-auto">
                     {items.map((item, idx) => (
                         <div key={idx} className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
@@ -1380,7 +1380,7 @@ const NewVendorPurchaseForm = ({ products, vendors, onSave, onCancel, saving }) 
                             </div>
                             {item.case_count && item.units_per_case && (
                                 <div className="text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded">
-                                    Quantity: <strong>{(parseInt(item.case_count) || 0) * (parseInt(item.units_per_case) || 1)}</strong> units | 
+                                    Quantity: <strong>{(parseInt(item.case_count) || 0) * (parseInt(item.units_per_case) || 1)}</strong> units |
                                     Line Total: <strong>₹{((parseInt(item.case_count) || 0) * (parseFloat(item.po_price) || 0)).toLocaleString()}</strong>
                                 </div>
                             )}
@@ -1532,7 +1532,7 @@ const Inventory = () => {
     // Filter products
     const filteredProducts = useMemo(() => {
         return allProducts.filter(p => {
-            const matchesSearch = !searchQuery || 
+            const matchesSearch = !searchQuery ||
                 p.Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.Product_ID?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.Category?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1560,14 +1560,14 @@ const Inventory = () => {
             }
             poGroups[poId].items.push(item);
         });
-        
+
         // Sort PO groups by Created_Date (descending)
         const sortedPoIds = Object.keys(poGroups).sort((a, b) => {
             const dateA = new Date(poGroups[a].created_date || 0);
             const dateB = new Date(poGroups[b].created_date || 0);
             return dateB - dateA;
         });
-        
+
         // Now create flat list with common fields only on first row, keeping PO groups together
         let flatRows = [];
         sortedPoIds.forEach(poId => {
@@ -1587,7 +1587,7 @@ const Inventory = () => {
                 });
             });
         });
-        
+
         // Apply status filter
         if (statusFilter !== 'All') {
             const matchingPoIds = new Set();
@@ -1598,7 +1598,7 @@ const Inventory = () => {
             });
             flatRows = flatRows.filter(row => matchingPoIds.has(row._poId));
         }
-        
+
         // Apply search filter
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
@@ -1613,7 +1613,7 @@ const Inventory = () => {
             });
             flatRows = flatRows.filter(row => matchingPoIds.has(row._poId));
         }
-        
+
         return flatRows;
     }, [ourPOs, searchQuery, statusFilter]);
 
@@ -1621,7 +1621,7 @@ const Inventory = () => {
     const filteredVendorPurchases = useMemo(() => {
         console.log('filteredVendorPurchases - vendorPurchasesList:', vendorPurchasesList);
         let list = vendorPurchasesList || [];
-        
+
         // Apply search filter
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
@@ -1632,7 +1632,7 @@ const Inventory = () => {
                 vp.Product_ID?.toLowerCase().includes(q)
             );
         }
-        
+
         console.log('filteredVendorPurchases result:', list.length, 'items');
         return list;
     }, [vendorPurchasesList, searchQuery]);
@@ -1644,13 +1644,24 @@ const Inventory = () => {
     const handleAddProduct = async (product) => {
         setSaving(true);
         try {
+            // Map frontend state to expected backend keys
+            const payload = {
+                PRODUCT_ID: product.Product_ID,
+                PRODUCT_NAME: product.Name,
+                CATEGORY: product.Category,
+                "VENDOR ID": product.Vendor_ID || 'UNKNOWN',
+                MRP: product.MRP || 0,
+                GST: product.GST || 0,
+                QUANTITY: product.Total_Stock || 0,
+                PO: product.Unit_Cost || 0
+            };
             const res = await fetch(`${API_URL}/add-product`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(product)
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
-            
+
             if (res.ok) {
                 setShowAddModal(false);
                 alert(`Product "${product.Name}" added successfully to Excel!`);
@@ -1668,13 +1679,21 @@ const Inventory = () => {
     const handleEditProduct = async (product) => {
         setSaving(true);
         try {
+            const payload = {
+                PRODUCT_ID: product.Product_ID,
+                PRODUCT_NAME: product.Name,
+                CATEGORY: product.Category,
+                "VENDOR ID": product.Vendor_ID || 'UNKNOWN',
+                MRP: product.MRP || 0,
+                PO: product.Unit_Cost || 0
+            };
             const res = await fetch(`${API_URL}/update-product`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(product)
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
-            
+
             if (res.ok) {
                 setEditProduct(null);
                 alert(`Product "${product.Name}" updated successfully!`);
@@ -1696,10 +1715,10 @@ const Inventory = () => {
             const res = await fetch(`${API_URL}/delete-product`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ Product_ID: deleteProduct.Product_ID })
+                body: JSON.stringify({ PRODUCT_ID: deleteProduct.Product_ID })
             });
             const data = await res.json();
-            
+
             if (res.ok) {
                 setDeleteProduct(null);
                 alert(`Product deleted successfully!`);
@@ -1717,22 +1736,28 @@ const Inventory = () => {
     const handleCreatePO = async (poData) => {
         setSaving(true);
         try {
+            // Generate ID: VP-YYYYMMDDHHMMSS-VID
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+            const generatedPoId = `VP-${timeStr}-${poData.vendor_id || 'UNKNOWN'}`;
+
             // Create the PO entry in Vendor_Purchase sheet
             const res = await fetch(`${API_URL}/create-po`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    po_id: generatedPoId,
                     product_id: poData.product_id,
                     vendor_id: poData.vendor_id,
-                    qty: poData.cases,
+                    no_of_cases: poData.cases,
                     units_per_case: poData.units_per_case,
                     po_price: poData.po_price,
                     notes: poData.notes
                 })
             });
-            
+
             const data = await res.json();
-            
+
             if (res.ok) {
                 // Also add the units to warehouse
                 if (poData.total_units > 0) {
@@ -1744,7 +1769,7 @@ const Inventory = () => {
                         `From PO: ${data.po_number || 'New Order'}`
                     );
                 }
-                
+
                 setShowPOModal(false);
                 alert(`PO created successfully! ${poData.total_units} units added to warehouse.`);
                 if (refreshData) refreshData();
@@ -1761,7 +1786,7 @@ const Inventory = () => {
                     parseInt(poData.units_per_case),
                     `PO for ${poData.cases} cases`
                 );
-                
+
                 if (result.success) {
                     setShowPOModal(false);
                     alert(`PO recorded! ${poData.total_units} units added to warehouse.`);
@@ -1781,7 +1806,7 @@ const Inventory = () => {
         setSaving(true);
         try {
             const result = await createMultiPO(items);
-            
+
             if (result.success) {
                 // Add units to warehouse for each item
                 for (const item of items) {
@@ -1796,7 +1821,7 @@ const Inventory = () => {
                         );
                     }
                 }
-                
+
                 setShowMultiPOModal(false);
                 alert(`${result.message}\nPO ID(s): ${result.po_ids?.join(', ')}\nTotal items: ${result.total_items}`);
                 if (refreshData) refreshData();
@@ -1837,8 +1862,8 @@ const Inventory = () => {
                                 key={subTab}
                                 onClick={() => { setPoSubTab(subTab); setSearchQuery(''); }}
                                 className={clsx("px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                                    poSubTab === subTab 
-                                        ? "bg-orange-500 text-white" 
+                                    poSubTab === subTab
+                                        ? "bg-orange-500 text-white"
                                         : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
                             >
                                 {subTab}
@@ -1858,15 +1883,15 @@ const Inventory = () => {
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
                                     placeholder={
-                                        activeTab === 'Product Master' ? "Search products..." : 
-                                        poSubTab === 'Your PO' ? "Search PO number or vendor..." :
-                                        "Search vendor purchases..."
+                                        activeTab === 'Product Master' ? "Search products..." :
+                                            poSubTab === 'Your PO' ? "Search PO number or vendor..." :
+                                                "Search vendor purchases..."
                                     }
                                     className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-orange-500 bg-slate-50"
                                 />
                             </div>
                             {activeTab === 'Product Master' && (
-                                <button 
+                                <button
                                     onClick={() => setShowFilters(!showFilters)}
                                     className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
                                         showFilters ? "border-orange-500 text-orange-600 bg-orange-50" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
@@ -1875,7 +1900,7 @@ const Inventory = () => {
                                 </button>
                             )}
                             {activeTab === 'Purchase Orders' && poSubTab === 'Your PO' && (
-                                <button 
+                                <button
                                     onClick={() => setShowFilters(!showFilters)}
                                     className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
                                         showFilters ? "border-orange-500 text-orange-600 bg-orange-50" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
@@ -1885,7 +1910,7 @@ const Inventory = () => {
                             )}
                         </div>
                         {activeTab === 'Product Master' && (
-                            <button 
+                            <button
                                 onClick={() => setShowAddModal(true)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"
                             >
@@ -1893,7 +1918,7 @@ const Inventory = () => {
                             </button>
                         )}
                         {activeTab === 'Purchase Orders' && poSubTab === 'Your PO' && (
-                            <button 
+                            <button
                                 onClick={() => setShowMultiPOModal(true)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"
                             >
@@ -1916,7 +1941,7 @@ const Inventory = () => {
                                     {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                 </select>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => { setSearchQuery(''); setCategoryFilter('All'); }}
                                 className="self-end px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700"
                             >
@@ -1940,7 +1965,7 @@ const Inventory = () => {
                                     <option value="Delivered">Delivered</option>
                                 </select>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => { setSearchQuery(''); setStatusFilter('All'); }}
                                 className="self-end px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700"
                             >
@@ -1970,8 +1995,8 @@ const Inventory = () => {
                 <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-slate-50">
                         <h3 className="font-semibold text-slate-800">
-                            {activeTab === 'Product Master' ? 'Active Inventory' : 
-                             poSubTab === 'Your PO' ? 'Your Purchase Orders' : 'Vendor Purchases (Actual Deliveries)'}
+                            {activeTab === 'Product Master' ? 'Active Inventory' :
+                                poSubTab === 'Your PO' ? 'Your Purchase Orders' : 'Vendor Purchases (Actual Deliveries)'}
                         </h3>
                     </div>
 
@@ -2018,14 +2043,14 @@ const Inventory = () => {
                                             <td className="px-6 py-4 text-slate-600">{p.Reorder_Level || 20} units</td>
                                             <td className="px-6 py-4">
                                                 <div className="flex gap-3">
-                                                    <button 
+                                                    <button
                                                         onClick={() => setEditProduct(p)}
                                                         className="text-blue-500 hover:text-blue-700 p-1 hover:bg-blue-50 rounded"
                                                         title="Edit"
                                                     >
                                                         <Pencil size={16} />
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => setDeleteProduct(p)}
                                                         className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
                                                         title="Delete"
@@ -2088,7 +2113,7 @@ const Inventory = () => {
                                                         {row.Status && (
                                                             <span className={clsx("px-2 py-1 rounded text-xs font-medium",
                                                                 row.Status === 'Completed' ? "bg-green-100 text-green-700" :
-                                                                "bg-orange-100 text-orange-700")}>
+                                                                    "bg-orange-100 text-orange-700")}>
                                                                 {row.Status}
                                                             </span>
                                                         )}
@@ -2101,7 +2126,7 @@ const Inventory = () => {
                                                                     Delivered
                                                                 </span>
                                                             ) : (
-                                                                <button 
+                                                                <button
                                                                     onClick={() => fetchPOItems(row._poId)}
                                                                     disabled={loadingPOItems}
                                                                     className="text-green-600 hover:text-green-800 font-medium text-xs px-2 py-1 bg-green-50 rounded hover:bg-green-100 disabled:opacity-50"
@@ -2165,9 +2190,9 @@ const Inventory = () => {
                                                     <td className="px-3 py-3 text-center text-slate-600">{vp.Payment_Mode || '-'}</td>
                                                     <td className="px-3 py-3 text-center">
                                                         <span className={clsx("px-2 py-1 rounded text-xs font-medium",
-                                                            vp.Payment_Status === 'Paid' ? "bg-green-100 text-green-700" : 
-                                                            vp.Payment_Status === 'Partial' ? "bg-yellow-100 text-yellow-700" :
-                                                            vp.Payment_Status ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-500"
+                                                            vp.Payment_Status === 'Paid' ? "bg-green-100 text-green-700" :
+                                                                vp.Payment_Status === 'Partial' ? "bg-yellow-100 text-yellow-700" :
+                                                                    vp.Payment_Status ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-500"
                                                         )}>
                                                             {vp.Payment_Status || '-'}
                                                         </span>
@@ -2192,7 +2217,7 @@ const Inventory = () => {
 
             {/* Add Product Modal */}
             <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Add New Product">
-                <ProductForm 
+                <ProductForm
                     onSave={handleAddProduct}
                     onCancel={() => setShowAddModal(false)}
                     categories={categories}
@@ -2203,7 +2228,7 @@ const Inventory = () => {
             {/* Edit Product Modal */}
             <Modal isOpen={!!editProduct} onClose={() => setEditProduct(null)} title="Edit Product">
                 {editProduct && (
-                    <ProductForm 
+                    <ProductForm
                         product={editProduct}
                         onSave={handleEditProduct}
                         onCancel={() => setEditProduct(null)}
@@ -2221,13 +2246,13 @@ const Inventory = () => {
                     </p>
                     <p className="text-sm text-slate-400">This action cannot be undone.</p>
                     <div className="flex gap-3 pt-4">
-                        <button 
+                        <button
                             onClick={() => setDeleteProduct(null)}
                             className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium"
                         >
                             Cancel
                         </button>
-                        <button 
+                        <button
                             onClick={handleDeleteProduct}
                             className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium"
                         >
@@ -2280,7 +2305,7 @@ const Inventory = () => {
                                 if (!result.success) {
                                     throw new Error(result.error);
                                 }
-                                
+
                                 // Build success message with details
                                 const { po_products_recorded, custom_products_recorded, po_products_skipped, both_sheets_updated } = result;
                                 let successMessage = `✅ Delivery Recorded Successfully!\n\n`;
@@ -2292,15 +2317,15 @@ const Inventory = () => {
                                 if (custom_products_recorded > 0) {
                                     successMessage += `Custom Products: ${custom_products_recorded} recorded\n`;
                                 }
-                                
+
                                 if (both_sheets_updated) {
                                     successMessage += `\n✓ Data inserted in both sheets\n✓ Status updated to "Completed"`;
                                 } else {
                                     successMessage += `\n⚠ Partial update - Status remains "Pending"`;
                                 }
-                                
+
                                 alert(successMessage);
-                                
+
                                 // Track successful delivery for tick indicator
                                 setRecentlyDeliveredPOs(prev => new Set([...prev, poDataForDelivery.po_id]));
                                 setShowDeliveryModal(false);

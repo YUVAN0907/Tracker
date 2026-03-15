@@ -6,7 +6,7 @@ warehouse_bp = Blueprint('warehouse', __name__)
 
 GET_WAREHOUSE_INV_QUERY = """
 query GetWarehouse($productId: String!) {
-  warehouseInventory(productId: $productId) {
+  warehouseInventory(key: { productId: $productId }) {
     productId
     availableUnits
     unitsPerCase
@@ -28,7 +28,7 @@ mutation UpsertWarehouse($productId: String!, $availableUnits: Int!, $unitsPerCa
 
 DELETE_WAREHOUSE_MUTATION = """
 mutation DeleteWarehouse($productId: String!) {
-  warehouseInventory_delete(id: $productId) 
+  warehouseInventory_delete(key: { productId: $productId }) 
 }
 """
 
@@ -36,10 +36,10 @@ mutation DeleteWarehouse($productId: String!) {
 def add_to_warehouse():
     data = request.json
     try:
-        product_id = str(data.get('product_id', '')).strip()
-        units_received = int(data.get('units_received', 0))
-        units_per_case = int(data.get('units_per_case', 1))
-        notes = data.get('notes', '')
+        product_id = str(data.get('product_id', data.get('Product_ID', ''))).strip()
+        units_received = int(data.get('units_received', data.get('Units', data.get('units', 0))))
+        units_per_case = int(data.get('units_per_case', data.get('Units_Per_Case', 1)))
+        notes = data.get('notes', data.get('Notes', ''))
 
         if not product_id or units_received <= 0:
             return jsonify({'error': 'Valid Product ID and units > 0 are required'}), 400

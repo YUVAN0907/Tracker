@@ -6,7 +6,7 @@ dashboard_bp = Blueprint('dashboard', __name__)
 # Data Connect allows fetching multiple root queries in one request!
 DASHBOARD_QUERY = """
 query GetDashboardData {
-  products {
+  products(limit: 1000) {
     productId
     productName
     category
@@ -15,6 +15,8 @@ query GetDashboardData {
     quantity
     units
     gst
+    unitCost
+    landedCost
     eanNo
     selfLife
     
@@ -24,19 +26,19 @@ query GetDashboardData {
     }
   }
   
-  machines {
+  machines(limit: 100) {
     machineId
     location
     status
   }
   
-  machineInventories {
+  machineInventories(limit: 1000) {
     machineId
     productId
     currentStock
   }
   
-  sales {
+  sales(limit: 1000) {
     saleId
     machineId
     productId
@@ -46,7 +48,7 @@ query GetDashboardData {
     transactionAt
   }
   
-  vendorPurchases {
+  vendorPurchases(limit: 1000) {
     purchaseId
     poId
     vendorId
@@ -60,9 +62,12 @@ query GetDashboardData {
     paymentMode
     paymentStatus
     gstFiled
+    product {
+      productName
+    }
   }
   
-  refillLogs {
+  refillLogs(limit: 1000) {
     refillId
     date
     refillerId
@@ -72,21 +77,25 @@ query GetDashboardData {
     quantity
   }
   
-  vendors {
+  vendors(limit: 1000) {
     vendorId
     vendorName
     mobileNumber
     email
   }
   
-  warehouseInventories {
+  warehouseInventories(limit: 1000) {
     productId
     availableUnits
     unitsPerCase
     lastReceivedDate
+    notes
+    product {
+      productName
+    }
   }
   
-  purchasedProducts {
+  purchasedProducts(limit: 1000) {
     id
     poId
     productId
@@ -94,9 +103,12 @@ query GetDashboardData {
     availableUnits
     batch
     receivedDate
+    product {
+      productName
+    }
   }
   
-  machineStockAssignments {
+  machineStockAssignments(limit: 1000) {
     id
     batch
     assignedDate
@@ -109,7 +121,7 @@ query GetDashboardData {
     status
   }
   
-  purchaseOrders {
+  purchaseOrders(limit: 1000) {
     poId
     vendorId
     productId
@@ -120,6 +132,9 @@ query GetDashboardData {
     poPrice
     lineTotal
     status
+    product {
+      productName
+    }
   }
 }
 """
@@ -143,7 +158,7 @@ def dashboard():
                 "MRP": p.get("mrp"),
                 "QUANTITY": p.get("units") or p.get("quantity"),  # Handle both
                 "GST": p.get("gst", 0),
-                "PO": 0, # Mapped to unit_cost in frontend, using 0 for now unless mapped in schema
+                "PO": p.get("unitCost", 0), # Mapped to unit_cost in frontend
                 "UNITS": p.get("units", 1)
             })
             
@@ -191,6 +206,7 @@ def dashboard():
                 "MRP": vp.get("mrp"),
                 "PO_Price": vp.get("poPrice"),
                 "Payment_Status": vp.get("paymentStatus"),
+                "Product_Name": (vp.get("product") or {}).get("productName", ""),
                 "Date": "" # We don't have date on VendorPurchase in schema yet
             })
             
@@ -218,9 +234,11 @@ def dashboard():
         for w in data.get("warehouseInventories", []):
             warehouse_out.append({
                 "Product_ID": w.get("productId"),
+                "Product_Name": (w.get("product") or {}).get("productName", "Unknown Product"),
                 "Available_Units": w.get("availableUnits", 0),
                 "Units_Per_Case": w.get("unitsPerCase", 1),
-                "Last_Received_Date": w.get("lastReceivedDate", "")
+                "Last_Received_Date": w.get("lastReceivedDate", ""),
+                "Notes": w.get("notes", "")
             })
             
         # 8a. Map Purchased Products
@@ -230,6 +248,7 @@ def dashboard():
                 "EXP_Id": pp.get("id"),
                 "PO_ID": pp.get("poId"),
                 "Product_ID": pp.get("productId"),
+                "Product_Name": (pp.get("product") or {}).get("productName", "Unknown Product"),
                 "Available_Units": pp.get("availableUnits", 0),
                 "Units_Per_Case": pp.get("unitsPerCase", 1),
                 "Batch": pp.get("batch"),
@@ -275,6 +294,7 @@ def dashboard():
                 "Line_Total": po.get("lineTotal", 0),
                 "Total_Amount": po.get("totalAmount", 0),
                 "Created_Date": po.get("createdDate", ""),
+                "Product_Name": po.get("product", {}).get("productName", ""),
                 "Status": po.get("status", "Pending")
             })
 

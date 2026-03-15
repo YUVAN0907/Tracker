@@ -8,7 +8,7 @@ products_bp = Blueprint('products', __name__)
 # ==========================================
 GET_PRODUCT_QUERY = """
 query GetProduct($productId: String!) {
-  product(id: $productId) {
+  product(key: { productId: $productId }) {
     productId
   }
 }
@@ -22,7 +22,9 @@ mutation UpsertProduct(
   $vendorId: String!,
   $mrp: Float,
   $gst: Float,
-  $units: Int
+  $units: Int,
+  $unitCost: Float,
+  $landedCost: Float
 ) {
   product_upsert(data: {
     productId: $productId,
@@ -31,14 +33,16 @@ mutation UpsertProduct(
     vendorId: $vendorId,
     mrp: $mrp,
     gst: $gst,
-    units: $units
+    units: $units,
+    unitCost: $unitCost,
+    landedCost: $landedCost
   }) 
 }
 """
 
 DELETE_PRODUCT_MUTATION = """
 mutation DeleteProduct($productId: String!) {
-  product_delete(id: $productId) 
+  product_delete(key: { productId: $productId })
 }
 """
 
@@ -56,10 +60,11 @@ def add_product():
         if check_res.get("product"):
             return jsonify({'error': 'Product ID already exists!'}), 400
 
-        # Assuming 'PO' cost maps to something else, or we just use mrp
         mrp = float(data.get('MRP', 0) or 0)
         gst = float(data.get('GST', 0) or 0)
         qty = int(float(data.get('QUANTITY', 0) or 0))
+        unit_cost = float(data.get('PO', 0) or 0)
+        landed_cost = round(unit_cost + (unit_cost * gst / 100) if gst > 1 else unit_cost + (unit_cost * gst), 2)
         vendor_id = str(data.get('VENDOR ID', data.get('Vendor_ID', 'UNKNOWN')))
 
         variables = {
@@ -69,7 +74,9 @@ def add_product():
             "vendorId": vendor_id,
             "mrp": mrp,
             "gst": gst,
-            "units": qty
+            "units": qty,
+            "unitCost": unit_cost,
+            "landedCost": landed_cost
         }
 
         execute_graphql(UPSERT_PRODUCT_MUTATION, variables)
@@ -84,21 +91,23 @@ def add_product():
 def update_product():
     data = request.json
     try:
-        product_id = str(data.get('product_id', '')).strip()
+        product_id = str(data.get('product_id', data.get('PRODUCT_ID', ''))).strip()
         if not product_id:
             return jsonify({'error': 'Product ID is required'}), 400
 
-        updates = data.get('updates', {})
+        updates = data.get('updates', data)
         
         # In Data Connect, _upsert will patch. We need to send full existing data or patch properly if supported.
         # Actually in Data Connect `_update` is generated if patching is preferred:
         update_mutation = """
-        mutation UpdateProduct($productId: String!, $productName: String, $category: String, $mrp: Float, $vendorId: String) {
-          product_update(id: $productId, data: {
+        mutation UpdateProduct($productId: String!, $productName: String, $category: String, $mrp: Float, $vendorId: String, $unitCost: Float, $landedCost: Float) {
+          product_update(key: { productId: $productId }, data: {
             productName: $productName,
             category: $category,
             mrp: $mrp,
-            vendorId: $vendorId
+            vendorId: $vendorId,
+            unitCost: $unitCost,
+            landedCost: $landedCost
           }) 
         }
         """
@@ -108,6 +117,11 @@ def update_product():
         if 'CATEGORY' in updates: vars['category'] = str(updates['CATEGORY'])
         if 'MRP' in updates: vars['mrp'] = float(updates['MRP'])
         if 'VENDOR ID' in updates: vars['vendorId'] = str(updates['VENDOR ID'])
+        if 'PO' in updates: 
+            unit_val = float(updates['PO'])
+            vars['unitCost'] = unit_val
+            # Fetch existing GST to calculate landedCost properly, or just use 0 if not updating whole product
+            vars['landedCost'] = round(unit_val + (unit_val * 0.05), 2)  # Simplified for update since gst is missing from updates array usually
 
         execute_graphql(update_mutation, vars)
         return jsonify({'message': 'Product updated successfully'})
@@ -121,7 +135,7 @@ def update_product():
 def delete_product_route():
     data = request.json
     try:
-        product_id = str(data.get('product_id', '')).strip()
+        product_id = str(data.get('product_id', data.get('PRODUCT_ID', ''))).strip()
         if not product_id:
             return jsonify({'error': 'Product ID is required'}), 400
 

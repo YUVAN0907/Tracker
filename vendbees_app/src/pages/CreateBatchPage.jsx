@@ -7,7 +7,7 @@ import clsx from 'clsx';
 
 const CreateBatchPage = () => {
     const navigate = useNavigate();
-    const { machines, purchased_products = [], stocks = [], refreshData } = useData();
+    const { machines, products = [], purchased_products = [], stocks = [], refreshData } = useData();
     const [batchNumber, setBatchNumber] = useState('');
     const [createdDate, setCreatedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedMachines, setSelectedMachines] = useState(['', '', '', '']);
@@ -43,12 +43,12 @@ const CreateBatchPage = () => {
                     fetch(`${API_URL}/stocks/get-previous-patterns`),
                     fetch(`${API_URL}/stocks/get-batch-suggestions`)
                 ]);
-                
+
                 const patternsData = await patternsRes.json();
                 const suggestionsData = await suggestionsRes.json();
-                
+
                 console.log('✅ Loaded suggestions (keyed by stock-cover-productId):', suggestionsData.suggestions);
-                
+
                 setPreviousPatterns(patternsData.patterns || []);
                 setSuggestedProducts(suggestionsData.suggestions || {});
             } catch (e) {
@@ -61,13 +61,13 @@ const CreateBatchPage = () => {
     // Get batch grouping info
     const getBatchGroupInfo = () => {
         if (!batchNumber.trim()) return null;
-        
+
         const batchNum = parseInt(batchNumber.match(/\d+/)?.[0] || 0);
         if (batchNum === 0) return null;
-        
+
         const isOddBatch = batchNum % 2 === 1;
         const groupLabel = isOddBatch ? 'Odd Batches' : 'Even Batches';
-        
+
         return { batchNum, isOddBatch, groupLabel };
     };
 
@@ -108,12 +108,12 @@ const CreateBatchPage = () => {
             if (!stocksData[stock]) return 'C';
             const existingCovers = Object.keys(stocksData[stock].covers || {});
             if (existingCovers.length === 0) return 'C';
-            
+
             const coverNames = ['C'];
             for (let i = 2; i <= 100; i++) {
                 coverNames.push(`C${i}`);
             }
-            
+
             for (let name of coverNames) {
                 if (!existingCovers.includes(name)) {
                     return name;
@@ -132,14 +132,14 @@ const CreateBatchPage = () => {
                 console.error(`Stock ${stock} not found in stocksData`);
                 return;
             }
-            
+
             const coverName = newCover.stock === stock && newCover.name.trim() ? newCover.name : getNextCoverName(stock);
-            
+
             if (!coverName.trim()) {
                 console.error('Cover name is empty');
                 return;
             }
-            
+
             const updatedStocks = { ...stocksData };
             if (!updatedStocks[stock].covers) {
                 updatedStocks[stock].covers = {};
@@ -165,16 +165,16 @@ const CreateBatchPage = () => {
                 addProductDirectly(stock, cover, product);
                 return;
             }
-            
+
             const productId = product.Product_ID;
             console.log(`🔍 Fetching detailed suggestions for ${stock}-${cover}-${productId}`);
-            
+
             // Show loading state
             setLoadingSuggestions(true);
             setSuggestionError(null);
             setPendingProduct({ stock, cover, product });
             setDetailedSuggestions({ previous_batches: [], warehouse: null, purchased_products: [] });
-            
+
             // Fetch detailed suggestions from backend
             try {
                 console.log(`📡 Calling API: ${API_URL}/stocks/get-suggestions-detailed`);
@@ -188,30 +188,30 @@ const CreateBatchPage = () => {
                         current_batch_number: batchNumber
                     })
                 });
-                
+
                 console.log(`✅ API Response status: ${suggestionResponse.status}`);
-                
+
                 if (!suggestionResponse.ok) {
                     throw new Error(`Server error ${suggestionResponse.status}: ${suggestionResponse.statusText}`);
                 }
-                
+
                 const suggestionData = await suggestionResponse.json();
                 console.log('📦 API Response:', suggestionData);
-                
+
                 if (suggestionData.error) {
                     throw new Error(`Backend error: ${suggestionData.error}`);
                 }
-                
+
                 const suggestions = suggestionData.suggestions;
-                
+
                 console.log('💾 Detailed suggestions:', suggestions);
                 console.log('📊 Group Info:', groupInfo);
-                
+
                 // Check if we have any suggestions at all
                 const hasBatches = suggestions.previous_batches && suggestions.previous_batches.length > 0;
                 const hasWarehouse = suggestions.warehouse && suggestions.warehouse.units_available > 0;
                 const hasPurchased = suggestions.purchased_products && suggestions.purchased_products.length > 0;
-                
+
                 if (hasBatches || hasWarehouse || hasPurchased) {
                     // Backend already filters by group and batch number, so just use the results
                     const availableSources = {
@@ -219,12 +219,12 @@ const CreateBatchPage = () => {
                         warehouse: hasWarehouse ? suggestions.warehouse : null,
                         purchased_products: suggestions.purchased_products || []
                     };
-                    
+
                     // Check if we have at least one source
-                    const hasAnySources = availableSources.previous_batches.length > 0 || 
-                                         availableSources.warehouse !== null || 
-                                         availableSources.purchased_products.length > 0;
-                    
+                    const hasAnySources = availableSources.previous_batches.length > 0 ||
+                        availableSources.warehouse !== null ||
+                        availableSources.purchased_products.length > 0;
+
                     if (hasAnySources) {
                         console.log('🎯 Showing suggestion dialog with available sources');
                         setDetailedSuggestions(availableSources);
@@ -235,7 +235,7 @@ const CreateBatchPage = () => {
                         return;
                     }
                 }
-                
+
                 // No sources available - show error
                 setLoadingSuggestions(false);
                 setSuggestionError(`No sources available for ${product.Product_Name}. 
@@ -246,7 +246,7 @@ You can:
 3. Add to purchased products first
 (Previous batches must match batch number parity)`);
                 // Keep dialog open with error message for user review
-                
+
             } catch (error) {
                 console.error('❌ Error fetching suggestions:', error);
                 console.error('Error stack:', error.stack);
@@ -265,7 +265,7 @@ You can:
         try {
             const updatedStocks = { ...stocksData };
             const existingProduct = updatedStocks[stock].covers[cover].find(p => p.product_id === product.Product_ID);
-            
+
             if (existingProduct) {
                 // Product already exists
                 console.log(`Product ${product.Product_ID} already exists in ${stock}-${cover}`);
@@ -279,7 +279,7 @@ You can:
                 });
                 setStocksData(updatedStocks);
             }
-            
+
             setShowProductDropdown(null);
             setFilterQuery('');
         } catch (error) {
@@ -295,7 +295,7 @@ You can:
                 alert('Please select a batch and enter units');
                 return;
             }
-            
+
             const unitsNum = parseInt(unitsToUse);
             if (unitsNum > batch.units_available) {
                 alert(`Cannot use more units than available (${batch.units_available})`);
@@ -314,7 +314,7 @@ You can:
             };
 
             setPendingSources([...pendingSources, newPendingSource]);
-            
+
             // Add product to batch
             addProductWithUnits(unitsNum);
             setPendingProduct(null);
@@ -333,10 +333,10 @@ You can:
                 alert('Please enter units > 0');
                 return;
             }
-            
+
             const unitsNum = parseInt(unitsToUse);
             const maxUnits = detailedSuggestions.warehouse.units_available;
-            
+
             if (unitsNum > maxUnits) {
                 alert(`Cannot use more units than available (${maxUnits})`);
                 return;
@@ -351,7 +351,7 @@ You can:
             };
 
             setPendingSources([...pendingSources, newPendingSource]);
-            
+
             // Add product to batch
             addProductWithUnits(unitsNum);
             setPendingProduct(null);
@@ -370,7 +370,7 @@ You can:
                 alert('Please select an item and enter units');
                 return;
             }
-            
+
             const unitsNum = parseInt(unitsToUse);
             if (unitsNum > purchasedItem.units_available) {
                 alert(`Cannot use more units than available (${purchasedItem.units_available})`);
@@ -387,7 +387,7 @@ You can:
             };
 
             setPendingSources([...pendingSources, newPendingSource]);
-            
+
             // Add product to batch
             addProductWithUnits(unitsNum);
             setPendingProduct(null);
@@ -439,7 +439,7 @@ You can:
                 setStocksData(updatedStocks);
                 alert(`✅ Added "${product.Product_Name}" to ${stock}-${cover} without any source.`);
             }
-            
+
             setShowProductDropdown(null);
             setFilterQuery('');
         } catch (error) {
@@ -473,14 +473,14 @@ You can:
 
 
 
-    const filteredProducts = purchased_products.filter(p =>
-        p.Product_Name?.toLowerCase().includes(filterQuery.toLowerCase()) ||
+    const filteredProducts = products.filter(p =>
+        p.Name?.toLowerCase().includes(filterQuery.toLowerCase()) ||
         p.Product_ID?.toLowerCase().includes(filterQuery.toLowerCase())
     );
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!batchNumber.trim()) {
             alert('Batch number is required');
             return;
@@ -532,7 +532,7 @@ You can:
             if (result.success) {
                 // Step 2: APPLY all pending sources using unified endpoint
                 console.log('📌 Applying pending sources:', pendingSources);
-                
+
                 if (pendingSources.length > 0) {
                     const decreaseResponse = await fetch(`${API_URL}/stocks/decrease-from-sources`, {
                         method: 'POST',
@@ -572,9 +572,9 @@ You can:
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
             {/* Suggestion Dialog - 3 Tab System */}
             {pendingProduct && detailedSuggestions !== null && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { 
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => {
                     if (!loadingSuggestions && !suggestionError) {
-                        setPendingProduct(null); 
+                        setPendingProduct(null);
                         setDetailedSuggestions(null);
                         setSelectedSourceUnits({});
                         setSuggestionError(null);
@@ -607,8 +607,8 @@ You can:
                                         🔄 Retry Loading Suggestions
                                     </button>
                                     <button
-                                        onClick={() => { 
-                                            setPendingProduct(null); 
+                                        onClick={() => {
+                                            setPendingProduct(null);
                                             setDetailedSuggestions(null);
                                             setSelectedSourceUnits({});
                                             setSuggestionError(null);
@@ -624,13 +624,13 @@ You can:
                                 <h3 className="text-lg font-bold text-slate-800 mb-2">
                                     💡 {pendingProduct.product.Product_Name} - Select Source
                                 </h3>
-                                
+
                                 <p className="text-sm text-slate-700 mb-2">
                                     Adding to <strong>{pendingProduct.stock}-{pendingProduct.cover}</strong> ({groupInfo?.groupLabel})
                                 </p>
-                                
+
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-sm text-blue-800">
-                                    <strong>📌 How it works:</strong> Select which source to take units from (Previous Batch, Warehouse, or Purchased Products). 
+                                    <strong>📌 How it works:</strong> Select which source to take units from (Previous Batch, Warehouse, or Purchased Products).
                                     When you create the batch, units will be decreased from the selected source to maintain consistency.
                                 </div>
 
@@ -648,7 +648,7 @@ You can:
                                     >
                                         📥 Purchased Products {detailedSuggestions.purchased_products.length > 0 && `(${detailedSuggestions.purchased_products.length})`}
                                     </button>
-                                    
+
                                     {/* Warehouse Stock Tab - Only if available */}
                                     {detailedSuggestions.warehouse && detailedSuggestions.warehouse.units_available > 0 && (
                                         <button
@@ -663,7 +663,7 @@ You can:
                                             🏭 Warehouse Stock ({detailedSuggestions.warehouse.units_available})
                                         </button>
                                     )}
-                                    
+
                                     {/* Previous Batches Tab - Only if available */}
                                     {detailedSuggestions.previous_batches.length > 0 && (
                                         <button
@@ -680,225 +680,225 @@ You can:
                                     )}
                                 </div>
 
-                        {/* Tab Content */}
-                        <div className="mb-6">
-                            {/* Previous Batches Tab */}
-                            {suggestionTab === 'batches' && (
-                                <div>
-                                    {detailedSuggestions.previous_batches.length === 0 ? (
-                                        <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
-                                            No previous {groupInfo?.groupLabel.toLowerCase()} batches with this product
+                                {/* Tab Content */}
+                                <div className="mb-6">
+                                    {/* Previous Batches Tab */}
+                                    {suggestionTab === 'batches' && (
+                                        <div>
+                                            {detailedSuggestions.previous_batches.length === 0 ? (
+                                                <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
+                                                    No previous {groupInfo?.groupLabel.toLowerCase()} batches with this product
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                                    {detailedSuggestions.previous_batches.map((batch, idx) => (
+                                                        <div key={idx} className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition">
+                                                            <div className="flex justify-between items-start mb-3">
+                                                                <div className="flex-1">
+                                                                    <div className="font-bold text-blue-900 text-lg">{batch.batch_number}</div>
+                                                                    <div className="text-xs text-blue-600 mt-1">Stock: {batch.stock_name} | Cover: {batch.cover_name}</div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-lg bg-blue-100 text-blue-800 px-4 py-2 rounded font-bold border-2 border-blue-300">
+                                                                        {batch.units_available} units
+                                                                    </div>
+                                                                    <div className="text-xs text-blue-600 mt-1">Available</div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="mb-2">
+                                                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                                    Units to add (Max: {batch.units_available})
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max={batch.units_available}
+                                                                    defaultValue={Math.min(5, batch.units_available)}
+                                                                    id={`batch-units-${idx}`}
+                                                                    className="w-full px-3 py-2 border-2 border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                                                                    placeholder="Enter units"
+                                                                    onChange={(e) => {
+                                                                        const val = parseInt(e.target.value) || 0;
+                                                                        if (val > batch.units_available) {
+                                                                            e.target.value = batch.units_available;
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const input = document.getElementById(`batch-units-${idx}`);
+                                                                    const units = parseInt(input.value) || 0;
+                                                                    if (units > batch.units_available) {
+                                                                        alert(`❌ Cannot use more than ${batch.units_available} units from this batch`);
+                                                                        input.value = batch.units_available;
+                                                                        return;
+                                                                    }
+                                                                    if (units > 0) {
+                                                                        handleUsePreviousBatchProduct(batch, units);
+                                                                    }
+                                                                }}
+                                                                className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium text-sm transition-colors"
+                                                            >
+                                                                ✅ Use {batch.units_available} Units from Batch {batch.batch_number}
+                                                            </button>
+                                                        </div>
+                                                    ))}
+
+                                                </div>
+                                            )}
                                         </div>
-                                    ) : (
-                                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                                            {detailedSuggestions.previous_batches.map((batch, idx) => (
-                                                <div key={idx} className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition">
+                                    )}
+
+                                    {/* Warehouse Tab */}
+                                    {suggestionTab === 'warehouse' && (
+                                        <div>
+                                            {!detailedSuggestions.warehouse || detailedSuggestions.warehouse.units_available <= 0 ? (
+                                                <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
+                                                    No warehouse stock available for this product
+                                                </div>
+                                            ) : (
+                                                <div className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition">
                                                     <div className="flex justify-between items-start mb-3">
                                                         <div className="flex-1">
-                                                            <div className="font-bold text-blue-900 text-lg">{batch.batch_number}</div>
-                                                            <div className="text-xs text-blue-600 mt-1">Stock: {batch.stock_name} | Cover: {batch.cover_name}</div>
+                                                            <div className="font-bold text-green-900 text-lg">{detailedSuggestions.warehouse.product_name}</div>
+                                                            <div className="text-xs text-green-600 mt-1">📦 Warehouse Stock</div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="text-lg bg-blue-100 text-blue-800 px-4 py-2 rounded font-bold border-2 border-blue-300">
-                                                                {batch.units_available} units
+                                                            <div className="text-lg bg-green-100 text-green-800 px-4 py-2 rounded font-bold border-2 border-green-300">
+                                                                {detailedSuggestions.warehouse.units_available} units
                                                             </div>
-                                                            <div className="text-xs text-blue-600 mt-1">Available</div>
+                                                            <div className="text-xs text-green-600 mt-1">Available</div>
                                                         </div>
                                                     </div>
                                                     <div className="mb-2">
                                                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                                            Units to add (Max: {batch.units_available})
+                                                            Units to add (Max: {detailedSuggestions.warehouse.units_available})
                                                         </label>
                                                         <input
                                                             type="number"
                                                             min="1"
-                                                            max={batch.units_available}
-                                                            defaultValue={Math.min(5, batch.units_available)}
-                                                            id={`batch-units-${idx}`}
-                                                            className="w-full px-3 py-2 border-2 border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                                                            max={detailedSuggestions.warehouse.units_available}
+                                                            defaultValue={Math.min(5, detailedSuggestions.warehouse.units_available)}
+                                                            id="warehouse-units"
+                                                            className="w-full px-3 py-2 border-2 border-green-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400"
                                                             placeholder="Enter units"
                                                             onChange={(e) => {
                                                                 const val = parseInt(e.target.value) || 0;
-                                                                if (val > batch.units_available) {
-                                                                    e.target.value = batch.units_available;
+                                                                if (val > detailedSuggestions.warehouse.units_available) {
+                                                                    e.target.value = detailedSuggestions.warehouse.units_available;
                                                                 }
                                                             }}
                                                         />
                                                     </div>
                                                     <button
                                                         onClick={() => {
-                                                            const input = document.getElementById(`batch-units-${idx}`);
+                                                            const input = document.getElementById('warehouse-units');
                                                             const units = parseInt(input.value) || 0;
-                                                            if (units > batch.units_available) {
-                                                                alert(`❌ Cannot use more than ${batch.units_available} units from this batch`);
-                                                                input.value = batch.units_available;
+                                                            if (units > detailedSuggestions.warehouse.units_available) {
+                                                                alert(`❌ Cannot use more than ${detailedSuggestions.warehouse.units_available} units from warehouse`);
+                                                                input.value = detailedSuggestions.warehouse.units_available;
                                                                 return;
                                                             }
                                                             if (units > 0) {
-                                                                handleUsePreviousBatchProduct(batch, units);
+                                                                handleUseWarehouseProduct(units);
                                                             }
                                                         }}
-                                                        className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium text-sm transition-colors"
+                                                        className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium text-sm transition-colors"
                                                     >
-                                                        ✅ Use {batch.units_available} Units from Batch {batch.batch_number}
+                                                        ✅ Use {detailedSuggestions.warehouse.units_available} Units from Warehouse
                                                     </button>
                                                 </div>
-                                            ))}
-
+                                            )}
                                         </div>
                                     )}
-                                </div>
-                            )}
 
-                            {/* Warehouse Tab */}
-                            {suggestionTab === 'warehouse' && (
-                                <div>
-                                    {!detailedSuggestions.warehouse || detailedSuggestions.warehouse.units_available <= 0 ? (
-                                        <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
-                                            No warehouse stock available for this product
-                                        </div>
-                                    ) : (
-                                        <div className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex-1">
-                                                    <div className="font-bold text-green-900 text-lg">{detailedSuggestions.warehouse.product_name}</div>
-                                                    <div className="text-xs text-green-600 mt-1">📦 Warehouse Stock</div>
+                                    {/* Purchased Products Tab */}
+                                    {suggestionTab === 'purchased' && (
+                                        <div>
+                                            {detailedSuggestions.purchased_products.length === 0 ? (
+                                                <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
+                                                    No purchased products available for this item
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="text-lg bg-green-100 text-green-800 px-4 py-2 rounded font-bold border-2 border-green-300">
-                                                        {detailedSuggestions.warehouse.units_available} units
-                                                    </div>
-                                                    <div className="text-xs text-green-600 mt-1">Available</div>
-                                                </div>
-                                            </div>
-                                            <div className="mb-2">
-                                                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                                    Units to add (Max: {detailedSuggestions.warehouse.units_available})
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max={detailedSuggestions.warehouse.units_available}
-                                                    defaultValue={Math.min(5, detailedSuggestions.warehouse.units_available)}
-                                                    id="warehouse-units"
-                                                    className="w-full px-3 py-2 border-2 border-green-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400"
-                                                    placeholder="Enter units"
-                                                    onChange={(e) => {
-                                                        const val = parseInt(e.target.value) || 0;
-                                                        if (val > detailedSuggestions.warehouse.units_available) {
-                                                            e.target.value = detailedSuggestions.warehouse.units_available;
-                                                        }
-                                                    }}
-                                                />
-                                            </div>
-                                            <button
-                                                onClick={() => {
-                                                    const input = document.getElementById('warehouse-units');
-                                                    const units = parseInt(input.value) || 0;
-                                                    if (units > detailedSuggestions.warehouse.units_available) {
-                                                        alert(`❌ Cannot use more than ${detailedSuggestions.warehouse.units_available} units from warehouse`);
-                                                        input.value = detailedSuggestions.warehouse.units_available;
-                                                        return;
-                                                    }
-                                                    if (units > 0) {
-                                                        handleUseWarehouseProduct(units);
-                                                    }
-                                                }}
-                                                className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium text-sm transition-colors"
-                                            >
-                                                ✅ Use {detailedSuggestions.warehouse.units_available} Units from Warehouse
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Purchased Products Tab */}
-                            {suggestionTab === 'purchased' && (
-                                <div>
-                                    {detailedSuggestions.purchased_products.length === 0 ? (
-                                        <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
-                                            No purchased products available for this item
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                                            {detailedSuggestions.purchased_products.map((item, idx) => (
-                                                <div key={idx} className="p-4 border-2 border-orange-200 rounded-lg hover:bg-orange-50 transition">
-                                                    <div className="flex justify-between items-start mb-3">
-                                                        <div className="flex-1">
-                                                            <div className="font-bold text-orange-900 text-lg">{item.product_name}</div>
-                                                            <div className="text-xs text-orange-600 mt-1">
-                                                                🏷️ EXP ID: <span className="font-mono font-semibold">{item.exp_id}</span>
+                                            ) : (
+                                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                                    {detailedSuggestions.purchased_products.map((item, idx) => (
+                                                        <div key={idx} className="p-4 border-2 border-orange-200 rounded-lg hover:bg-orange-50 transition">
+                                                            <div className="flex justify-between items-start mb-3">
+                                                                <div className="flex-1">
+                                                                    <div className="font-bold text-orange-900 text-lg">{item.product_name}</div>
+                                                                    <div className="text-xs text-orange-600 mt-1">
+                                                                        🏷️ EXP ID: <span className="font-mono font-semibold">{item.exp_id}</span>
+                                                                    </div>
+                                                                    <div className="text-xs text-orange-600">📅 Received: {item.received_date}</div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-lg bg-orange-100 text-orange-800 px-4 py-2 rounded font-bold border-2 border-orange-300">
+                                                                        {item.units_available} units
+                                                                    </div>
+                                                                    <div className="text-xs text-orange-600 mt-1">Available</div>
+                                                                </div>
                                                             </div>
-                                                            <div className="text-xs text-orange-600">📅 Received: {item.received_date}</div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="text-lg bg-orange-100 text-orange-800 px-4 py-2 rounded font-bold border-2 border-orange-300">
-                                                                {item.units_available} units
+                                                            <div className="mb-2">
+                                                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                                    Units to add (Max: {item.units_available})
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max={item.units_available}
+                                                                    defaultValue={Math.min(5, item.units_available)}
+                                                                    id={`purchased-units-${idx}`}
+                                                                    className="w-full px-3 py-2 border-2 border-orange-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
+                                                                    placeholder="Enter units"
+                                                                    onChange={(e) => {
+                                                                        const val = parseInt(e.target.value) || 0;
+                                                                        if (val > item.units_available) {
+                                                                            e.target.value = item.units_available;
+                                                                        }
+                                                                    }}
+                                                                />
                                                             </div>
-                                                            <div className="text-xs text-orange-600 mt-1">Available</div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const input = document.getElementById(`purchased-units-${idx}`);
+                                                                    const units = parseInt(input.value) || 0;
+                                                                    if (units > item.units_available) {
+                                                                        alert(`❌ Cannot use more than ${item.units_available} units from this item`);
+                                                                        input.value = item.units_available;
+                                                                        return;
+                                                                    }
+                                                                    if (units > 0) {
+                                                                        handleUsePurchasedProduct(item, units);
+                                                                    }
+                                                                }}
+                                                                className="w-full px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded font-medium text-sm transition-colors"
+                                                            >
+                                                                ✅ Use {item.units_available} Units from {item.exp_id}
+                                                            </button>
                                                         </div>
-                                                    </div>
-                                                    <div className="mb-2">
-                                                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                                            Units to add (Max: {item.units_available})
-                                                        </label>
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            max={item.units_available}
-                                                            defaultValue={Math.min(5, item.units_available)}
-                                                            id={`purchased-units-${idx}`}
-                                                            className="w-full px-3 py-2 border-2 border-orange-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
-                                                            placeholder="Enter units"
-                                                            onChange={(e) => {
-                                                                const val = parseInt(e.target.value) || 0;
-                                                                if (val > item.units_available) {
-                                                                    e.target.value = item.units_available;
-                                                                }
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        onClick={() => {
-                                                            const input = document.getElementById(`purchased-units-${idx}`);
-                                                            const units = parseInt(input.value) || 0;
-                                                            if (units > item.units_available) {
-                                                                alert(`❌ Cannot use more than ${item.units_available} units from this item`);
-                                                                input.value = item.units_available;
-                                                                return;
-                                                            }
-                                                            if (units > 0) {
-                                                                handleUsePurchasedProduct(item, units);
-                                                            }
-                                                        }}
-                                                        className="w-full px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded font-medium text-sm transition-colors"
-                                                    >
-                                                        ✅ Use {item.units_available} Units from {item.exp_id}
-                                                    </button>
+                                                    ))}
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
                                     )}
                                 </div>
-                            )}
-                        </div>
 
-                        <div className="border-t border-slate-200 pt-4 space-y-3">
-                            <p className="text-sm text-slate-600 text-center mb-3">
-                                Select a source above and click "Use" to add units from that source
-                            </p>
-                            <button
-                                onClick={() => { 
-                                    setPendingProduct(null); 
-                                    setDetailedSuggestions(null);
-                                    setSelectedSourceUnits({});
-                                }}
-                                className="w-full px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium transition-colors"
-                            >
-                                Cancel
-                            </button>
-                        </div>
+                                <div className="border-t border-slate-200 pt-4 space-y-3">
+                                    <p className="text-sm text-slate-600 text-center mb-3">
+                                        Select a source above and click "Use" to add units from that source
+                                    </p>
+                                    <button
+                                        onClick={() => {
+                                            setPendingProduct(null);
+                                            setDetailedSuggestions(null);
+                                            setSelectedSourceUnits({});
+                                        }}
+                                        className="w-full px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </>
                         )}
                     </div>
@@ -924,8 +924,8 @@ You can:
                 {groupInfo && (
                     <div className={clsx(
                         "mb-6 p-4 rounded-lg border-2",
-                        groupInfo.isOddBatch 
-                            ? "bg-purple-50 border-purple-200" 
+                        groupInfo.isOddBatch
+                            ? "bg-purple-50 border-purple-200"
                             : "bg-blue-50 border-blue-200"
                     )}>
                         <div className="flex items-center justify-between">
@@ -1134,18 +1134,18 @@ You can:
                                                                         <button
                                                                             key={product.Product_ID}
                                                                             type="button"
-                                                                            onClick={() => handleAddProduct(activeStock, cover, product)}
+                                                                            onClick={() => handleAddProduct(activeStock, cover, { Product_ID: product.Product_ID, Product_Name: product.Name })}
                                                                             className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-100 last:border-b-0"
                                                                         >
                                                                             <div className="flex justify-between items-start">
                                                                                 <div className="flex-1">
-                                                                                    <div className="font-medium text-slate-800">{product.Product_Name}</div>
+                                                                                    <div className="font-medium text-slate-800">{product.Name}</div>
                                                                                     <div className="text-xs text-slate-500">
                                                                                         ID: {product.Product_ID}
                                                                                     </div>
                                                                                 </div>
                                                                                 <div className="text-right text-xs">
-                                                                                    <div className="font-semibold text-slate-700">{product.Available_Units} units</div>
+                                                                                    <div className="font-semibold text-slate-700">{product.Total_Stock || 0} trackable</div>
                                                                                 </div>
                                                                             </div>
                                                                         </button>

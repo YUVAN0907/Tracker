@@ -25,6 +25,9 @@ type Product @table(key: "productId") {
   eanNo: String
   selfLife: Int
 
+  unitCost: Float
+  landedCost: Float
+
   vendor: Vendor! @ref(fields: "vendorId") 
 }
 

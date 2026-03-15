@@ -119,7 +119,7 @@ def create_multi_po():
                 price = float(item.get('po_price', 0))
                 total_amount += (cases * units * price)
 
-            # Insert a PurchaseOrder row for each product in the PO
+            # Insert an order block
             for idx, item in enumerate(vendor_items):
                 pid = str(item.get('product_id', '')).strip()
                 cases = int(item.get('no_of_cases', 0))
@@ -128,8 +128,10 @@ def create_multi_po():
                 
                 line_total = cases * units
 
+                unique_po_id = f"{po_id}-{idx+1}" if len(vendor_items) > 1 else po_id
+
                 vars = {
-                    "poId": po_id, # Same PO ID groups them
+                    "poId": unique_po_id,
                     "vendorId": vid,
                     "productId": pid,
                     "createdDate": created_date,
@@ -140,15 +142,6 @@ def create_multi_po():
                     "lineTotal": float(line_total),
                     "status": "Pending"
                 }
-                # Since Data Connect tables generally enforce primary keys,
-                # wait, if our schema key is just "poId", we can't have multiple rows with same poId!
-                # Ah. `type PurchaseOrder @table(key: "poId")`
-                # If the key is just poId, then a PurchaseOrder can only have ONE product!
-                # Let's append an index to the poId so it can be unique per product row,
-                # OR we change the schema key to `[poId, productId]`.
-                # Since we cannot change the schema here, we must add the index suffix.
-                
-                unique_po_id = f"{po_id}-{idx}" if idx > 0 else po_id
 
                 execute_graphql(INSERT_PO_MUTATION, vars)
 
@@ -156,10 +149,13 @@ def create_multi_po():
 
         return jsonify({
             'message': f'Successfully created {len(created_pos)} POs!',
-            'po_ids': created_pos
+            'po_ids': created_pos,
+            'total_items': len(items)
         })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error creating multi PO: {e}")
         return jsonify({'error': str(e)}), 500
 
