@@ -17,5 +17,5 @@ jobs:
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VENDBESS_8793B }}
-          projectId: vendbess-8793b
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VENDBEES_60D7B }}
+          projectId: vendbees-60d7b

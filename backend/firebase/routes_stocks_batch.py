@@ -44,6 +44,20 @@ query GetMaxBatch {
 }
 """
 
+UPDATE_WAREHOUSE_STOCK_AFTER_BATCH = """
+mutation UpdateWarehouseStock($productId: String!, $newUnits: Int!) {
+  warehouseInventory_update(key: {productId: $productId}, data: {availableUnits: $newUnits})
+}
+"""
+
+GET_WH_UNITS_QUERY = """
+query GetWH($productId: String!) {
+  warehouseInventory(key: {productId: $productId}) {
+    availableUnits
+  }
+}
+"""
+
 # Much of the existing batch creation logic involves mapping nested structures into the flat
 # MachineStockAssignment Postgres table defined in the user's Data Connect schema.
 @stocks_batch_bp.route('/api/stocks/create-batch-full', methods=['POST'])
@@ -61,22 +75,36 @@ def create_batch_full():
         new_batch = max_batch + 1
         
         assigned_date = format_timestamp(datetime.now())
-        
+
+        # Support BOTH expected structure forms
+        # Frontend sends: { batch_number, machine_ids, created_date, stocks: { 'S1': ... } }
+        # Or dictionary directly: { 'S1': { 'machine': 'M001', 'covers': ... } }
+        stocks_dict = data.get('stocks', data) if isinstance(data, dict) else data
+
+        # Product usage tally to auto-deduct from warehouse
+        product_usage = {}
+
         # Iterate over S1, S2, S3...
-        for stock_label, stock_data in data.items():
+        for stock_label, stock_data in stocks_dict.items():
+            # Skip non-stock keys if passing the full frontend object directly
+            if not isinstance(stock_data, dict):
+                continue
+
             machine_id = stock_data.get('machine', '').strip()
             if not machine_id: continue
-            
+
             covers = stock_data.get('covers', {})
             for cover_label, products in covers.items():
                 cover_status = "Active" if cover_label == "C" else "Inactive"
-                
+
                 for product in products:
-                    product_id = str(product.get("productId", "")).strip()
+                    product_id = str(product.get("product_id", product.get("productId", ""))).strip()
                     units = int(product.get("units", 0))
-                    
+
                     if not product_id or units == 0: continue
                     
+                    product_usage[product_id] = product_usage.get(product_id, 0) + units
+
                     vars = {
                         "batch": new_batch,
                         "assignedDate": assigned_date,
@@ -89,7 +117,20 @@ def create_batch_full():
                         "status": "Active" # Or In_Stock
                     }
                     execute_graphql(INSERT_MACHINE_ASSIGNMENT, vars)
-                    
+
+        # Apply warehouse deductions automatically for all used items
+        for pid, used_units in product_usage.items():
+            wh_res = execute_graphql(GET_WH_UNITS_QUERY, {"productId": pid})
+            current_w = wh_res.get("warehouseInventory") or {}
+            current_available = int(current_w.get("availableUnits", 0) or 0)
+            
+            # Deduct but prevent going below zero
+            new_available = max(0, current_available - used_units)
+            execute_graphql(UPDATE_WAREHOUSE_STOCK_AFTER_BATCH, {
+                "productId": pid,
+                "newUnits": new_available
+            })
+
         return jsonify({
             'message': f'Full batch {new_batch} created successfully.',
             'batch_number': new_batch

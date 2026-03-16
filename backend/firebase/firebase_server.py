@@ -9,7 +9,8 @@ import dataconnect_config
 
 load_dotenv()
 
-PORT = 3002
+# Use Google Cloud Run PORT environment variable, fallback to 3002 for local dev
+PORT = int(os.environ.get('PORT', 3002))
 
 # --------------------------------------------------
 # FLASK APP
@@ -53,4 +54,4 @@ def health():
 # --------------------------------------------------
 if __name__ == "__main__":
     print(f"🚀 Firebase Data Connect backend starting on port {PORT}")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    ## app.run(host="0.0.0.0", port=PORT, debug=False)

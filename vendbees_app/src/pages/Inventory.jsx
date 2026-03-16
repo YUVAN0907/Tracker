@@ -23,12 +23,12 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
     };
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-            <div className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} mx-4 max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center p-6 border-b border-slate-100">
+            <div className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} mx-4 max-h-[90vh] overflow-hidden flex flex-col`} onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0">
                     <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
                 </div>
-                <div className="p-6">{children}</div>
+                <div className="p-6 overflow-y-auto overflow-x-auto">{children}</div>
             </div>
         </div>
     );
@@ -1484,7 +1484,7 @@ const Inventory = () => {
     const [loadingPOItems, setLoadingPOItems] = useState(false);
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
 
-    const API_URL = 'http://127.0.0.1:3002/api';
+    const API_URL = 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // Fetch vendor purchases when tab changes
     useEffect(() => {
@@ -2000,11 +2000,12 @@ const Inventory = () => {
                         </h3>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    <div>
                         {/* Product Master Table */}
                         {activeTab === 'Product Master' && (
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-slate-500 uppercase bg-slate-50">
                                     <tr>
                                         <th className="px-6 py-4 font-medium">Product</th>
                                         <th className="px-6 py-4 font-medium">Vendor ID</th>
@@ -2063,6 +2064,7 @@ const Inventory = () => {
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         )}
 
                         {/* Your PO Table (OUR_PO sheet) - Same structure as Vendor Purchase */}

@@ -1,6 +1,7 @@
 import os
 import json
 from dotenv import load_dotenv
+import google.auth
 from google.oauth2 import service_account
 from google.auth.transport.requests import AuthorizedSession
 
@@ -19,17 +20,20 @@ SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(__file__), "serviceAccountKe
 
 def get_auth_session():
     """Returns an authenticated requests block to talk to the Google API"""
-    if not os.path.exists(SERVICE_ACCOUNT_FILE):
-        raise FileNotFoundError(f"Missing service account file: {SERVICE_ACCOUNT_FILE}. Download it from Firebase Console.")
-    
-    # We need the dataconnect scope
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=scopes
-    )
-    
-    # AuthorizedSession automatically injects the OAuth2 Bearer token into headers
+
+    if os.path.exists(SERVICE_ACCOUNT_FILE):
+        print("Using local serviceAccountKey.json for authentication.")
+        credentials = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=scopes
+        )
+    else:
+        print("Falling back to Google Application Default Credentials.")
+        credentials, project = google.auth.default(default_scopes=scopes)
+
     return AuthorizedSession(credentials)
 
 auth_session = get_auth_session()
 print(f"✔ Data Connect Session initialized with endpoint: {DATACONNECT_ENDPOINT}")
+
+

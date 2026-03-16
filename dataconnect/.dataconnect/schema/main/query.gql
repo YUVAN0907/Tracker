@@ -1,0 +1,540 @@
+extend type Query {
+  """
+  ✨ Look up a single `Machine` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  machine(
+    """
+    The key used to identify the object.
+    """
+    key: Machine_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Machine_FirstRow
+  ): Machine @fdc_generated(from: "Machine", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `MachineInventory` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  machineInventory(
+    """
+    The key used to identify the object.
+    """
+    key: MachineInventory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: MachineInventory_FirstRow
+  ): MachineInventory @fdc_generated(from: "MachineInventory", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `MachineStockAssignment` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  machineStockAssignment(
+    """
+    The unique ID of the object.
+    """
+    id: UUID
+
+    """
+    The key used to identify the object.
+    """
+    key: MachineStockAssignment_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: MachineStockAssignment_FirstRow
+  ): MachineStockAssignment @fdc_generated(from: "MachineStockAssignment", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `Product` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  product(
+    """
+    The key used to identify the object.
+    """
+    key: Product_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Product_FirstRow
+  ): Product @fdc_generated(from: "Product", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `PurchaseOrder` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  purchaseOrder(
+    """
+    The key used to identify the object.
+    """
+    key: PurchaseOrder_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: PurchaseOrder_FirstRow
+  ): PurchaseOrder @fdc_generated(from: "PurchaseOrder", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `PurchasedProduct` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  purchasedProduct(
+    """
+    The unique ID of the object.
+    """
+    id: UUID
+
+    """
+    The key used to identify the object.
+    """
+    key: PurchasedProduct_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: PurchasedProduct_FirstRow
+  ): PurchasedProduct @fdc_generated(from: "PurchasedProduct", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `RefillLog` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  refillLog(
+    """
+    The key used to identify the object.
+    """
+    key: RefillLog_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: RefillLog_FirstRow
+  ): RefillLog @fdc_generated(from: "RefillLog", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `Sale` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  sale(
+    """
+    The key used to identify the object.
+    """
+    key: Sale_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Sale_FirstRow
+  ): Sale @fdc_generated(from: "Sale", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `Vendor` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  vendor(
+    """
+    The key used to identify the object.
+    """
+    key: Vendor_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Vendor_FirstRow
+  ): Vendor @fdc_generated(from: "Vendor", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `VendorPurchase` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  vendorPurchase(
+    """
+    The key used to identify the object.
+    """
+    key: VendorPurchase_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: VendorPurchase_FirstRow
+  ): VendorPurchase @fdc_generated(from: "VendorPurchase", purpose: QUERY_SINGLE)
+  """
+  ✨ Look up a single `WarehouseInventory` based on `id`, `key` or `first` and return selected fields (or `null` if not found).
+  """
+  warehouseInventory(
+    """
+    The key used to identify the object.
+    """
+    key: WarehouseInventory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: WarehouseInventory_FirstRow
+  ): WarehouseInventory @fdc_generated(from: "WarehouseInventory", purpose: QUERY_SINGLE)
+  """
+  ✨ List `Machine` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  machines(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: Machine_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [Machine_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: Machine_Having
+  ): [Machine!]! @fdc_generated(from: "Machine", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `MachineInventory` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  machineInventories(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: MachineInventory_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [MachineInventory_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: MachineInventory_Having
+  ): [MachineInventory!]! @fdc_generated(from: "MachineInventory", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `MachineStockAssignment` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  machineStockAssignments(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: MachineStockAssignment_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [MachineStockAssignment_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: MachineStockAssignment_Having
+  ): [MachineStockAssignment!]! @fdc_generated(from: "MachineStockAssignment", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `Product` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  products(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: Product_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [Product_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: Product_Having
+  ): [Product!]! @fdc_generated(from: "Product", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `PurchaseOrder` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  purchaseOrders(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: PurchaseOrder_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [PurchaseOrder_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: PurchaseOrder_Having
+  ): [PurchaseOrder!]! @fdc_generated(from: "PurchaseOrder", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `PurchasedProduct` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  purchasedProducts(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: PurchasedProduct_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [PurchasedProduct_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: PurchasedProduct_Having
+  ): [PurchasedProduct!]! @fdc_generated(from: "PurchasedProduct", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `RefillLog` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  refillLogs(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: RefillLog_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [RefillLog_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: RefillLog_Having
+  ): [RefillLog!]! @fdc_generated(from: "RefillLog", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `Sale` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  sales(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: Sale_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [Sale_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: Sale_Having
+  ): [Sale!]! @fdc_generated(from: "Sale", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `Vendor` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  vendors(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: Vendor_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [Vendor_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: Vendor_Having
+  ): [Vendor!]! @fdc_generated(from: "Vendor", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `VendorPurchase` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  vendorPurchases(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: VendorPurchase_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [VendorPurchase_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: VendorPurchase_Having
+  ): [VendorPurchase!]! @fdc_generated(from: "VendorPurchase", purpose: QUERY_MULTIPLE)
+  """
+  ✨ List `WarehouseInventory` objects in the table and return selected fields, optionally filtered by `where` conditions
+  """
+  warehouseInventories(
+    """
+    Filter condition to narrow down the query results.
+    """
+    where: WarehouseInventory_Filter
+
+    """
+    Order the query results by specific fields.
+    """
+    orderBy: [WarehouseInventory_Order!]
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
+
+    """
+    Maximum number of rows to return (defaults to 100 rows).
+    """
+    limit: Int = 100
+
+    """
+    Set to true to return distinct results.
+    """
+    distinct: Boolean = false
+
+    """
+    Filter condition to apply to the groups of aggregate queries.
+    """
+    having: WarehouseInventory_Having
+  ): [WarehouseInventory!]! @fdc_generated(from: "WarehouseInventory", purpose: QUERY_MULTIPLE)
+}

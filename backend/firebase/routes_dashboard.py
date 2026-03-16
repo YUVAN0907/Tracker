@@ -108,7 +108,7 @@ query GetDashboardData {
     }
   }
   
-  machineStockAssignments(limit: 1000) {
+  machineStockAssignments(limit: 1000, orderBy: [{batch: ASC}, {stockLabel: ASC}, {coverLabel: ASC}]) {
     id
     batch
     assignedDate
@@ -119,6 +119,9 @@ query GetDashboardData {
     productId
     units
     status
+    product {
+      productName
+    }
   }
   
   purchaseOrders(limit: 1000) {
@@ -261,6 +264,7 @@ def dashboard():
         stocks_out = []
         stock_assignments_out = []
         for msa in data.get("machineStockAssignments", []):
+            product_dict = msa.get("product") or {}
             stocks_out.append({
                 "Batch": msa.get("batch"),
                 "Date": msa.get("assignedDate"),
@@ -269,6 +273,7 @@ def dashboard():
                 "cover": msa.get("coverLabel"),
                 "cover_status": msa.get("coverStatus"),
                 "product_id": msa.get("productId"),
+                "product_name": product_dict.get("productName", ""),
                 "units": msa.get("units", 0),
                 "Status": msa.get("status"),
                 "Stock_ID": msa.get("id")

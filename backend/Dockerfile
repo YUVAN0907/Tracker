@@ -2,12 +2,17 @@ FROM python:3.11.8-slim-bookworm
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Install dependencies from the firebase folder specifically
+COPY firebase/requirements_firebase.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+# Gunicorn is needed for production WSGI hosting on Cloud Run
+RUN pip install --no-cache-dir gunicorn
 
-COPY . .
+# Copy all the firebase folder backend files into /app
+COPY firebase/ .
 
 ENV PORT=8080
 
-CMD ["gunicorn", "--bind", ":8080", "--workers", "2", "--threads", "8", "server:app"]
+# Run the firebase_server's Flask `app` object using gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "8", "firebase_server:app"]
 

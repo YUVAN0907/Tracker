@@ -40,7 +40,7 @@ const Layout = () => {
     return (
         <div className="min-h-screen bg-slate-50 flex">
             <Sidebar />
-            <main className="flex-1 ml-64 min-h-screen flex flex-col">
+            <main className="flex-1 ml-64 min-h-screen flex flex-col min-w-0 overflow-x-hidden">
                 <Outlet />
             </main>
         </div>

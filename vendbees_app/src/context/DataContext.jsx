@@ -32,7 +32,7 @@ export const DataProvider = ({ children }) => {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     // Use the local Firebase backend running on port 3002
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002/api';
+    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
     const fetchData = async () => {
         try {
             console.log('DataContext: Starting fetch from', API_URL);

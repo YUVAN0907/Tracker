@@ -24,7 +24,7 @@ const Restock = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
     const [notification, setNotification] = useState(null);
-    const API_URL = 'http://127.0.0.1:3002/api';
+    const API_URL = 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // Log when stocks data changes
     useEffect(() => {
@@ -329,11 +329,13 @@ const Restock = () => {
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {stocks && stocks.length > 0 ? (
-                                                stocks.map((row, idx) => (
-                                                    <tr key={`batch-${idx}`} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-4 py-3 font-bold text-orange-600">{row.Batch || ''}</td>
+                                                stocks.map((row, idx) => {
+                                                    const showBatch = idx === 0 || row.Batch !== stocks[idx-1].Batch;
+                                                    return (
+                                                    <tr key={`batch-${idx}`} className={clsx("hover:bg-slate-50 transition-colors", showBatch && idx !== 0 ? "border-t-2 border-slate-200" : "")}>
+                                                        <td className="px-4 py-3 font-bold text-orange-600">{showBatch ? (row.Batch || '') : ''}</td>
                                                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                                                            {row.Date ? new Date(row.Date).toLocaleDateString() : ''}
+                                                            {showBatch && row.Date ? new Date(row.Date).toLocaleDateString() : ''}
                                                         </td>
                                                         <td className="px-4 py-3 font-medium text-slate-700">{row.Machine || ''}</td>
                                                         <td className="px-4 py-3 text-slate-700 font-semibold">{row.Stock || ''}</td>
@@ -377,7 +379,8 @@ const Restock = () => {
                                                             )}
                                                         </td>
                                                     </tr>
-                                                ))
+                                                      );
+                                                  })
                                             ) : (
                                                 <tr>
                                                     <td colSpan="10" className="px-4 py-8 text-center text-slate-500">

@@ -7,7 +7,7 @@ import clsx from 'clsx';
 
 const CreateBatchPage = () => {
     const navigate = useNavigate();
-    const { machines, products = [], purchased_products = [], stocks = [], refreshData } = useData();
+    const { machines, products = [], purchased_products = [], stocks = [], warehouse = [], refreshData } = useData();
     const [batchNumber, setBatchNumber] = useState('');
     const [createdDate, setCreatedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedMachines, setSelectedMachines] = useState(['', '', '', '']);
@@ -33,7 +33,7 @@ const CreateBatchPage = () => {
         'S3': { machine: '', covers: {} },
         'S4': { machine: '', covers: {} }
     });
-    const API_URL = 'http://127.0.0.1:3002/api';
+    const API_URL = 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // Load suggestions on mount
     useEffect(() => {
@@ -69,6 +69,38 @@ const CreateBatchPage = () => {
         const groupLabel = isOddBatch ? 'Odd Batches' : 'Even Batches';
 
         return { batchNum, isOddBatch, groupLabel };
+    };
+
+    // Helper function to dynamically check remaining units globally across all blocks
+    const getRemainingUnits = (productId) => {
+        // Find warehouse units
+        const whItem = warehouse.find(w => w.Product_ID === productId);
+        let total = whItem ? parseInt(whItem.Available_Units || 0) : 0;
+        
+        // Find purchased products units (which aren't mathematically in the warehouse yet)
+        const purchasedItems = purchased_products.filter(p => p.Product_ID === productId);
+        purchasedItems.forEach(p => {
+            total += parseInt(p.Available_Units || 0);
+        });
+        
+        // Let's add a concept of "allow override". If we have literally 0 tracked in the backend,
+        // we might still allow them to enter it if they are doing a manual physical add.
+        // We'll return unbounded total if they've completely overridden tracking, 
+        // but for now let's just make the limit equal to what we accurately aggregated.
+        
+        // Subtract amounts already entered in the UI
+        let used = 0;
+        Object.values(stocksData).forEach(stock => {
+            Object.values(stock.covers || {}).forEach(products => {
+                products.forEach(p => {
+                    if (p.product_id === productId || p.Product_ID === productId) {
+                        used += parseInt(p.units || 0);
+                    }
+                });
+            });
+        });
+        
+        return { total, used, remaining: Math.max(0, total - used) };
     };
 
     // Helper function to get warehouse units for a product across all stock-cover combinations
@@ -449,10 +481,29 @@ You can:
     };
 
     const handleUnitsChange = (stock, cover, productId, units) => {
+        const parsedUnits = parseInt(units) || 0;
+        
+        // Dynamic warehouse limit check
+        const { total, used } = getRemainingUnits(productId);
+        
         const updatedStocks = { ...stocksData };
         const product = updatedStocks[stock].covers[cover].find(p => p.product_id === productId);
+        
         if (product) {
-            product.units = parseInt(units) || 0;
+            // How much previous value was consuming?
+            const previousUnits = product.units || 0;
+            // The NEW requested difference
+            const diff = parsedUnits - previousUnits;
+            
+            // Only enforce strict global limits if the system actually has inventory tracked (total > 0)
+            // If total is 0, they are forcing a manual entry, so let them type what they physically have.
+            if (total > 0 && diff > 0 && diff > (Math.max(0, total - Math.max(0, used - previousUnits)))) {
+                const absoluteMax = Math.max(0, total - Math.max(0, used - previousUnits));
+                alert(`⚠️ Only ${absoluteMax} units available globally for this product across warehouse and purchases.`);
+                product.units = absoluteMax;
+            } else {
+                product.units = parsedUnits;
+            }
         }
         setStocksData(updatedStocks);
     };
@@ -529,7 +580,7 @@ You can:
                 throw new Error(result.error || `Server error: ${response.status}`);
             }
 
-            if (result.success) {
+            if (response.ok) {
                 // Step 2: APPLY all pending sources using unified endpoint
                 console.log('📌 Applying pending sources:', pendingSources);
 
@@ -605,6 +656,18 @@ You can:
                                         className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
                                     >
                                         🔄 Retry Loading Suggestions
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            addProductDirectly(pendingProduct.stock, pendingProduct.cover, pendingProduct.product);
+                                            setPendingProduct(null);
+                                            setDetailedSuggestions(null);
+                                            setSelectedSourceUnits({});
+                                            setSuggestionError(null);
+                                        }}
+                                        className="w-full px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors"
+                                    >
+                                        ➕ Add Manually (0 units)
                                     </button>
                                     <button
                                         onClick={() => {
