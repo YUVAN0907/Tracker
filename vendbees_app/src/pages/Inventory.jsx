@@ -1470,6 +1470,9 @@ const Inventory = () => {
     const [poSubTab, setPoSubTab] = useState('Your PO'); // Sub-tab for Purchase Orders
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('All');
+    const [productSortBy, setProductSortBy] = useState('name_asc');
+    const [poSortBy, setPoSortBy] = useState('date_desc');
+    const [vpSortBy, setVpSortBy] = useState('date_desc');
     const [showFilters, setShowFilters] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showPOModal, setShowPOModal] = useState(false);
@@ -1526,12 +1529,12 @@ const Inventory = () => {
     // Get unique categories
     const categories = useMemo(() => {
         const cats = new Set(allProducts.map(p => p.Category).filter(Boolean));
-        return ['Snacks', 'Beverages', 'Confectionery', 'Personal Care', 'Others', ...Array.from(cats)].filter((v, i, a) => a.indexOf(v) === i);
+        return ['SNACKS', 'BEVERAGE', ...Array.from(cats)].filter((v, i, a) => a.indexOf(v) === i);
     }, [allProducts]);
 
-    // Filter products
+    // Filter and sort products
     const filteredProducts = useMemo(() => {
-        return allProducts.filter(p => {
+        const filtered = allProducts.filter(p => {
             const matchesSearch = !searchQuery ||
                 p.Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.Product_ID?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1539,7 +1542,15 @@ const Inventory = () => {
             const matchesCategory = categoryFilter === 'All' || p.Category === categoryFilter;
             return matchesSearch && matchesCategory;
         });
-    }, [allProducts, searchQuery, categoryFilter]);
+
+        return [...filtered].sort((a, b) => {
+            if (productSortBy === 'name_asc') return (a.Name || '').localeCompare(b.Name || '');
+            if (productSortBy === 'name_desc') return (b.Name || '').localeCompare(a.Name || '');
+            if (productSortBy === 'cost_low') return (parseFloat(a.Unit_Cost) || 0) - (parseFloat(b.Unit_Cost) || 0);
+            if (productSortBy === 'cost_high') return (parseFloat(b.Unit_Cost) || 0) - (parseFloat(a.Unit_Cost) || 0);
+            return 0;
+        });
+    }, [allProducts, searchQuery, categoryFilter, productSortBy]);
 
     // Filter purchases - Flat rows like Vendor Purchase (common fields only on first row)
     const filteredOurPOs = useMemo(() => {
@@ -1561,11 +1572,21 @@ const Inventory = () => {
             poGroups[poId].items.push(item);
         });
 
-        // Sort PO groups by Created_Date (descending)
+        // Sort PO groups
         const sortedPoIds = Object.keys(poGroups).sort((a, b) => {
-            const dateA = new Date(poGroups[a].created_date || 0);
-            const dateB = new Date(poGroups[b].created_date || 0);
-            return dateB - dateA;
+            if (poSortBy === 'date_desc') {
+                return new Date(poGroups[b].created_date || 0) - new Date(poGroups[a].created_date || 0);
+            }
+            if (poSortBy === 'date_asc') {
+                return new Date(poGroups[a].created_date || 0) - new Date(poGroups[b].created_date || 0);
+            }
+            if (poSortBy === 'amount_high') {
+                return (parseFloat(poGroups[b].total_amount) || 0) - (parseFloat(poGroups[a].total_amount) || 0);
+            }
+            if (poSortBy === 'amount_low') {
+                return (parseFloat(poGroups[a].total_amount) || 0) - (parseFloat(poGroups[b].total_amount) || 0);
+            }
+            return 0;
         });
 
         // Now create flat list with common fields only on first row, keeping PO groups together
@@ -1615,7 +1636,7 @@ const Inventory = () => {
         }
 
         return flatRows;
-    }, [ourPOs, searchQuery, statusFilter]);
+    }, [ourPOs, searchQuery, statusFilter, poSortBy]);
 
     // Filter vendor purchases (for "Vendor Purchase" tab) - flat list from Excel
     const filteredVendorPurchases = useMemo(() => {
@@ -1633,9 +1654,19 @@ const Inventory = () => {
             );
         }
 
-        console.log('filteredVendorPurchases result:', list.length, 'items');
-        return list;
-    }, [vendorPurchasesList, searchQuery]);
+        return [...list].sort((a, b) => {
+            const dateB = b.Date || b.Purchase_Date || 0;
+            const dateA = a.Date || a.Purchase_Date || 0;
+            const amountB = (parseFloat(b.PO_Price) || 0) * (parseFloat(b.Quantity) || 0);
+            const amountA = (parseFloat(a.PO_Price) || 0) * (parseFloat(a.Quantity) || 0);
+
+            if (vpSortBy === 'date_desc') return new Date(dateB) - new Date(dateA);
+            if (vpSortBy === 'date_asc') return new Date(dateA) - new Date(dateB);
+            if (vpSortBy === 'amount_high') return amountB - amountA;
+            if (vpSortBy === 'amount_low') return amountA - amountB;
+            return 0;
+        });
+    }, [vendorPurchasesList, searchQuery, vpSortBy]);
 
     if (loading) return null;
 
@@ -1652,7 +1683,7 @@ const Inventory = () => {
                 "VENDOR ID": product.Vendor_ID || 'UNKNOWN',
                 MRP: product.MRP || 0,
                 GST: product.GST || 0,
-                QUANTITY: product.Total_Stock || 0,
+                QUANTITY: product.Quantity || product.Total_Stock || 0,
                 PO: product.Unit_Cost || 0
             };
             const res = await fetch(`${API_URL}/add-product`, {
@@ -1891,22 +1922,58 @@ const Inventory = () => {
                                 />
                             </div>
                             {activeTab === 'Product Master' && (
-                                <button
-                                    onClick={() => setShowFilters(!showFilters)}
-                                    className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
-                                        showFilters ? "border-orange-500 text-orange-600 bg-orange-50" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
-                                >
-                                    <Filter size={16} /> Filters
-                                </button>
+                                <>
+                                    <select
+                                        value={productSortBy}
+                                        onChange={e => setProductSortBy(e.target.value)}
+                                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 bg-white"
+                                    >
+                                        <option value="name_asc">Name (A-Z)</option>
+                                        <option value="name_desc">Name (Z-A)</option>
+                                        <option value="cost_low">Cost (Lowest)</option>
+                                        <option value="cost_high">Cost (Highest)</option>
+                                    </select>
+                                    <button
+                                        onClick={() => setShowFilters(!showFilters)}
+                                        className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
+                                            showFilters ? "border-orange-500 text-orange-600 bg-orange-50" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                                    >
+                                        <Filter size={16} /> Filters
+                                    </button>
+                                </>
                             )}
                             {activeTab === 'Purchase Orders' && poSubTab === 'Your PO' && (
-                                <button
-                                    onClick={() => setShowFilters(!showFilters)}
-                                    className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
-                                        showFilters ? "border-orange-500 text-orange-600 bg-orange-50" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                                <>
+                                    <select
+                                        value={poSortBy}
+                                        onChange={e => setPoSortBy(e.target.value)}
+                                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 bg-white"
+                                    >
+                                        <option value="date_desc">Date (Newest)</option>
+                                        <option value="date_asc">Date (Oldest)</option>
+                                        <option value="amount_high">Amount (Highest)</option>
+                                        <option value="amount_low">Amount (Lowest)</option>
+                                    </select>
+                                    <button
+                                        onClick={() => setShowFilters(!showFilters)}
+                                        className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
+                                            showFilters ? "border-orange-500 text-orange-600 bg-orange-50" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                                    >
+                                        <Filter size={16} /> Filters
+                                    </button>
+                                </>
+                            )}
+                            {activeTab === 'Purchase Orders' && poSubTab === 'Vendor Purchase' && (
+                                <select
+                                    value={vpSortBy}
+                                    onChange={e => setVpSortBy(e.target.value)}
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 bg-white"
                                 >
-                                    <Filter size={16} /> Filters
-                                </button>
+                                    <option value="date_desc">Date (Newest)</option>
+                                    <option value="date_asc">Date (Oldest)</option>
+                                    <option value="amount_high">Amount (Highest)</option>
+                                    <option value="amount_low">Amount (Lowest)</option>
+                                </select>
                             )}
                         </div>
                         {activeTab === 'Product Master' && (

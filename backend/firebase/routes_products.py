@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
-from dataconnect_db import execute_graphql
+from datetime import datetime
+from dataconnect_db import execute_graphql, format_timestamp
 
 products_bp = Blueprint('products', __name__)
 
@@ -11,6 +12,18 @@ query GetProduct($productId: String!) {
   product(key: { productId: $productId }) {
     productId
   }
+}
+"""
+
+UPSERT_WAREHOUSE_MUTATION = """
+mutation UpsertWarehouse($productId: String!, $availableUnits: Int!, $unitsPerCase: Int, $notes: String, $lastReceivedDate: Timestamp) {
+  warehouseInventory_upsert(data: {
+    productId: $productId,
+    availableUnits: $availableUnits,
+    unitsPerCase: $unitsPerCase,
+    notes: $notes,
+    lastReceivedDate: $lastReceivedDate
+  })
 }
 """
 
@@ -80,6 +93,17 @@ def add_product():
         }
 
         execute_graphql(UPSERT_PRODUCT_MUTATION, variables)
+
+        if qty > 0:
+            warehouse_vars = {
+                "productId": product_id,
+                "availableUnits": qty,
+                "unitsPerCase": 1,
+                "notes": "Initial Stock",
+                "lastReceivedDate": format_timestamp(datetime.now())
+            }
+            execute_graphql(UPSERT_WAREHOUSE_MUTATION, warehouse_vars)
+
         return jsonify({'message': 'Product added successfully!'})
 
     except Exception as e:

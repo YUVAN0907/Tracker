@@ -272,7 +272,11 @@ const EditForm = ({ item, onSave, onCancel, saving }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onSave(item.Product_ID, form);
+        onSave(item.Product_ID, {
+            Available_Units: parseInt(form.available_units) || 0,
+            Units_Per_Case: parseInt(form.units_per_case) || 1,
+            Notes: form.notes
+        });
     };
 
     return (
@@ -329,6 +333,7 @@ const EditForm = ({ item, onSave, onCancel, saving }) => {
 const Warehouse = () => {
     const { products, machines, warehouse, refills, loading, refreshData, addToWarehouse, transferFromWarehouse, updateWarehouseItem, deleteWarehouseItem } = useData();
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState('name_asc');
     const [showAddModal, setShowAddModal] = useState(false);
     const [transferItem, setTransferItem] = useState(null);
     const [editItem, setEditItem] = useState(null);
@@ -356,15 +361,25 @@ const Warehouse = () => {
         return { totalUnits, totalItems, lowStock, outOfStock };
     }, [warehouse]);
 
-    // Filter warehouse items
+    // Filter and sort warehouse items
     const filteredWarehouse = useMemo(() => {
-        if (!searchQuery) return warehouse;
-        const q = searchQuery.toLowerCase();
-        return warehouse.filter(w =>
-            w.Product_ID?.toLowerCase().includes(q) ||
-            w.Product_Name?.toLowerCase().includes(q)
-        );
-    }, [warehouse, searchQuery]);
+        let filtered = warehouse;
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            filtered = warehouse.filter(w =>
+                w.Product_ID?.toLowerCase().includes(q) ||
+                w.Product_Name?.toLowerCase().includes(q)
+            );
+        }
+        return [...filtered].sort((a, b) => {
+            if (sortBy === 'name_asc') return (a.Product_Name || '').localeCompare(b.Product_Name || '');
+            if (sortBy === 'name_desc') return (b.Product_Name || '').localeCompare(a.Product_Name || '');
+            if (sortBy === 'units_high') return (b.Available_Units || 0) - (a.Available_Units || 0);
+            if (sortBy === 'units_low') return (a.Available_Units || 0) - (b.Available_Units || 0);
+            if (sortBy === 'last_received') return new Date(b.Last_Received_Date || 0) - new Date(a.Last_Received_Date || 0);
+            return 0;
+        });
+    }, [warehouse, searchQuery, sortBy]);
 
     const showNotification = (message, type = 'success') => {
         setNotification({ message, type });
@@ -451,8 +466,8 @@ const Warehouse = () => {
                 </div>
 
                 {/* Toolbar */}
-                <div className="flex justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                    <div className="relative flex-1 max-w-md">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                    <div className="relative flex-1 w-full sm:max-w-md">
                         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                             type="text"
@@ -462,12 +477,25 @@ const Warehouse = () => {
                             className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-orange-500 bg-slate-50"
                         />
                     </div>
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"
-                    >
-                        <Plus size={16} /> Add Stock
-                    </button>
+                    <div className="flex gap-3 w-full sm:w-auto">
+                        <select
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value)}
+                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 bg-white"
+                        >
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="units_high">Units (Highest)</option>
+                            <option value="units_low">Units (Lowest)</option>
+                            <option value="last_received">Last Received</option>
+                        </select>
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap"
+                        >
+                            <Plus size={16} /> Add Stock
+                        </button>
+                    </div>
                 </div>
 
                 {/* Warehouse Table */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
@@ -23,6 +23,7 @@ const Restock = () => {
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
+    const [purchasedSortBy, setPurchasedSortBy] = useState('date_desc');
     const [notification, setNotification] = useState(null);
     const API_URL = 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
@@ -83,6 +84,30 @@ const Restock = () => {
             a.Product.Product_ID.toLowerCase().includes(query)
         );
     }
+
+    const filteredPurchasedProducts = useMemo(() => {
+        let list = [...purchased_products];
+        // Apply sorting
+        list.sort((a, b) => {
+            if (purchasedSortBy === 'date_desc') return new Date(b.Received_Date || 0) - new Date(a.Received_Date || 0);
+            if (purchasedSortBy === 'date_asc') return new Date(a.Received_Date || 0) - new Date(b.Received_Date || 0);
+            if (purchasedSortBy === 'units_high') return (b.Available_Units || 0) - (a.Available_Units || 0);
+            if (purchasedSortBy === 'units_low') return (a.Available_Units || 0) - (b.Available_Units || 0);
+            return 0;
+        });
+
+        // Search applies if active tab is purchased
+        if (activeTab === 'purchased' && searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            list = list.filter(p => 
+                p.Product_ID?.toLowerCase().includes(query) ||
+                p.Product_Name?.toLowerCase().includes(query) ||
+                p.PO_ID?.toLowerCase().includes(query)
+            );
+        }
+        
+        return list;
+    }, [purchased_products, purchasedSortBy, searchQuery, activeTab]);
 
     const handleCreateBatch = async (data) => {
         // Batch creation is now handled in CreateBatchPage
@@ -229,8 +254,30 @@ const Restock = () => {
                             </div>
                         ) : (
                             <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="p-6 border-b border-slate-50">
+                                <div className="p-4 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
                                     <h3 className="font-semibold text-slate-800">Purchased Products Inventory</h3>
+                                    <div className="flex gap-4">
+                                        <div className="relative">
+                                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                placeholder="Search products..."
+                                                className="pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm w-full sm:w-64 focus:outline-none focus:border-orange-500 bg-slate-50"
+                                            />
+                                        </div>
+                                        <select
+                                            value={purchasedSortBy}
+                                            onChange={e => setPurchasedSortBy(e.target.value)}
+                                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="date_desc">Receive Date (Newest)</option>
+                                            <option value="date_asc">Receive Date (Oldest)</option>
+                                            <option value="units_high">Units (Highest)</option>
+                                            <option value="units_low">Units (Lowest)</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm text-left">
@@ -248,7 +295,7 @@ const Restock = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {purchased_products.map((product, idx) => (
+                                            {filteredPurchasedProducts.map((product, idx) => (
                                                 <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50">
                                                     <td className="px-6 py-4 font-medium text-slate-700">{product.PO_ID || ''}</td>
                                                     <td className="px-6 py-4 text-blue-600 font-medium">{product.EXP_Id || ''}</td>
