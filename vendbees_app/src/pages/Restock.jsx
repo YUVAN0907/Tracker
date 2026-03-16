@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
-import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2, ChevronDown, FileText } from 'lucide-react';
 import clsx from 'clsx';
+import GenerateBillModal from '../components/GenerateBillModal';
 
 const KPI = ({ title, value, icon: Icon, colorClass }) => (
     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
@@ -23,9 +24,9 @@ const Restock = () => {
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
-    const [purchasedSortBy, setPurchasedSortBy] = useState('date_desc');
     const [notification, setNotification] = useState(null);
-    const API_URL = 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+    const [showBillModal, setShowBillModal] = useState(false);
+    const API_URL = 'http://127.0.0.1:3001/api';
 
     // Log when stocks data changes
     useEffect(() => {
@@ -35,7 +36,15 @@ const Restock = () => {
         } else {
             console.log('⚠️ Restock.jsx: No stocks data loaded');
         }
-    }, [stocks]);
+        
+        // Debug products data
+        if (products && Array.isArray(products)) {
+            console.log('✔ Restock.jsx: Products loaded:', products.length);
+            console.log('  Product names:', products.map(p => p.Product_Name || p.name || p.productName).slice(0, 5));
+        } else {
+            console.log('⚠️ Restock.jsx: Products not loaded or not array:', typeof products);
+        }
+    }, [stocks, products]);
 
     if (loading) return null;
 
@@ -84,30 +93,6 @@ const Restock = () => {
             a.Product.Product_ID.toLowerCase().includes(query)
         );
     }
-
-    const filteredPurchasedProducts = useMemo(() => {
-        let list = [...purchased_products];
-        // Apply sorting
-        list.sort((a, b) => {
-            if (purchasedSortBy === 'date_desc') return new Date(b.Received_Date || 0) - new Date(a.Received_Date || 0);
-            if (purchasedSortBy === 'date_asc') return new Date(a.Received_Date || 0) - new Date(b.Received_Date || 0);
-            if (purchasedSortBy === 'units_high') return (b.Available_Units || 0) - (a.Available_Units || 0);
-            if (purchasedSortBy === 'units_low') return (a.Available_Units || 0) - (b.Available_Units || 0);
-            return 0;
-        });
-
-        // Search applies if active tab is purchased
-        if (activeTab === 'purchased' && searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
-            list = list.filter(p => 
-                p.Product_ID?.toLowerCase().includes(query) ||
-                p.Product_Name?.toLowerCase().includes(query) ||
-                p.PO_ID?.toLowerCase().includes(query)
-            );
-        }
-        
-        return list;
-    }, [purchased_products, purchasedSortBy, searchQuery, activeTab]);
 
     const handleCreateBatch = async (data) => {
         // Batch creation is now handled in CreateBatchPage
@@ -253,67 +238,53 @@ const Restock = () => {
                                 <p className="text-slate-600">No purchased products yet. Record deliveries to view them here.</p>
                             </div>
                         ) : (
-                            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="p-4 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
                                     <h3 className="font-semibold text-slate-800">Purchased Products Inventory</h3>
-                                    <div className="flex gap-4">
-                                        <div className="relative">
-                                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                            <input
-                                                type="text"
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                                placeholder="Search products..."
-                                                className="pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm w-full sm:w-64 focus:outline-none focus:border-orange-500 bg-slate-50"
-                                            />
-                                        </div>
-                                        <select
-                                            value={purchasedSortBy}
-                                            onChange={e => setPurchasedSortBy(e.target.value)}
-                                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 bg-white"
-                                        >
-                                            <option value="date_desc">Receive Date (Newest)</option>
-                                            <option value="date_asc">Receive Date (Oldest)</option>
-                                            <option value="units_high">Units (Highest)</option>
-                                            <option value="units_low">Units (Lowest)</option>
-                                        </select>
-                                    </div>
+                                    <button
+                                        onClick={() => setShowBillModal(true)}
+                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                                    >
+                                        <FileText size={16} /> Generate Bill
+                                    </button>
                                 </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-                                            <tr>
-                                                <th className="px-6 py-4 font-medium">PO ID</th>
-                                                <th className="px-6 py-4 font-medium">EXP ID</th>
-                                                <th className="px-6 py-4 font-medium">Product ID</th>
-                                                <th className="px-6 py-4 font-medium">Product Name</th>
-                                                <th className="px-6 py-4 font-medium">Available Units</th>
-                                                <th className="px-6 py-4 font-medium">Units Per Case</th>
-                                                <th className="px-6 py-4 font-medium">Batch</th>
-                                                <th className="px-6 py-4 font-medium">Received Date</th>
-                                                <th className="px-6 py-4 font-medium">Notes</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredPurchasedProducts.map((product, idx) => (
-                                                <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                                    <td className="px-6 py-4 font-medium text-slate-700">{product.PO_ID || ''}</td>
-                                                    <td className="px-6 py-4 text-blue-600 font-medium">{product.EXP_Id || ''}</td>
-                                                    <td className="px-6 py-4 font-bold text-slate-800">{product.Product_ID}</td>
-                                                    <td className="px-6 py-4 text-slate-700">{product.Product_Name}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">
-                                                            {product.Available_Units} units
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-slate-600">{product.Units_Per_Case || 1}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{product.Batch || ''}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{product.Received_Date}</td>
-                                                    <td className="px-6 py-4 text-slate-500 text-xs">{product.Notes}</td>
+                                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+                                                <tr>
+                                                    <th className="px-6 py-4 font-medium">PO ID</th>
+                                                    <th className="px-6 py-4 font-medium">EXP ID</th>
+                                                    <th className="px-6 py-4 font-medium">Product ID</th>
+                                                    <th className="px-6 py-4 font-medium">Product Name</th>
+                                                    <th className="px-6 py-4 font-medium">Available Units</th>
+                                                    <th className="px-6 py-4 font-medium">Units Per Case</th>
+                                                    <th className="px-6 py-4 font-medium">Batch</th>
+                                                    <th className="px-6 py-4 font-medium">Received Date</th>
+                                                    <th className="px-6 py-4 font-medium">Notes</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {purchased_products.map((product, idx) => (
+                                                    <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                                        <td className="px-6 py-4 font-medium text-slate-700">{product.PO_ID || ''}</td>
+                                                        <td className="px-6 py-4 text-blue-600 font-medium">{product.EXP_Id || ''}</td>
+                                                        <td className="px-6 py-4 font-bold text-slate-800">{product.Product_ID}</td>
+                                                        <td className="px-6 py-4 text-slate-700">{product.Product_Name}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">
+                                                                {product.Available_Units} units
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-600">{product.Units_Per_Case || 1}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{product.Batch || ''}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{product.Received_Date}</td>
+                                                        <td className="px-6 py-4 text-slate-500 text-xs">{product.Notes}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -376,13 +347,11 @@ const Restock = () => {
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {stocks && stocks.length > 0 ? (
-                                                stocks.map((row, idx) => {
-                                                    const showBatch = idx === 0 || row.Batch !== stocks[idx-1].Batch;
-                                                    return (
-                                                    <tr key={`batch-${idx}`} className={clsx("hover:bg-slate-50 transition-colors", showBatch && idx !== 0 ? "border-t-2 border-slate-200" : "")}>
-                                                        <td className="px-4 py-3 font-bold text-orange-600">{showBatch ? (row.Batch || '') : ''}</td>
+                                                stocks.map((row, idx) => (
+                                                    <tr key={`batch-${idx}`} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="px-4 py-3 font-bold text-orange-600">{row.Batch || ''}</td>
                                                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                                                            {showBatch && row.Date ? new Date(row.Date).toLocaleDateString() : ''}
+                                                            {row.Date ? new Date(row.Date).toLocaleDateString() : ''}
                                                         </td>
                                                         <td className="px-4 py-3 font-medium text-slate-700">{row.Machine || ''}</td>
                                                         <td className="px-4 py-3 text-slate-700 font-semibold">{row.Stock || ''}</td>
@@ -426,8 +395,7 @@ const Restock = () => {
                                                             )}
                                                         </td>
                                                     </tr>
-                                                      );
-                                                  })
+                                                ))
                                             ) : (
                                                 <tr>
                                                     <td colSpan="10" className="px-4 py-8 text-center text-slate-500">
@@ -443,6 +411,14 @@ const Restock = () => {
                     </div>
                 )}
             </div>
+
+            {/* Generate Bill Modal */}
+            <GenerateBillModal
+                isOpen={showBillModal}
+                onClose={() => setShowBillModal(false)}
+                purchased_products={purchased_products}
+                products={products}
+            />
         </div>
     );
 };
