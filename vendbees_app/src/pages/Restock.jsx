@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
-import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2, ChevronDown, FileText } from 'lucide-react';
 import clsx from 'clsx';
+import GenerateBillModal from '../components/GenerateBillModal';
 
 const KPI = ({ title, value, icon: Icon, colorClass }) => (
     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
@@ -24,6 +25,7 @@ const Restock = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
     const [notification, setNotification] = useState(null);
+    const [showBillModal, setShowBillModal] = useState(false);
     const API_URL = 'http://127.0.0.1:3001/api';
 
     // Log when stocks data changes
@@ -34,7 +36,15 @@ const Restock = () => {
         } else {
             console.log('⚠️ Restock.jsx: No stocks data loaded');
         }
-    }, [stocks]);
+        
+        // Debug products data
+        if (products && Array.isArray(products)) {
+            console.log('✔ Restock.jsx: Products loaded:', products.length);
+            console.log('  Product names:', products.map(p => p.Product_Name || p.name || p.productName).slice(0, 5));
+        } else {
+            console.log('⚠️ Restock.jsx: Products not loaded or not array:', typeof products);
+        }
+    }, [stocks, products]);
 
     if (loading) return null;
 
@@ -228,45 +238,53 @@ const Restock = () => {
                                 <p className="text-slate-600">No purchased products yet. Record deliveries to view them here.</p>
                             </div>
                         ) : (
-                            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="p-6 border-b border-slate-50">
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
                                     <h3 className="font-semibold text-slate-800">Purchased Products Inventory</h3>
+                                    <button
+                                        onClick={() => setShowBillModal(true)}
+                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                                    >
+                                        <FileText size={16} /> Generate Bill
+                                    </button>
                                 </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-                                            <tr>
-                                                <th className="px-6 py-4 font-medium">PO ID</th>
-                                                <th className="px-6 py-4 font-medium">EXP ID</th>
-                                                <th className="px-6 py-4 font-medium">Product ID</th>
-                                                <th className="px-6 py-4 font-medium">Product Name</th>
-                                                <th className="px-6 py-4 font-medium">Available Units</th>
-                                                <th className="px-6 py-4 font-medium">Units Per Case</th>
-                                                <th className="px-6 py-4 font-medium">Batch</th>
-                                                <th className="px-6 py-4 font-medium">Received Date</th>
-                                                <th className="px-6 py-4 font-medium">Notes</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {purchased_products.map((product, idx) => (
-                                                <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                                    <td className="px-6 py-4 font-medium text-slate-700">{product.PO_ID || ''}</td>
-                                                    <td className="px-6 py-4 text-blue-600 font-medium">{product.EXP_Id || ''}</td>
-                                                    <td className="px-6 py-4 font-bold text-slate-800">{product.Product_ID}</td>
-                                                    <td className="px-6 py-4 text-slate-700">{product.Product_Name}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">
-                                                            {product.Available_Units} units
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-slate-600">{product.Units_Per_Case || 1}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{product.Batch || ''}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{product.Received_Date}</td>
-                                                    <td className="px-6 py-4 text-slate-500 text-xs">{product.Notes}</td>
+                                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+                                                <tr>
+                                                    <th className="px-6 py-4 font-medium">PO ID</th>
+                                                    <th className="px-6 py-4 font-medium">EXP ID</th>
+                                                    <th className="px-6 py-4 font-medium">Product ID</th>
+                                                    <th className="px-6 py-4 font-medium">Product Name</th>
+                                                    <th className="px-6 py-4 font-medium">Available Units</th>
+                                                    <th className="px-6 py-4 font-medium">Units Per Case</th>
+                                                    <th className="px-6 py-4 font-medium">Batch</th>
+                                                    <th className="px-6 py-4 font-medium">Received Date</th>
+                                                    <th className="px-6 py-4 font-medium">Notes</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {purchased_products.map((product, idx) => (
+                                                    <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                                        <td className="px-6 py-4 font-medium text-slate-700">{product.PO_ID || ''}</td>
+                                                        <td className="px-6 py-4 text-blue-600 font-medium">{product.EXP_Id || ''}</td>
+                                                        <td className="px-6 py-4 font-bold text-slate-800">{product.Product_ID}</td>
+                                                        <td className="px-6 py-4 text-slate-700">{product.Product_Name}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">
+                                                                {product.Available_Units} units
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-600">{product.Units_Per_Case || 1}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{product.Batch || ''}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{product.Received_Date}</td>
+                                                        <td className="px-6 py-4 text-slate-500 text-xs">{product.Notes}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -393,6 +411,14 @@ const Restock = () => {
                     </div>
                 )}
             </div>
+
+            {/* Generate Bill Modal */}
+            <GenerateBillModal
+                isOpen={showBillModal}
+                onClose={() => setShowBillModal(false)}
+                purchased_products={purchased_products}
+                products={products}
+            />
         </div>
     );
 };
