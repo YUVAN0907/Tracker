@@ -142,6 +142,8 @@ CLEAR_MUTATIONS = [
     ("WarehouseInventory",      "warehouseInventory_deleteMany(where: {productId: {ne: \"\"}})"),
     ("PurchasedProduct",        "purchasedProduct_deleteMany(all: true)"),
     ("VendorPurchase",          "vendorPurchase_deleteMany(all: true)"),
+    ("PurchaseOrderLine",       "purchaseOrderLine_deleteMany(where: {poId: {ne: \"\"}})"),
+    ("PurchaseOrderHeader",     "purchaseOrderHeader_deleteMany(where: {poId: {ne: \"\"}})"),
     ("PurchaseOrder",           "purchaseOrder_deleteMany(where: {poId: {ne: \"\"}})"),
     ("Product",                 "product_deleteMany(where: {productId: {ne: \"\"}})"),
     ("Machine",                 "machine_deleteMany(where: {machineId: {ne: \"\"}})"),
@@ -346,12 +348,12 @@ def migrate_products(xls, dry_run, stats):
 
 
 def migrate_purchase_orders(xls, dry_run, stats):
-    """OUR_PO → PurchaseOrder"""
+    """OUR_PO → PurchaseOrderHeader + PurchaseOrderLine (Normalized)"""
     if "OUR_PO" not in xls.sheet_names:
         print("  ⚠️  Sheet 'OUR_PO' not found, skipping.")
         return
 
-    print("[INSERT] Migrating Purchase Orders (OUR_PO -> PurchaseOrder)...")
+    print("[INSERT] Migrating Purchase Orders (OUR_PO -> PurchaseOrderHeader + PurchaseOrderLine)...")
     df = pd.read_excel(xls, "OUR_PO", dtype=str)
 
     # Forward-fill merged PO_ID, Vendor_ID, Created_Date, Total_Amount, Status
@@ -360,49 +362,92 @@ def migrate_purchase_orders(xls, dry_run, stats):
             df[col] = forward_fill(df[col].tolist())
 
     df = df.dropna(subset=["PO_ID"], how="all")
+    
+    # Group by PO_ID to track headers
+    po_groups = df.groupby("PO_ID")
+    headers_inserted = set()
     ok = skip = 0
 
-    query = """mutation M(
-        $poId: String!, $vid: String!, $pid: String!,
-        $date: Timestamp, $total: Float, $cases: Int, $upc: Int,
-        $poPrice: Float, $lineTotal: Float, $status: String
+    # Header mutation (once per PO)
+    header_query = """mutation M(
+        $poId: String!, $vid: String!,
+        $date: Timestamp, $total: Float, $status: String
     ) {
-      purchaseOrder_upsert(data: {
-        poId: $poId, vendorId: $vid, productId: $pid,
-        createdDate: $date, totalAmount: $total, noOfCases: $cases,
-        unitsPerCase: $upc, poPrice: $poPrice, lineTotal: $lineTotal, status: $status
+      purchaseOrderHeader_upsert(data: {
+        poId: $poId, vendorId: $vid,
+        createdDate: $date, totalAmount: $total, status: $status
       })
     }"""
 
-    for _, row in df.iterrows():
-        po_id = clean_str(row.get("PO_ID"))
-        pid   = clean_str(row.get("Product_ID"))
-        vid   = clean_str(row.get("Vendor_ID"))
-        if not po_id or not pid or not vid:
-            skip += 1
+    # Line mutation (once per product in PO)
+    line_query = """mutation M(
+        $poId: String!, $pid: String!,
+        $cases: Int, $upc: Int, $poPrice: Float, $lineTotal: Float
+    ) {
+      purchaseOrderLine_upsert(data: {
+        poId: $poId, productId: $pid,
+        noOfCases: $cases, unitsPerCase: $upc,
+        poPrice: $poPrice, lineTotal: $lineTotal
+      })
+    }"""
+
+    for po_id, group in po_groups:
+        po_id = clean_str(po_id)
+        if not po_id:
+            skip += len(group)
             continue
-        variables = {
-            "poId":      po_id,
-            "vid":       vid,
-            "pid":       pid,
-            "date":      parse_timestamp(row.get("Created_Date")),
-            "total":     clean_float(row.get("Total_Amount")),
-            "cases":     clean_int(row.get("No_of_Cases")),
-            "upc":       clean_int(row.get("Units_Per_Case")),
-            "poPrice":   clean_float(row.get("PO_Price")),
-            "lineTotal": clean_float(row.get("Line_Total")),
-            "status":    clean_str(row.get("Status")),
-            # NOTE: 'Product_Name' column in Excel has no matching schema field — intentionally ignored
-        }
-        if not dry_run:
-            try:
-                execute_graphql(query, variables)
-                ok += 1
-            except Exception as e:
-                print(f"    ⚠️  PO {po_id}/{pid}: {e}")
+
+        # Get header info from first row
+        first_row = group.iloc[0]
+        vid = clean_str(first_row.get("Vendor_ID"))
+        if not vid:
+            skip += len(group)
+            continue
+
+        # Insert header only once
+        if po_id not in headers_inserted:
+            header_vars = {
+                "poId": po_id,
+                "vid": vid,
+                "date": parse_timestamp(first_row.get("Created_Date")),
+                "total": clean_float(first_row.get("Total_Amount")),
+                "status": clean_str(first_row.get("Status")) or "Pending",
+            }
+            if not dry_run:
+                try:
+                    execute_graphql(header_query, header_vars)
+                    headers_inserted.add(po_id)
+                except Exception as e:
+                    print(f"    ⚠️  PO {po_id} header: {e}")
+                    skip += len(group)
+                    continue
+            else:
+                headers_inserted.add(po_id)
+
+        # Insert line items for each product
+        for _, row in group.iterrows():
+            pid = clean_str(row.get("Product_ID"))
+            if not pid:
                 skip += 1
-        else:
-            ok += 1
+                continue
+
+            line_vars = {
+                "poId": po_id,
+                "pid": pid,
+                "cases": clean_int(row.get("No_of_Cases")),
+                "upc": clean_int(row.get("Units_Per_Case")),
+                "poPrice": clean_float(row.get("PO_Price")),
+                "lineTotal": clean_float(row.get("Line_Total")),
+            }
+            if not dry_run:
+                try:
+                    execute_graphql(line_query, line_vars)
+                    ok += 1
+                except Exception as e:
+                    print(f"    ⚠️  PO {po_id}/{pid}: {e}")
+                    skip += 1
+            else:
+                ok += 1
 
     print(f"    [DONE] Inserted: {ok}  |  Skipped: {skip}")
     stats["PurchaseOrder"] = {"ok": ok, "skip": skip}

@@ -58,7 +58,8 @@ mutation InsertPurchasedProduct(
 
 GET_PO_QUERY = """
 query GetPOStatus($poId: String!) {
-  purchaseOrder(key: { poId: $poId }) {
+  purchaseOrderHeaders(where: {poId: {eq: $poId}}) {
+    poId
     status
   }
 }
@@ -66,7 +67,7 @@ query GetPOStatus($poId: String!) {
 
 UPDATE_PO_STATUS_MUTATION = """
 mutation UpdatePOStatus($poId: String!, $status: String!) {
-  purchaseOrder_update(key: { poId: $poId }, data: { status: $status }) 
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status }) 
 }
 """
 

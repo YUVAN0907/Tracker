@@ -40,6 +40,29 @@ type Machine @table(key: "machineId") {
 # ==============================
 # PURCHASE TABLES
 # ==============================
+type PurchaseOrderHeader @table(key: "poId") {
+  poId: String!
+  vendorId: String!
+  createdDate: Timestamp
+  totalAmount: Float
+  status: String
+
+  vendor: Vendor! @ref(fields: "vendorId")
+}
+
+type PurchaseOrderLine @table(key: "lineId") {
+  lineId: String!
+  poId: String!
+  productId: String!
+  noOfCases: Int
+  unitsPerCase: Int
+  poPrice: Float
+  lineTotal: Float
+
+  purchaseOrderHeader: PurchaseOrderHeader! @ref(fields: "poId")
+  product: Product! @ref(fields: "productId")
+}
+
 type PurchaseOrder @table(key: "poId") {
   poId: String!
 
@@ -75,7 +98,7 @@ type VendorPurchase @table(key: "purchaseId") {
   paymentStatus: String
   gstFiled: Boolean
 
-  purchaseOrder: PurchaseOrder! @ref(fields: "poId")
+  purchaseOrderHeader: PurchaseOrderHeader! @ref(fields: "poId")
   vendor: Vendor! @ref(fields: "vendorId")
   product: Product! @ref(fields: "productId")
 }
@@ -117,7 +140,8 @@ type WarehouseInventory @table(key: "productId") {
 # MACHINE STOCK TABLES
 # ==============================
 
-type MachineInventory @table(key: ["machineId", "productId"]) {
+type MachineInventory @table(key: "machineInventoryId") {
+  machineInventoryId: String!
   machineId: String!
   productId: String!
   currentStock: Int

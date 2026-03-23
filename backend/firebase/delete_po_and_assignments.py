@@ -30,6 +30,8 @@ mutation DeleteAssignments {
 
 delete_po_query = """
 mutation DeletePOs {
+  purchaseOrderLine_deleteMany(where: {poId: {ne: ""}})
+  purchaseOrderHeader_deleteMany(where: {poId: {ne: ""}})
   purchaseOrder_deleteMany(where: {poId: {ne: ""}})
 }
 """

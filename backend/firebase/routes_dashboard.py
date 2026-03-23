@@ -124,19 +124,26 @@ query GetDashboardData {
     }
   }
   
-  purchaseOrders(limit: 1000) {
+  
+  purchaseOrderHeaders(limit: 1000) {
     poId
     vendorId
-    productId
     createdDate
     totalAmount
-    noOfCases
-    unitsPerCase
-    poPrice
-    lineTotal
     status
-    product {
-      productName
+    vendor {
+      vendorName
+    }
+    purchaseOrderLines {
+      poId
+      productId
+      noOfCases
+      unitsPerCase
+      poPrice
+      lineTotal
+      product {
+        productName
+      }
     }
   }
 }
@@ -286,22 +293,31 @@ def dashboard():
                 "Assignment_Status": msa.get("status")
             })
             
-        # 9. Map OUR_POs
+        # 9. Map OUR_POs from PurchaseOrderHeaders
         our_pos_out = []
-        for po in data.get("purchaseOrders", []):
-            our_pos_out.append({
-                "PO_ID": po.get("poId"),
-                "Vendor_ID": po.get("vendorId"),
-                "Product_ID": po.get("productId"),
-                "No_of_Cases": po.get("noOfCases", 0),
-                "Units_Per_Case": po.get("unitsPerCase", 1),
-                "PO_Price": po.get("poPrice", 0),
-                "Line_Total": po.get("lineTotal", 0),
-                "Total_Amount": po.get("totalAmount", 0),
-                "Created_Date": po.get("createdDate", ""),
-                "Product_Name": po.get("product", {}).get("productName", ""),
-                "Status": po.get("status", "Pending")
-            })
+        
+        for po_header in data.get("purchaseOrderHeaders", []):
+            vendor = po_header.get("vendor", {})
+            po_lines = po_header.get("purchaseOrderLines", [])
+            
+            # Create an entry for each line item under this header
+            for line in po_lines:
+                product = line.get("product", {})
+                
+                our_pos_out.append({
+                    "PO_ID": po_header.get("poId"),
+                    "Vendor_ID": po_header.get("vendorId", ""),
+                    "Vendor_Name": vendor.get("vendorName", ""),
+                    "Product_ID": line.get("productId"),
+                    "No_of_Cases": line.get("noOfCases", 0),
+                    "Units_Per_Case": line.get("unitsPerCase", 1),
+                    "PO_Price": line.get("poPrice", 0),
+                    "Line_Total": line.get("lineTotal", 0),
+                    "Total_Amount": po_header.get("totalAmount", 0),
+                    "Created_Date": po_header.get("createdDate", ""),
+                    "Product_Name": product.get("productName", ""),
+                    "Status": po_header.get("status", "Pending")
+                })
 
         # Calculate basic metrics to match old dashboard
         total_value = sum((float(op.get("PO_Price", 0)) * float(op.get("No_of_Cases", 0)) * float(op.get("Units_Per_Case", 1))) for op in our_pos_out)
