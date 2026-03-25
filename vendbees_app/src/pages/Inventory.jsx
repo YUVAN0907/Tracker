@@ -1502,9 +1502,14 @@ const Inventory = () => {
     const fetchPOItems = async (poId) => {
         setLoadingPOItems(true);
         try {
+            console.debug('Fetching PO items', { api: API_URL, poId });
             const response = await fetch(`${API_URL}/po-items/${encodeURIComponent(poId)}`);
-            const data = await response.json();
-            if (data.success) {
+            const text = await response.text();
+            let data = null;
+            try { data = text ? JSON.parse(text) : null; } catch(e) { /* non-JSON response */ }
+
+            // Accept responses that either include a success flag OR directly return an items array
+            if (response.ok && data && (data.success === true || Array.isArray(data.items))) {
                 setPoDataForDelivery({
                     po_id: poId,
                     vendor_id: data.vendor_id,
@@ -1513,11 +1518,13 @@ const Inventory = () => {
                 });
                 setShowDeliveryModal(true);
             } else {
-                alert(`Failed to fetch PO items: ${data.error}`);
+                const errMsg = data && data.error ? data.error : (text ? text : `${response.status} ${response.statusText}`);
+                console.error('Failed to fetch PO items', { status: response.status, statusText: response.statusText, body: text, parsed: data });
+                alert(`Failed to fetch PO items: ${errMsg}`);
             }
         } catch (err) {
             console.error('Error fetching PO items:', err);
-            alert('Error fetching PO items');
+            alert(`Error fetching PO items: ${err?.message || err}`);
         } finally {
             setLoadingPOItems(false);
         }

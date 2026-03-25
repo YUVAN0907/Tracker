@@ -311,7 +311,7 @@ def load_data():
                         if sheet_name in wb.sheetnames:
                             ws = wb[sheet_name]
                             # Convert worksheet to dataframe
-                            df = pd.DataFrame([cell.value for cell in row] for row in ws.iter_rows(values_only=True))
+                            df = pd.DataFrame([cell for cell in row] for row in ws.iter_rows(values_only=True))
                             if not df.empty:
                                 # Use first row as header
                                 df.columns = df.iloc[0]
