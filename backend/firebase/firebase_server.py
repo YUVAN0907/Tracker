@@ -1,6 +1,6 @@
 import os
 import sys
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -16,7 +16,16 @@ PORT = int(os.environ.get('PORT', 3002))
 # FLASK APP
 # --------------------------------------------------
 app = Flask(__name__)
-CORS(app)
+
+# Configure CORS for development
+CORS(app, 
+     resources={r"/api/*": {
+         "origins": "*",
+         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization"],
+         "supports_credentials": False
+     }}
+)
 
 # --------------------------------------------------
 # IMPORT ROUTE MODULES
@@ -49,9 +58,33 @@ def health():
         "port": PORT
     })
 
+# Request logging middleware
+@app.before_request
+def log_request():
+    import sys
+    print(f"\n{'='*60}", file=sys.stderr, flush=True)
+    print(f"[FLASK] Incoming {request.method} {request.path}", file=sys.stderr, flush=True)
+    print(f"[FLASK] Headers: {dict(request.headers)}", file=sys.stderr, flush=True)
+    if request.method in ['POST', 'PUT']:
+        try:
+            print(f"[FLASK] Body: {request.get_json()}", file=sys.stderr, flush=True)
+        except:
+            print(f"[FLASK] Body: <unable to parse JSON>", file=sys.stderr, flush=True)
+    print(f"{'='*60}\n", file=sys.stderr, flush=True)
+
+# Global error handler
+@app.errorhandler(Exception)
+def handle_error(e):
+    import sys
+    import traceback
+    print(f"\n[FLASK ERROR] {type(e).__name__}: {str(e)}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+    print(f"\n", file=sys.stderr, flush=True)
+    return jsonify({'error': str(e)}), 500
+
 # --------------------------------------------------
 # RUN SERVER
 # --------------------------------------------------
 if __name__ == "__main__":
     print(f"🚀 Firebase Data Connect backend starting on port {PORT}")
-    ## app.run(host="0.0.0.0", port=PORT, debug=False)
+    app.run(host="0.0.0.0", port=PORT, debug=False)

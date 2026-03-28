@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Monitor, Package, Archive, Box, Warehouse, Bell } from 'lucide-react';
+import { LayoutDashboard, Monitor, Package, Archive, Box, Warehouse, FileText, Bell } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const Sidebar = () => {
@@ -9,6 +9,7 @@ const Sidebar = () => {
         { name: 'Restock', icon: Box, path: '/restock' },
         { name: 'Inventory', icon: Archive, path: '/inventory' },
         { name: 'Warehouse', icon: Warehouse, path: '/warehouse' },
+        { name: 'Generate Bill', icon: FileText, path: '/generate-bill' },
         { name: 'Notifications', icon: Bell, path: '/notifications' },
     ];
 

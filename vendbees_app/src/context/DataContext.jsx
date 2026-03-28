@@ -15,6 +15,7 @@ export const DataProvider = ({ children }) => {
         vendors: [],
         warehouse: [],
         purchased_products: [],
+        purchased_product_cases: [],
         stocks: [],
         stock_assignments: [],
         ourPOs: [],
@@ -31,8 +32,16 @@ export const DataProvider = ({ children }) => {
     const [error, setError] = useState(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    // Use the local Firebase backend running on port 3002
-    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+    // Use the local Firebase backend running on port 3002 for development
+    // Production uses the VITE_API_URL from environment, defaults to Cloud Run backend
+    const isLocalhost = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' || 
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.startsWith('192.168')
+    );
+    const API_URL = isLocalhost 
+        ? 'http://localhost:3002/api'
+        : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
     const fetchData = async () => {
         try {
             console.log('DataContext: Starting fetch from', API_URL);
@@ -48,13 +57,17 @@ export const DataProvider = ({ children }) => {
 
             // 1. Products Mapping
             const products = (json.products || []).map(p => {
-                const pid = String(p.PRODUCT_ID || p.Product_ID || '').trim();
-                const name = p.PRODUCT_NAME || p.Product_Name || p.Name || 'Unknown';
-                const category = p.CATEGORY || p.Category || 'Others';
-                const unit_cost = parseFloat(p.PO || p.Unit_Cost || 0) || 0;
-                const vendorId = p['VENDOR ID'] || p.VENDOR_ID || p.Vendor_ID || null;
+                // Try both camelCase (from DataConnect) and UPPERCASE (from sheets) field names
+                const pid = String(p.productId || p.PRODUCT_ID || p.Product_ID || '').trim();
+                const name = p.productName || p.PRODUCT_NAME || p.Product_Name || p.Name || 'Unknown';
+                const category = p.category || p.CATEGORY || p.Category || 'Others';
+                const unit_cost = parseFloat(p.unitCost || p.PO || p.Unit_Cost || 0) || 0;
+                const vendorId = p.vendorId || p['VENDOR ID'] || p.VENDOR_ID || p.Vendor_ID || null;
+                const quantity = parseFloat(p.quantity || p.QUANTITY || 0) || 0;
+                const units = parseInt(p.units || p.UNITS || 1) || 1;
+                const selfLifeValue = parseInt(p.selfLife || p.Self_Life || p.SELF_LIFE || p.Self_Life_Months || 0) || 0;
 
-                const rawGst = String(p.GST || '0').replace(/[^0-9.]/g, '');
+                const rawGst = String(p.gst || p.GST || '0').replace(/[^0-9.]/g, '');
                 let gstRate = parseFloat(rawGst) || 0;
                 if (gstRate > 1) gstRate = gstRate / 100;
 
@@ -64,14 +77,15 @@ export const DataProvider = ({ children }) => {
                     Product_ID: pid,
                     Name: name,
                     Category: category,
-                    Total_Stock: parseFloat(p.QUANTITY || 0) || 0,
+                    Total_Stock: quantity,
                     Unit_Cost: unit_cost,
                     Landed_Cost: landed_cost,
                     GST: gstRate,
-                    MRP: parseFloat(p.MRP || 0) || 0,
-                    Quantity: parseFloat(p.QUANTITY || 0) || 0,
+                    MRP: parseFloat(p.mrp || p.MRP || 0) || 0,
+                    Quantity: quantity,
                     Vendor_ID: vendorId,
-                    Units_Per_Case: parseInt(p.UNITS || 1) || 1  // Units per case from Product_Master
+                    Units_Per_Case: units,
+                    selfLife: selfLifeValue  // Add selfLife field for delivery form
                 };
             }).filter(p => p.Product_ID && p.Product_ID.toLowerCase() !== 'nan');
 
@@ -156,14 +170,18 @@ export const DataProvider = ({ children }) => {
             // 8a. Purchased_Products Mapping (items received from vendors, pending warehouse approval)
             const purchased_products = (json.purchased_products || []).map(i => ({
                 PO_ID: String(i.PO_ID || '').trim(),
-                EXP_Id: String(i.EXP_Id || '').trim(),
+                EXP_Id: String(i.EXP_Id || i.id || '').trim(),
                 Product_ID: String(i.Product_ID || '').trim(),
                 Product_Name: i.Product_Name || '',
-                Available_Units: parseInt(i.Available_Units || 0) || 0,
-                Units_Per_Case: parseInt(i.Units_Per_Case || 1) || 1,
+                Available_Units: parseInt(i.Available_Units || i.availableUnits || 0) || 0,
+                Units_Per_Case: parseInt(i.Units_Per_Case || i.unitsPerCase || 1) || 1,
                 Batch: i.Batch || '',
-                Received_Date: i.Received_Date || '',
-                Notes: i.Notes || ''
+                Received_Date: i.Received_Date || i.receivedDate || '',
+                mfd: i.mfd || i.MFD || '',
+                expd: i.expd || i.EXPD || '',
+                caseLabel: i.caseLabel || i.Case_Label || '',
+                Status: i.Status || i.status || 'Available',
+                Notes: i.Notes || i.notes || ''
             })).filter(i => i.Product_ID);
 
             // 8b. Stocks Mapping - Match Excel sheet structure exactly
@@ -222,41 +240,118 @@ export const DataProvider = ({ children }) => {
                 Assigned_Date: sa.Assigned_Date || ''
             }));
 
-            // 9. OUR_PO Mapping (with delivery status)
-            // Note: PO_ID, Vendor_ID, Created_Date, Total_Amount, Status are only in first row of each PO
-            // Subsequent product rows have these fields empty - API propagates them for display
-            const ourPOs = (json.our_pos || []).map(po => ({
-                PO_ID: po.PO_ID || '',
-                Vendor_ID: po.Vendor_ID || '',
-                Product_ID: po.Product_ID || '',
-                Product_Name: po.Product_Name || '',
-                No_of_Cases: parseInt(po.No_of_Cases || 0) || 0,
-                Units_Per_Case: parseInt(po.Units_Per_Case || 1) || 1,
-                PO_Price: parseFloat(po.PO_Price || 0) || 0,  // Price per unit
-                Line_Total: parseFloat(po.Line_Total || 0) || 0,  // Total units (No_of_Cases * Units_Per_Case)
-                Total_Amount: parseFloat(po.Total_Amount || 0) || 0,  // sum(Line_Total * PO_Price) for all products
-                Created_Date: po.Created_Date || '',
-                Status: po.Status || 'Pending'
-            })).filter(po => po.Product_ID);  // Keep all rows with Product_ID (not PO_ID)
+            // 9. OUR_PO Mapping - Fetch from normalized schema via API
+            // Try to fetch from /api/po-list first (new normalized schema)
+            // Fall back to Excel data if API fails
+            let ourPOs = [];
+            try {
+                const poListRes = await fetch(`${API_URL}/po-list`);
+                if (poListRes.ok) {
+                    const poListData = await poListRes.json();
+                    ourPOs = (poListData.data || []).map(po => ({
+                        PO_ID: po.PO_ID || '',
+                        Vendor_ID: po.Vendor_ID || '',
+                        Product_ID: po.Product_ID || '',
+                        Product_Name: po.Product_Name || '',
+                        No_of_Cases: parseInt(po.No_of_Cases || 0) || 0,
+                        Units_Per_Case: parseInt(po.Units_Per_Case || 1) || 1,
+                        PO_Price: parseFloat(po.PO_Price || 0) || 0,  // Price per unit
+                        Line_Total: parseFloat(po.Line_Total || 0) || 0,  // Total for this line
+                        Total_Amount: parseFloat(po.Total_Amount || 0) || 0,  // Total for entire PO
+                        Created_Date: po.Created_Date || '',
+                        Status: po.Status || 'Pending'
+                    })).filter(po => po.Product_ID);  // Keep all rows with Product_ID
+                    console.log('✔ Loaded POs from API /po-list:', ourPOs.length, 'rows');
+                } else {
+                    throw new Error('API not available, falling back to Excel');
+                }
+            } catch (apiErr) {
+                // Fallback to Excel data
+                console.warn('PO API not available, using Excel data:', apiErr.message);
+                ourPOs = (json.our_pos || []).map(po => ({
+                    PO_ID: po.PO_ID || '',
+                    Vendor_ID: po.Vendor_ID || '',
+                    Product_ID: po.Product_ID || '',
+                    Product_Name: po.Product_Name || '',
+                    No_of_Cases: parseInt(po.No_of_Cases || 0) || 0,
+                    Units_Per_Case: parseInt(po.Units_Per_Case || 1) || 1,
+                    PO_Price: parseFloat(po.PO_Price || 0) || 0,
+                    Line_Total: parseFloat(po.Line_Total || 0) || 0,
+                    Total_Amount: parseFloat(po.Total_Amount || 0) || 0,
+                    Created_Date: po.Created_Date || '',
+                    Status: po.Status || 'Pending'
+                })).filter(po => po.Product_ID);
+            }
 
             // 10. Vendor Purchase (Actual Deliveries) Mapping
             const vendorDeliveries = (json.purchases || []).map(d => ({
                 PO_ID: String(d['PO ID'] || d.PO_ID || '').trim(),
                 Date: d.DATE || d.Date || '',
-                Purchase_Date: d['PURCHASE DATE'] || d.Purchase_Date || '',
-                Vendor_ID: String(d['VENDOR ID'] || d.Vendor_ID || '').trim(),
-                Product_ID: String(d['PRODUCT ID'] || d.Product_ID || '').trim(),
-                Product_Name: d['PRODUCT NAME'] || d.Product_Name || '',
-                Batch: d.BATCH || d.Batch || '',
-                Units_Per_Case: parseInt(d['UNIT/CASE'] || d.Units_Per_Case || 1) || 1,
-                Cases_Received: parseInt(d['CASE COUNT'] || d.Cases_Received || 0) || 0,
-                Quantity: parseInt(d.QUANTITY || d.Quantity || 0) || 0,
-                MRP: parseFloat(d.MRP || 0) || 0,
-                PO_Price: parseFloat(d['PO PRICE'] || d.PO_Price || 0) || 0,
-                Payment_Mode: d['PAYMENT MODE'] || d.Payment_Mode || '',
-                Payment_Status: d['PAYMENT STATUS'] || d.Payment_Status || '',
-                GST_Filed: d['GST FILED'] || d.GST_Filed || ''
+                Purchase_Date: d['PURCHASE DATE'] || d.Purchase_Date || d.purchaseDate || '',
+                Vendor_ID: String(d['VENDOR ID'] || d.Vendor_ID || d.vendorId || '').trim(),
+                Product_ID: String(d['PRODUCT ID'] || d.Product_ID || d.productId || '').trim(),
+                Product_Name: d['PRODUCT NAME'] || d.Product_Name || d.productName || '',
+                Batch: d['BATCH'] || d.Batch || '',
+                Units_Per_Case: d['UNIT/CASE'] || d.Units_Per_Case || d.unitsPerCase || '',
+                Case_Count: d['CASE COUNT'] || d.Case_Count || d.casesReceived || d.Cases_Received || 0,
+                Quantity: d.QUANTITY || d.Quantity || d.quantity || 0,
+                MRP: d.MRP || d.mrp || 0,
+                PO_Price: d['PO PRICE'] || d.PO_Price || d.poPrice || 0,
+                Payment_Mode: d['PAYMENT MODE'] || d.Payment_Mode || d.paymentMode || '',
+                Payment_Status: d['PAYMENT STATUS'] || d.Payment_Status || d.paymentStatus || '',
+                GST_Filed: d['GST FILED'] || d.GST_Filed || d.gstFiled || ''
             })).filter(d => d.Vendor_ID || d.Product_ID);
+
+            // 8c. Purchased Product Cases Mapping (normalized schema)
+            // Build a map of purchased product batches by their ID
+            const purchasedProductBatchMap = (json.purchasedProductBatches || []).reduce((map, batch) => {
+                map[batch.id] = batch;
+                return map;
+            }, {});
+
+            let purchased_product_cases = (json.purchasedProductCases || []).map(c => {
+                const batch = purchasedProductBatchMap[c.purchasedProductBatchId] || {};
+                return {
+                    id: c.id || '',
+                    poId: batch.poId || '',
+                    productId: batch.productId || '',
+                    productName: (batch.product || {}).productName || batch.productName || '',
+                    receivedDate: batch.receivedDate || '',
+                    caseLabel: c.caseLabel || '',
+                    availableUnits: parseInt(c.availableUnits || 0) || 0,
+                    expd: c.expd || '',
+                    expiry: c.expd || '',
+                    mfd: c.mfd || '',
+                    batch: batch.batch || '',
+                    unitsPerCase: parseInt(batch.unitsPerCase || 1) || 1
+                };
+            });
+
+            console.log('DataContext: purchasedProductCases from API:', json.purchasedProductCases?.length || 0);
+            if (json.purchasedProductCases?.length > 0) {
+                console.log('DataContext: First purchasedProductCase:', json.purchasedProductCases[0]);
+            }
+            console.log('DataContext: purchased_product_cases mapped:', purchased_product_cases.length);
+            if (purchased_product_cases.length > 0) {
+                console.log('DataContext: First mapped case:', purchased_product_cases[0]);
+            }
+
+            if (purchased_product_cases.length === 0) {
+                purchased_product_cases = (json.purchased_products || []).map(p => ({
+                    id: p.EXP_Id || p.id || '',
+                    poId: p.PO_ID || '',
+                    productId: p.Product_ID || '',
+                    productName: p.Product_Name || '',
+                    receivedDate: p.Received_Date || '',
+                    caseLabel: p.Case_Label || '',
+                    availableUnits: parseInt(p.Available_Units || 0) || 0,
+                    expd: p.expd || '',
+                    expiry: p.expd || p.EXP_Id || '',
+                    mfd: p.mfd || '',
+                    batch: p.Batch || '',
+                    unitsPerCase: parseInt(p.Units_Per_Case || 1) || 1
+                }));
+            }
 
             setData(prev => ({
                 ...prev,
@@ -269,10 +364,13 @@ export const DataProvider = ({ children }) => {
                 vendors,
                 warehouse,
                 purchased_products,
+                purchased_product_cases: purchased_product_cases,
                 stocks,
                 stock_assignments,
                 ourPOs,
                 vendorDeliveries,
+                // Use fetched dashboard vendor deliveries as default list
+                vendorPurchasesList: vendorDeliveries,
                 stats: json.metrics || {}
             }));
             setError(null);
@@ -466,21 +564,40 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    // Record Vendor Delivery (Stock In)
+    // Record Vendor Delivery (Stock In) - normalized path
     const recordDelivery = async (deliveryData) => {
         try {
-            const res = await fetch(`${API_URL}/record-delivery`, {
+            console.log('[recordDelivery] Using API_URL:', API_URL);
+            console.log('[recordDelivery] Sending payload to /record-delivery-normalized:', deliveryData);
+            const res = await fetch(`${API_URL}/record-delivery-normalized`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(deliveryData)
             });
             const result = await res.json();
-            if (!res.ok) throw new Error(result.error);
+            console.log('[recordDelivery] Normalized response status:', res.status, 'body:', result);
+            if (!res.ok) throw new Error(result.error || `Server returned ${res.status}`);
             setRefreshTrigger(prev => prev + 1);
             return { success: true, ...result };
         } catch (e) {
-            console.error(e);
-            return { success: false, error: e.message };
+            console.error('[recordDelivery] Normalized route error:', e);
+            // Fallback to legacy route if normalized route is unavailable
+            try {
+                console.log('[recordDelivery] Trying fallback to /record-delivery');
+                const fallbackRes = await fetch(`${API_URL}/record-delivery`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(deliveryData)
+                });
+                const fallbackResult = await fallbackRes.json();
+                console.log('[recordDelivery] Fallback response status:', fallbackRes.status, 'body:', fallbackResult);
+                if (!fallbackRes.ok) throw new Error(fallbackResult.error || `Server returned ${fallbackRes.status}`);
+                setRefreshTrigger(prev => prev + 1);
+                return { success: true, ...fallbackResult };
+            } catch (fallbackError) {
+                console.error('[recordDelivery] Both routes failed:', fallbackError);
+                return { success: false, error: e.message || fallbackError.message };
+            }
         }
     };
 
@@ -505,11 +622,30 @@ export const DataProvider = ({ children }) => {
             const result = await res.json();
             console.log('Vendor purchases result:', result);
             if (!res.ok) throw new Error(result.error);
-            setData(prev => ({ ...prev, vendorPurchasesList: result.purchases || [] }));
-            console.log('Set vendorPurchasesList:', result.purchases?.length || 0, 'items');
-            return { success: true, data: result.purchases || [] };
+
+            const purchases = result.purchases || [];
+            if (purchases.length > 0) {
+                setData(prev => ({ ...prev, vendorPurchasesList: purchases }));
+                console.log('Set vendorPurchasesList from API vendor-purchases:', purchases.length, 'items');
+                return { success: true, data: purchases };
+            }
+
+            // Fallback to preloaded dashboard data if API returned empty
+            setData(prev => ({
+                ...prev,
+                vendorPurchasesList: (prev.vendorPurchasesList && prev.vendorPurchasesList.length > 0)
+                    ? prev.vendorPurchasesList
+                    : (prev.vendorDeliveries || [])
+            }));
+            console.warn('Vendor purchases from API empty, using fallback context list');
+            return { success: true, data: (purchases.length ? purchases : (data.vendorDeliveries || [])) };
         } catch (e) {
             console.error('Error fetching vendor purchases:', e);
+            // Keep existing list if present
+            setData(prev => ({
+                ...prev,
+                vendorPurchasesList: prev.vendorPurchasesList || prev.vendorDeliveries || []
+            }));
             return { success: false, error: e.message };
         }
     };

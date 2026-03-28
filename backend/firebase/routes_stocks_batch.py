@@ -10,6 +10,7 @@ mutation InsertAssignment(
   $assignedDate: Timestamp,
   $machineId: String!,
   $stockLabel: String!,
+  $caseLabel: String,
   $coverLabel: String!,
   $coverStatus: String,
   $productId: String!,
@@ -21,6 +22,7 @@ mutation InsertAssignment(
     assignedDate: $assignedDate,
     machineId: $machineId,
     stockLabel: $stockLabel,
+    caseLabel: $caseLabel,
     coverLabel: $coverLabel,
     coverStatus: $coverStatus,
     productId: $productId,
@@ -110,6 +112,7 @@ def create_batch_full():
                         "assignedDate": assigned_date,
                         "machineId": machine_id,
                         "stockLabel": stock_label,
+                        "caseLabel": None,  # Optional: can be mapped from PurchasedProductCase if needed
                         "coverLabel": cover_label,
                         "coverStatus": cover_status,
                         "productId": product_id,

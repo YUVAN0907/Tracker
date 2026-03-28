@@ -34,6 +34,6 @@ def get_auth_session():
     return AuthorizedSession(credentials)
 
 auth_session = get_auth_session()
-print(f"✔ Data Connect Session initialized with endpoint: {DATACONNECT_ENDPOINT}")
+print(f"Data Connect Session initialized with endpoint: {DATACONNECT_ENDPOINT}")
 
 
