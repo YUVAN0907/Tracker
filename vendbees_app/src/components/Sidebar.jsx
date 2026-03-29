@@ -9,6 +9,7 @@ const Sidebar = () => {
         { name: 'Restock', icon: Box, path: '/restock' },
         { name: 'Inventory', icon: Archive, path: '/inventory' },
         { name: 'Warehouse', icon: Warehouse, path: '/warehouse' },
+        { name: 'Complaints', icon: Monitor, path: '/complaints' },
         { name: 'Generate Bill', icon: FileText, path: '/generate-bill' },
         { name: 'Notifications', icon: Bell, path: '/notifications' },
     ];
