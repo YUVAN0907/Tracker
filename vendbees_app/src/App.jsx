@@ -7,7 +7,9 @@ import Restock from "./pages/Restock";
 import CreateBatchPage from "./pages/CreateBatchPage";
 import Inventory from "./pages/Inventory";
 import Warehouse from "./pages/Warehouse";
+import GenerateBill from "./pages/GenerateBill";
 import Notifications from "./pages/Notifications";
+import Complaints from "./pages/Complaints";
 import { DataProvider } from "./context/DataContext";
 
 function App() {
@@ -22,6 +24,8 @@ function App() {
             <Route path="restock/create-batch" element={<CreateBatchPage />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="warehouse" element={<Warehouse />} />
+            <Route path="complaints" element={<Complaints />} />
+            <Route path="generate-bill" element={<GenerateBill />} />
             <Route path="notifications" element={<Notifications />} />
           </Route>
         </Routes>

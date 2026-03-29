@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
-import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2, ChevronDown, FileText } from 'lucide-react';
+import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
-import GenerateBillModal from '../components/GenerateBillModal';
 
 const KPI = ({ title, value, icon: Icon, colorClass }) => (
     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
@@ -20,12 +19,13 @@ const KPI = ({ title, value, icon: Icon, colorClass }) => (
 
 const Restock = () => {
     const navigate = useNavigate();
-    const { products, machines, stock, vendors, purchased_products = [], stocks = [], stock_assignments = [], loading, refreshData } = useData();
+    const { products, machines, stock, vendors, purchased_product_cases = [], stocks = [], stock_assignments = [], loading, refreshData } = useData();
+    const purchased_products = purchased_product_cases;
+    const uniquePurchasedProducts = new Set((purchased_products || []).map(it => (it.Product_ID || it.productId || it.Product_Id || '').trim())).size;
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
     const [notification, setNotification] = useState(null);
-    const [showBillModal, setShowBillModal] = useState(false);
     const API_URL = 'http://127.0.0.1:3001/api';
 
     // Log when stocks data changes
@@ -47,6 +47,37 @@ const Restock = () => {
     }, [stocks, products]);
 
     if (loading) return null;
+
+    const formatExpiryDate = (value) => {
+        if (!value) return null;
+
+        let v = typeof value === 'string' ? value.trim() : '';
+
+        // Direct date pattern: yyyy-mm-dd
+        const isoDate = v.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (isoDate) {
+            return `${isoDate[3]}-${isoDate[2]}-${isoDate[1]}`;
+        }
+
+        // If value is Date object
+        if (value instanceof Date && !Number.isNaN(value.getTime())) {
+            const d = String(value.getDate()).padStart(2, '0');
+            const m = String(value.getMonth() + 1).padStart(2, '0');
+            const y = value.getFullYear();
+            return `${d}-${m}-${y}`;
+        }
+
+        // Attempt parsing with new Date fallback
+        const parsed = new Date(v);
+        if (!Number.isNaN(parsed.getTime())) {
+            const d = String(parsed.getDate()).padStart(2, '0');
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const y = parsed.getFullYear();
+            return `${d}-${m}-${y}`;
+        }
+
+        return null;
+    };
 
     // Process alerts
     let alerts = [];
@@ -145,7 +176,7 @@ const Restock = () => {
                         onClick={() => setActiveTab('purchased')}
                         className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'purchased' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
                     >
-                        Purchased Products ({purchased_products.length})
+                        Purchased Products ({uniquePurchasedProducts})
                     </button>
                     <button
                         onClick={() => setActiveTab('batches')}
@@ -232,58 +263,148 @@ const Restock = () => {
                 {/* Purchased Products Tab */}
                 {activeTab === 'purchased' && (
                     <div className="space-y-4">
-                        {purchased_products.length === 0 ? (
+                        {purchased_product_cases.length === 0 ? (
                             <div className="bg-slate-50 rounded-xl p-8 text-center">
                                 <Package size={32} className="mx-auto text-slate-400 mb-2" />
                                 <p className="text-slate-600">No purchased products yet. Record deliveries to view them here.</p>
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center">
+                                <div>
                                     <h3 className="font-semibold text-slate-800">Purchased Products Inventory</h3>
-                                    <button
-                                        onClick={() => setShowBillModal(true)}
-                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition"
-                                    >
-                                        <FileText size={16} /> Generate Bill
-                                    </button>
+                                    <p className="text-xs text-slate-500 mt-1">Showing {uniquePurchasedProducts} products across {purchased_product_cases.length} cases from deliveries</p>
                                 </div>
+                                
+                                {/* Table View - Row-wise display with grouped PO and Product info */}
                                 <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm text-left">
-                                            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50 sticky top-0">
                                                 <tr>
-                                                    <th className="px-6 py-4 font-medium">PO ID</th>
-                                                    <th className="px-6 py-4 font-medium">EXP ID</th>
-                                                    <th className="px-6 py-4 font-medium">Product ID</th>
-                                                    <th className="px-6 py-4 font-medium">Product Name</th>
-                                                    <th className="px-6 py-4 font-medium">Available Units</th>
-                                                    <th className="px-6 py-4 font-medium">Units Per Case</th>
-                                                    <th className="px-6 py-4 font-medium">Batch</th>
-                                                    <th className="px-6 py-4 font-medium">Received Date</th>
-                                                    <th className="px-6 py-4 font-medium">Notes</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">PO ID</th>
+                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Received Date</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product ID</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product Name</th>
+                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Batch</th>
+                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Units Per Case</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Case Label</th>
+                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Available Units</th>
+                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Expiry Date</th>
                                                 </tr>
                                             </thead>
-                                            <tbody>
-                                                {purchased_products.map((product, idx) => (
-                                                    <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                                        <td className="px-6 py-4 font-medium text-slate-700">{product.PO_ID || ''}</td>
-                                                        <td className="px-6 py-4 text-blue-600 font-medium">{product.EXP_Id || ''}</td>
-                                                        <td className="px-6 py-4 font-bold text-slate-800">{product.Product_ID}</td>
-                                                        <td className="px-6 py-4 text-slate-700">{product.Product_Name}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">
-                                                                {product.Available_Units} units
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-slate-600">{product.Units_Per_Case || 1}</td>
-                                                        <td className="px-6 py-4 text-slate-600">{product.Batch || ''}</td>
-                                                        <td className="px-6 py-4 text-slate-600">{product.Received_Date}</td>
-                                                        <td className="px-6 py-4 text-slate-500 text-xs">{product.Notes}</td>
-                                                    </tr>
-                                                ))}
+                                            <tbody className="divide-y divide-slate-100">
+                                                {(() => {
+                                                    const rows = [];
+                                                    const groupedByPO = {};
+                                                    
+                                                    // Group items by PO first
+                                                    purchased_product_cases.forEach(item => {
+                                                        const poId = item.poId || 'Unknown';
+                                                        if (!groupedByPO[poId]) {
+                                                            groupedByPO[poId] = [];
+                                                        }
+                                                        groupedByPO[poId].push(item);
+                                                    });
+
+                                                    // Process each PO group
+                                                    Object.entries(groupedByPO).forEach(([poId, poItems]) => {
+                                                        const firstPoItem = poItems[0];
+                                                        const receivedDate = firstPoItem.receivedDate 
+                                                            ? new Date(firstPoItem.receivedDate).toLocaleDateString() 
+                                                            : '-';
+
+                                                        // Group items within PO by product
+                                                        const groupedByProduct = {};
+                                                        poItems.forEach(item => {
+                                                            const prodName = item.productName || item.productId || 'Unknown';
+                                                            if (!groupedByProduct[prodName]) {
+                                                                groupedByProduct[prodName] = [];
+                                                            }
+                                                            groupedByProduct[prodName].push(item);
+                                                        });
+
+                                                        // Create rows for each case item
+                                                        Object.entries(groupedByProduct).forEach(([productName, productCases]) => {
+                                                            const firstProduct = productCases[0];
+                                                            productCases.forEach((caseItem, caseIdx) => {
+                                                                const expiryValue = caseItem.expiry || caseItem.expd || caseItem.mfd;
+                                                                const expiryFormatted = formatExpiryDate(expiryValue);
+                                                                const formattedLabel = `${poId}_${firstProduct.productId}_c${caseIdx + 1}`;
+
+                                                                rows.push({
+                                                                    poId,
+                                                                    productId: firstProduct.productId || '-',
+                                                                    productName,
+                                                                    batch: firstProduct.batch || '-',
+                                                                    unitsPerCase: firstProduct.unitsPerCase || '-',
+                                                                    availableUnits: caseItem.availableUnits || 0,
+                                                                    expiry: expiryFormatted || '-',
+                                                                    receivedDate,
+                                                                    caseLabel: caseItem.caseLabel || formattedLabel,
+                                                                    isFirstInGroup: caseIdx === 0
+                                                                });
+                                                            });
+                                                        });
+                                                    });
+
+                                                    // Track previous values to show "-" for duplicates
+                                                    let prevPoId = null;
+                                                    let prevProductId = null;
+                                                    let prevProductName = null;
+                                                    let prevBatch = null;
+                                                    let prevUnitsPerCase = null;
+                                                    let prevReceivedDate = null;
+
+                                                    return rows.map((row, idx) => {
+                                                        const showPoId = row.poId !== prevPoId;
+                                                        const showProductId = row.productId !== prevProductId || row.poId !== prevPoId;
+                                                        const showProductName = row.productName !== prevProductName || row.productId !== prevProductId;
+                                                        const showBatch = row.batch !== prevBatch || row.productId !== prevProductId;
+                                                        const showUnitsPerCase = row.unitsPerCase !== prevUnitsPerCase || row.productId !== prevProductId;
+                                                        const showReceivedDate = row.receivedDate !== prevReceivedDate || row.poId !== prevPoId;
+
+                                                        // Update previous values
+                                                        prevPoId = row.poId;
+                                                        prevProductId = row.productId;
+                                                        prevProductName = row.productName;
+                                                        prevBatch = row.batch;
+                                                        prevUnitsPerCase = row.unitsPerCase;
+                                                        prevReceivedDate = row.receivedDate;
+
+                                                        return (
+                                                            <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
+                                                                <td className="px-6 py-4 font-bold text-orange-600">{showPoId ? row.poId : ''}</td>
+                                                                <td className="px-6 py-4 text-center text-slate-600 whitespace-nowrap">{showReceivedDate ? row.receivedDate : ''}</td>
+                                                                <td className="px-6 py-4 font-mono text-xs text-slate-600">{showProductId ? row.productId : ''}</td>
+                                                                <td className="px-6 py-4 font-medium text-slate-800">{showProductName ? row.productName : ''}</td>
+                                                                <td className="px-6 py-4 text-center text-slate-600">{showBatch ? row.batch : ''}</td>
+                                                                <td className="px-6 py-4 text-center text-slate-600">{showUnitsPerCase ? row.unitsPerCase : ''}</td>
+                                                                <td className="px-6 py-4 text-slate-700 font-medium">{row.caseLabel}</td>
+                                                                <td className="px-6 py-4 text-center">
+                                                                    <span className={clsx(
+                                                                        "px-2 py-1 rounded text-xs font-bold inline-block",
+                                                                        parseInt(row.availableUnits) > 0 
+                                                                            ? "bg-green-100 text-green-700" 
+                                                                            : "bg-gray-100 text-gray-600"
+                                                                    )}>
+                                                                        {row.availableUnits} units
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-center text-slate-600">{row.expiry}</td>
+                                                            </tr>
+                                                        );
+                                                    });
+                                                })()}
                                             </tbody>
                                         </table>
+                                    </div>
+                                </div>
+
+                                {/* Summary Footer */}
+                                <div className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600">
+                                    <div className="flex justify-between items-center">
+                                        <span>Total Cases: <strong>{purchased_products.length}</strong></span>
+                                        <span>Total Units: <strong>{purchased_products.reduce((sum, p) => sum + parseInt(p.availableUnits || 0), 0)}</strong></span>
                                     </div>
                                 </div>
                             </div>
@@ -412,13 +533,6 @@ const Restock = () => {
                 )}
             </div>
 
-            {/* Generate Bill Modal */}
-            <GenerateBillModal
-                isOpen={showBillModal}
-                onClose={() => setShowBillModal(false)}
-                purchased_products={purchased_products}
-                products={products}
-            />
         </div>
     );
 };

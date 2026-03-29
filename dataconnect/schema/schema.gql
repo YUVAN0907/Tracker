@@ -43,6 +43,7 @@ type Machine @table(key: "machineId") {
 type PurchaseOrderHeader @table(key: "poId") {
   poId: String!
   vendorId: String!
+
   createdDate: Timestamp
   totalAmount: Float
   status: String
@@ -63,63 +64,102 @@ type PurchaseOrderLine @table(key: "lineId") {
   product: Product! @ref(fields: "productId")
 }
 
-type PurchaseOrder @table(key: "poId") {
-  poId: String!
+# ==============================
+# NORMALIZED VENDOR PURCHASE (1NF)
+# ==============================
 
-  vendorId: String!
-  productId: String!
+# LEVEL 1: Vendor Purchase Order Header (PO-Level Payment Data)
+type VendorPurchaseOrder @table(key: "purchaseOrderId") {
+  purchaseOrderId: UUID! @default(expr: "uuidV4()")
 
-  createdDate: Timestamp
-  totalAmount: Float
-  noOfCases: Int
-  unitsPerCase: Int
-  poPrice: Float
-  lineTotal: Float
-  status: String
-
-  vendor: Vendor! @ref(fields: "vendorId")
-  product: Product! @ref(fields: "productId")
-}
-
-type VendorPurchase @table(key: "purchaseId") {
-  purchaseId: UUID! @default(expr: "uuidV4()")
-
+  # Foreign Keys
   poId: String!
   vendorId: String!
-  productId: String!
 
-  batch: Int
-  unitsPerCase : Int
-  caseCount: Int
-  totalUnits: Int
-  mrp: Float
-  poPrice: Float
-  paymentMode: String
-  paymentStatus: String
-  gstFiled: Boolean
+  # PO-Level Fields (Stored Once per PO)
+  receivedDate: Timestamp!
+  paymentMode: String!
+  paymentStatus: String!
+  gstFiled: Boolean! @default(value: false)
 
+  # Relations
   purchaseOrderHeader: PurchaseOrderHeader! @ref(fields: "poId")
   vendor: Vendor! @ref(fields: "vendorId")
+}
+
+# LEVEL 2: Vendor Purchase Item (Product-Level Line Items)
+type VendorPurchaseItem @table(key: "itemId") {
+  itemId: UUID! @default(expr: "uuidV4()")
+
+  # Foreign Key
+  purchaseOrderId: UUID!
+  productId: String!
+
+  # Product-Specific Fields (Stored Once per Product per PO)
+  batch: Int!
+  unitsPerCase: Int!
+  caseCount: Int!
+  totalUnits: Int!
+  mrp: Float!
+  poPrice: Float!
+
+  # Relations
+  vendorPurchaseOrder: VendorPurchaseOrder! @ref(fields: "purchaseOrderId")
   product: Product! @ref(fields: "productId")
 }
 
-type PurchasedProduct @table(key: "id") {
+# ==============================
+# NORMALIZED PURCHASED PRODUCTS (3NF)
+# ==============================
+
+# LEVEL 1: PO + Product Delivery (Common per product per PO)
+type PurchasedProductBatch @table(key: "id") {
   id: UUID! @default(expr: "uuidV4()")
 
-  poId: String
-  productId: String
+  # Foreign Keys
+  poId: String!
+  productId: String!
 
-  unitsPerCase: Int
-  caseLabel: String
-  unitsInCase: Int
-  mfd: Timestamp
-  expd: Timestamp
-  availableUnits: Int
-  batch: Int
-  receivedDate: Timestamp
-  notes: String
+  # Common fields for this product in this PO
+  batch: Int!              # Batch number (1, 2, 3...)
+  unitsPerCase: Int!       # Standard units per case for this product in this PO
+  totalUnitsReceived: Int! # Total units received for this product in this PO (sum of all cases)
+  receivedDate: Timestamp  # When this product batch was received (PO level data)
+  notes: String            # Notes common to all cases of this product in this PO
 
-  product: Product @ref(fields: "productId")
+  # Metadata
+  status: String           # active, closed, partial
+  createdAt: Timestamp
+  updatedAt: Timestamp
+
+  # Relations
+  purchaseOrderHeader: PurchaseOrderHeader! @ref(fields: "poId")
+  product: Product! @ref(fields: "productId")
+}
+
+# LEVEL 2: Individual Cases (Case-specific data)
+type PurchasedProductCase @table(key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+
+  # Foreign Key to batch
+  purchasedProductBatchId: UUID!
+
+  # Auto-generated case label (poId_productId_c1, c2, c3...)
+  caseLabel: String!       # Unique identifier: e.g., "PO123_PROD456_c1"
+
+
+  # Case-specific dates
+  mfd: Timestamp!          # Manufacture Date
+  expd: Timestamp!         # Expiry Date
+
+  # Case inventory
+  availableUnits: Int!     # Current available units in this case
+
+  # Metadata
+  lastUpdated: Timestamp
+
+  # Relations
+  purchasedProductBatch: PurchasedProductBatch! @ref(fields: "purchasedProductBatchId")
 }
 
 # ==============================
@@ -158,6 +198,7 @@ type MachineStockAssignment @table(key: "id") {
 
   machineId: String!
   stockLabel: String!
+  caseLabel: String          # Case label to track specific case with expiry date
   coverLabel: String!
 
   coverStatus: String

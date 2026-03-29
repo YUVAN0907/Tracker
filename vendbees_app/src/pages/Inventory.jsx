@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
-import { Package, Truck, IndianRupee, Filter, Plus, Pencil, Trash2, Eye, X, Search, Warehouse, AlertCircle, Info, ChevronDown, ChevronRight, CheckCircle } from 'lucide-react';
+import { Package, Truck, IndianRupee, Filter, Plus, Pencil, Trash2, Eye, X, Search, Warehouse, AlertCircle, Info, ChevronDown, ChevronRight, CheckCircle, Download } from 'lucide-react';
 import clsx from 'clsx';
 
 const KPI = ({ title, value, subtext }) => (
@@ -459,11 +459,18 @@ const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving })
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        // Format for API - include vendor_id in each item
+        
+        // Generate PO_ID: VP-YYYYMMDDHHMMSS-VendorID
+        const now = new Date();
+        const timeStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+        const generatedPoId = `VP-${timeStr}-${selectedVendor || 'UNKNOWN'}`;
+        
+        // Format for API - include vendor_id and po_id in each item
         const validItems = items.filter(item =>
             item.product_id && item.no_of_cases && item.units_per_case
         ).map(item => {
             return {
+                po_id: generatedPoId,  // All items in this batch share the same PO_ID
                 product_id: item.product_id,
                 product_name: item.product_name,
                 vendor_id: selectedVendor,
@@ -663,125 +670,401 @@ const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving })
 // Comprehensive Delivery Recording Form (for recording stock-in from vendor) - All products in PO + Custom products
 const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [] }) => {
     const today = new Date().toISOString().split('T')[0];
+    // Use local backend for normalized delivery recording (falls back to production if not available)
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3002/api'
+        : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // poData contains: { po_id, vendor_id, po_date, items: [{Product_ID, Product_Name, No_of_Cases, Units_Per_Case, PO_Price}] }
     const [purchaseDate, setPurchaseDate] = useState(today);
-    const [paymentMode, setPaymentMode] = useState('');
-    const [paymentStatus, setPaymentStatus] = useState('Completed');
+    const [paymentMode, setPaymentMode] = useState('Cash');
+    const [paymentStatus, setPaymentStatus] = useState('Pending');
     const [gstFiled, setGstFiled] = useState('No');
 
-    // Initialize product details from PO items
-    const [productDetails, setProductDetails] = useState(() => {
-        return (poData?.items || []).map(item => ({
-            product_id: item.Product_ID || '',
-            product_name: item.Product_Name || '',
-            ordered_cases: item.No_of_Cases || 0,
-            batch: '',
-            units_per_case: item.Units_Per_Case || 1,
-            case_count: '', // Empty = not delivered yet, 0 = explicitly not delivered
-            mrp: '',
-            po_price: item.PO_Price || '',
-            is_custom: false
-        }));
-    });
-
-    // Custom products added by admin (for vendor substitutions)
-    const [customProducts, setCustomProducts] = useState([]);
+    // Map of productId -> {productName, selfLife}
+    const [productsMap, setProductsMap] = useState({});
     const [showCustomProductForm, setShowCustomProductForm] = useState(false);
+    const [customProducts, setCustomProducts] = useState([]);
     const [newCustomProduct, setNewCustomProduct] = useState({
         product_id: '',
         product_name: '',
-        quantity: '',
+        case_count: 0,
         units_per_case: 1,
-        batch: '',
+        po_price: '',
+        batch: 1,
         mrp: '',
-        po_price: ''
+        cases: [] // Array of case objects for custom products
     });
+    const [selectedItems, setSelectedItems] = useState({});
 
-    // Get vendor products for dropdown - show all products that could be supplied by this vendor
-    const vendorId = poData?.vendor_id || '';
-    const vendorProducts = vendorId && products ? products.filter(p => p && p.Product_ID) : [];
+    // Extract vendor ID from PO data
+    const vendorId = poData?.vendor_id;
 
-    // Handle product selection for custom product
+    // Filter products by vendor
+    const vendorProducts = useMemo(() => {
+        if (!vendorId) return [];
+        return products.filter(p => p.Vendor_ID === vendorId);
+    }, [products, vendorId]);
+
+    // Handle product selection for custom products
     const handleSelectProduct = (productId) => {
-        const selected = products.find(p => p.Product_ID === productId);
-        if (selected) {
-            setNewCustomProduct(prev => ({
-                ...prev,
-                product_id: selected.Product_ID,
-                product_name: selected.Name || '',
-                units_per_case: selected.Units_Per_Case || 1,
-                mrp: selected.MRP || '',
-                po_price: selected.Unit_Cost || ''
-            }));
+        if (!productId) {
+            setNewCustomProduct({
+                product_id: '',
+                product_name: '',
+                case_count: 0,
+                units_per_case: 1,
+                po_price: '',
+                batch: 1,
+                mrp: '',
+                cases: []
+            });
+            return;
+        }
+
+        const selectedProduct = vendorProducts.find(p => p.Product_ID === productId);
+        if (selectedProduct) {
+            setNewCustomProduct({
+                product_id: selectedProduct.Product_ID,
+                product_name: selectedProduct.Name || selectedProduct.Product_Name || '',
+                case_count: 0,
+                units_per_case: selectedProduct.Units_Per_Case || 1,
+                po_price: selectedProduct.PO_Price || selectedProduct.MRP || '',
+                batch: 1,
+                mrp: selectedProduct.MRP || '',
+                cases: []
+            });
         }
     };
 
-    // Update a specific product's field
-    const updateProduct = (index, field, value) => {
+    // Handle case count change for custom products
+    const handleCustomProductCaseCountChange = (value) => {
+        const caseCount = parseInt(value) || 0;
+        const currentCases = (newCustomProduct.cases || []).length;
+        
+        let updatedCases = [...(newCustomProduct.cases || [])];
+        
+        if (caseCount > currentCases) {
+            // Add new cases
+            for (let i = currentCases; i < caseCount; i++) {
+                const caseNumber = i + 1;
+                const caseLabel = `Custom_${newCustomProduct.product_id}_c${caseNumber}`;
+                updatedCases.push({
+                    caseNumber: caseNumber,
+                    unitsPerCase: newCustomProduct.units_per_case,
+                    mfd: purchaseDate,
+                    expd: '',
+                    caseLabel: caseLabel
+                });
+            }
+        } else if (caseCount < currentCases) {
+            // Remove excess cases
+            updatedCases = updatedCases.slice(0, caseCount);
+        }
+        
+        setNewCustomProduct({
+            ...newCustomProduct,
+            case_count: caseCount,
+            cases: updatedCases
+        });
+    };
+
+    // Handle case field updates for custom products
+    const updateCustomProductCase = (caseIndex, field, value) => {
+        const updatedCases = [...(newCustomProduct.cases || [])];
+        const caseData = updatedCases[caseIndex];
+        
+        // Sanitize date fields - ensure YYYY-MM-DD format or empty
+        if ((field === 'mfd' || field === 'expd') && value) {
+            const dateMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
+            caseData[field] = dateMatch ? dateMatch[0] : '';
+        } else {
+            caseData[field] = value;
+        }
+        
+        // Auto-calculate expiry if mfd changed
+        if (field === 'mfd' && caseData[field]) {
+            const selfLifeDays = getSelfLife(newCustomProduct.product_id);
+            caseData.expd = calculateExpiry(caseData[field], selfLifeDays);
+        }
+        
+        setNewCustomProduct({
+            ...newCustomProduct,
+            cases: updatedCases
+        });
+    };
+
+    // Initialize product structure with cases array
+    const [productDetails, setProductDetails] = useState(() => {
+        return (poData?.items || []).map(item => {
+            // Find product in products array to get MRP
+            const productInfo = products.find(p => p.Product_ID === item.Product_ID);
+            return {
+                product_id: item.Product_ID || '',
+                product_name: item.Product_Name || '',
+                ordered_cases: item.No_of_Cases || 0,
+                units_per_case: item.Units_Per_Case || 1,
+                po_price: item.PO_Price || '',
+                mrp: productInfo?.MRP || '',
+                batch: 1, // Default batch number
+                case_count: 0, // Track how many cases to generate (for quantity calculation)
+                cases: [] // Array of case objects: {caseNumber, unitsPerCase, mfd, expd, caseLabel}
+            };
+        });
+    });
+
+    // Convert shelf life from months to days if needed
+    // If value < 50, treat as months and convert to days (multiply by 30)
+    const convertToDays = (value) => {
+        const num = parseInt(value) || 0;
+        if (num === 0) return 0;
+        // If value is less than 50, assume it's in months, convert to days
+        if (num < 50) {
+            return num * 30;
+        }
+        // Otherwise assume it's already in days
+        return num;
+    };
+
+    // Map product IDs/names to default shelf life in days
+    const getDefaultSelfLife = (productId, productName) => {
+        const nameUpper = (productName || productId).toUpperCase();
+        
+        // Product-specific mappings based on popular FMCG brands
+        const productMappings = {
+            'BINGO': 180,           // ~6 months
+            'LAYS': 180,            // ~6 months  
+            'BRITANNIA': 365,       // ~12 months (biscuits)
+            'PARLE': 365,           // ~12 months (biscuits)
+            'DARK': 180,            // ~6 months
+            'ELITE': 365,           // ~12 months (chocolate)
+            'NABA': 180,            // ~6 months
+            'RAAJ': 180,            // ~6 months
+            'BAUL': 180,            // ~6 months
+            'GAIA': 180,            // ~6 months
+            'SUN': 180,             // ~6 months
+            'LAVAZZA': 90,          // ~3 months (coffee)
+            'DM': 90,               // ~3 months
+            'KITK': 365,            // ~12 months (chocolate)
+            'UNI': 365,             // ~12 months (biscuits)
+            'FAB': 180,             // ~6 months
+            'MOM': 365,             // ~12 months
+            'CHAI': 90,             // ~3 months
+            '7UP': 180,             // ~6 months (beverage)
+            'SPRITE': 180,          // ~6 months
+            'COKE': 180,            // ~6 months
+            'PEPSI': 180,           // ~6 months
+        };
+        
+        // Check for matching products
+        for (const [pattern, days] of Object.entries(productMappings)) {
+            if (nameUpper.includes(pattern)) {
+                return days;
+            }
+        }
+        
+        // Default based on product category hints
+        if (nameUpper.includes('CHIPS') || nameUpper.includes('SNACK') || nameUpper.includes('WAFER')) {
+            return 180;  // 6 months
+        } else if (nameUpper.includes('BISCUIT') || nameUpper.includes('COOKIE')) {
+            return 365;  // 12 months
+        } else if (nameUpper.includes('CHOCOLATE')) {
+            return 365;  // 12 months
+        } else if (nameUpper.includes('COFFEE') || nameUpper.includes('TEA')) {
+            return 90;   // 3 months
+        } else if (nameUpper.includes('DRINK') || nameUpper.includes('BEVERAGE') || nameUpper.includes('SODA')) {
+            return 180;  // 6 months
+        }
+        
+        // Default fallback
+        return 90;  // 3 months
+    };
+
+    // Get product quantity from products table
+    const getProductQuantity = (productId) => {
+        const product = products?.find(p => p.Product_ID === productId);
+        return product?.Quantity || 0;
+    };
+
+    // Fetch products with selfLife when component mounts or when products change
+    useEffect(() => {
+        try {
+            const productIds = [...new Set((poData?.items || []).map(item => item.Product_ID))];
+            console.log('DeliveryForm: PO Product IDs:', productIds);
+            console.log('DeliveryForm: Products array length:', products?.length);
+            if (productIds.length === 0 || !products || products.length === 0) return;
+
+            // Get from dashboard products which have selfLife
+            const pMap = {};
+            
+            // First, try to get from products array passed down (Product_Master data from Inventory page)
+            products.forEach(p => {
+                // Try multiple possible field names for product ID
+                const productId = p.Product_ID || p.productId || p.PRODUCT_ID;
+                // Get selfLife directly - convert months to days if needed
+                let selfLife = convertToDays(p.selfLife || p.Self_Life || p.SELF_LIFE || 0);
+                
+                // If selfLife is still 0, use intelligent defaults
+                if (selfLife === 0) {
+                    const productName = p.Name || p.productName || p.PRODUCT_NAME || '';
+                    selfLife = getDefaultSelfLife(productId, productName);
+                    console.log(`DeliveryForm: Using default selfLife for ${productId}: ${selfLife} days`);
+                } else {
+                    console.log(`DeliveryForm: Found selfLife for ${productId}: ${selfLife} days (converted)`);
+                }
+                
+                if (productIds.includes(productId)) {
+                    pMap[productId] = {
+                        productName: p.Name || p.productName || p.PRODUCT_NAME || '',
+                        selfLife: selfLife  // Use as-is, already in days, or intelligent default
+                    };
+                    console.log(`DeliveryForm: Mapped ${productId} -> selfLife: ${selfLife}`);
+                }
+            });
+            
+            console.log('DeliveryForm: ProductsMap after processing:', pMap);
+            
+            // Fallback: If we couldn't find any products, use intelligent defaults for all
+            if (Object.keys(pMap).length === 0) {
+                console.warn('DeliveryForm: No products found in productsMap, using intelligent defaults');
+                productIds.forEach(pid => {
+                    const defaultLife = getDefaultSelfLife(pid, '');
+                    pMap[pid] = {
+                        productName: '',
+                        selfLife: defaultLife
+                    };
+                });
+            }
+            
+            if (Object.keys(pMap).length > 0) {
+                setProductsMap(pMap);
+            }
+        } catch (err) {
+            console.error('Error fetching products:', err);
+        }
+    }, [poData, products]);
+
+    // Calculate expiry date from manufacture date and selfLife
+    const calculateExpiry = (mfdString, selfLifeDays) => {
+        try {
+            if (!mfdString || typeof mfdString !== 'string') return '';
+            // Ensure it's in YYYY-MM-DD format
+            const validDateMatch = mfdString.match(/^\d{4}-\d{2}-\d{2}/);
+            if (!validDateMatch) return '';
+            
+            // Parse YYYY-MM-DD as local date (not UTC)
+            const [year, month, day] = mfdString.split('-').map(Number);
+            const mfd = new Date(year, month - 1, day);  // Month is 0-indexed
+            
+            if (isNaN(mfd.getTime())) return '';
+            
+            // Add selfLifeDays to the local date
+            const expd = new Date(year, month - 1, day + selfLifeDays);
+            
+            // Format back to YYYY-MM-DD without timezone conversion
+            const expYear = expd.getFullYear();
+            const expMonth = String(expd.getMonth() + 1).padStart(2, '0');
+            const expDay = String(expd.getDate()).padStart(2, '0');
+            const result = `${expYear}-${expMonth}-${expDay}`;
+            
+            console.log(`[calculateExpiry] mfd='${mfdString}', selfLifeDays=${selfLifeDays}, calculated expd='${result}'`);
+            return result;
+        } catch (err) {
+            console.log(`[calculateExpiry] ERROR calculating expiry for mfd='${mfdString}', selfLifeDays=${selfLifeDays}:`, err);
+            return '';
+        }
+    };
+
+    // Remove a product from the delivery
+    const removeProduct = (productIndex) => {
+        setProductDetails(prev => prev.filter((_, i) => i !== productIndex));
+    };
+
+    // Remove a case from a product
+    const removeCaseFromProduct = (productIndex, caseIndex) => {
         setProductDetails(prev => {
             const updated = [...prev];
-            updated[index] = { ...updated[index], [field]: value };
+            updated[productIndex].cases = updated[productIndex].cases.filter((_, i) => i !== caseIndex);
             return updated;
         });
     };
 
-    // Add custom product (vendor substitution)
-    const handleAddCustomProduct = () => {
-        if (!newCustomProduct.product_name.trim()) {
-            alert('Product Name is required');
-            return;
-        }
-        if (!newCustomProduct.product_id.trim()) {
-            alert('Product ID is required');
-            return;
-        }
-        const quantity = parseInt(newCustomProduct.quantity) || 0;
-        if (quantity <= 0) {
-            alert('Quantity must be greater than 0');
-            return;
-        }
-
-        setCustomProducts([...customProducts, {
-            product_id: newCustomProduct.product_id.trim(),
-            product_name: newCustomProduct.product_name.trim(),
-            quantity: quantity,
-            units_per_case: parseInt(newCustomProduct.units_per_case) || 1,
-            batch: newCustomProduct.batch.trim(),
-            mrp: parseFloat(newCustomProduct.mrp) || 0,
-            po_price: parseFloat(newCustomProduct.po_price) || 0
-        }]);
-
-        // Reset form
-        setNewCustomProduct({
-            product_id: '',
-            product_name: '',
-            quantity: '',
-            units_per_case: 1,
-            batch: '',
-            mrp: '',
-            po_price: ''
+    // Update a product field (batch, units_per_case, case_count, etc.)
+    const updateProduct = (productIndex, field, value) => {
+        setProductDetails(prev => {
+            const updated = [...prev];
+            const product = updated[productIndex];
+            
+            if (field === 'case_count') {
+                // When case count changes, auto-generate case blocks
+                const caseCount = parseInt(value) || 0;
+                const currentCases = product.cases.length;
+                
+                if (caseCount > currentCases) {
+                    // Add new cases
+                    for (let i = currentCases; i < caseCount; i++) {
+                        const caseNumber = i + 1;
+                        const caseLabel = `${poData.po_id}_${product.product_id}_c${caseNumber}`;
+                        product.cases.push({
+                            caseNumber: caseNumber,
+                            unitsPerCase: product.units_per_case,
+                            mfd: '',
+                            expd: '',
+                            caseLabel: caseLabel
+                        });
+                    }
+                } else if (caseCount < currentCases) {
+                    // Remove excess cases
+                    product.cases = product.cases.slice(0, caseCount);
+                }
+                // Update the case_count field
+                product.case_count = caseCount;
+            } else {
+                product[field] = value;
+            }
+            
+            return updated;
         });
-        setShowCustomProductForm(false);
     };
 
-    const handleRemoveCustomProduct = (index) => {
-        setCustomProducts(customProducts.filter((_, i) => i !== index));
+    // Update a case field
+    const updateCase = (productIndex, caseIndex, field, value) => {
+        setProductDetails(prev => {
+            const updated = [...prev];
+            const caseData = updated[productIndex].cases[caseIndex];
+            const productId = updated[productIndex].product_id;
+            
+            // Sanitize date fields - ensure YYYY-MM-DD format or empty
+            if ((field === 'mfd' || field === 'expd') && value) {
+                const dateMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
+                caseData[field] = dateMatch ? dateMatch[0] : '';
+            } else {
+                caseData[field] = value;
+            }
+
+            // Auto-calculate expiry if mfd changed
+            if (field === 'mfd' && caseData[field]) {
+                const selfLifeDays = productsMap[productId]?.selfLife || 0;
+                caseData.expd = calculateExpiry(caseData[field], selfLifeDays);
+            }
+
+            return updated;
+        });
     };
 
-    // Calculate quantity for a product
+    // Get total units across all cases for a product
+    const getTotalUnitsForProduct = (product) => {
+        return product.cases.reduce((sum, c) => sum + (parseInt(c.unitsPerCase) || 0), 0);
+    };
+
+    // Calculate quantity for a product (case_count * units_per_case)
     const getQuantity = (product) => {
-        const cases = parseInt(product.case_count) || 0;
-        const units = parseInt(product.units_per_case) || 1;
-        return cases * units;
+        const caseCount = parseInt(product.case_count) || 0;
+        const unitsPerCase = parseInt(product.units_per_case) || 1;
+        return caseCount * unitsPerCase;
     };
 
-    // Count products being delivered
-    const productsToDeliver = productDetails.filter(p => parseInt(p.case_count) > 0);
-    const totalCases = productsToDeliver.reduce((sum, p) => sum + (parseInt(p.case_count) || 0), 0);
-    const totalUnits = productsToDeliver.reduce((sum, p) => sum + getQuantity(p), 0);
-    const totalCustomUnits = customProducts.reduce((sum, p) => sum + p.quantity, 0);
-
+    // Prepare data for submission
     const handleSubmit = (e) => {
         e.preventDefault();
 
@@ -790,42 +1073,225 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             return;
         }
 
-        if (productsToDeliver.length === 0 && customProducts.length === 0) {
-            alert('Please enter case count for at least one PO product or add a custom product');
+        if (!paymentMode) {
+            alert('Please select Payment Mode');
             return;
         }
 
-        // Prepare PO products array - only products with case_count > 0
-        const products = productsToDeliver.map(p => ({
-            product_id: p.product_id,
-            product_name: p.product_name,
-            batch: p.batch,
-            units_per_case: parseInt(p.units_per_case) || 1,
-            case_count: parseInt(p.case_count) || 0,
-            mrp: parseFloat(p.mrp) || 0,
-            po_price: parseFloat(p.po_price) || 0,
-            payment_mode: paymentMode,
-            payment_status: paymentStatus,
-            gst_filed: gstFiled
+        if (!paymentStatus) {
+            alert('Please select Payment Status');
+            return;
+        }
+
+        if (!gstFiled) {
+            alert('Please select GST Filed');
+            return;
+        }
+
+        // Find products that have at least one case
+        const productsWithCases = productDetails.filter(p => p.cases.length > 0);
+
+        if (productsWithCases.length === 0 && customProducts.length === 0) {
+            alert('Please add at least one case for at least one product or add custom products');
+            return;
+        }
+
+        // Validate all cases have manufacture date and expiry date
+        for (const product of productsWithCases) {
+            for (const caseData of product.cases) {
+                if (!caseData.mfd) {
+                    alert(`Please enter Manufacture Date for ${product.product_name} - ${caseData.caseLabel}`);
+                    return;
+                }
+                if (!caseData.expd) {
+                    alert(`Please enter or verify Expiry Date for ${product.product_name} - ${caseData.caseLabel}`);
+                    return;
+                }
+            }
+        }
+
+        // Validate custom product cases
+        for (const customProduct of customProducts) {
+            for (const caseData of customProduct.cases) {
+                if (!caseData.mfd) {
+                    alert(`Please enter Manufacture Date for ${customProduct.product_name} - ${caseData.caseLabel}`);
+                    return;
+                }
+                if (!caseData.expd) {
+                    alert(`Please enter or verify Expiry Date for ${customProduct.product_name} - ${caseData.caseLabel}`);
+                    return;
+                }
+            }
+        }
+
+        // Build delivery data in the new format
+        const items = productsWithCases.map(product => ({
+            product_id: product.product_id,
+            product_name: product.product_name,
+            batch: product.batch,
+            units_per_case: product.units_per_case,
+            po_price: parseFloat(product.po_price) || 0,
+            mrp: parseFloat(product.mrp) || parseFloat(product.MRP) || 0,
+            cases: product.cases.map(c => {
+                console.log(`[DeliveryForm] Case ${c.caseLabel}: mfd='${c.mfd}', expd='${c.expd}', unitsPerCase='${c.unitsPerCase}'`);
+                return {
+                    case_number: c.caseNumber,
+                    case_label: c.caseLabel,
+                    units_per_case: parseInt(c.unitsPerCase) || 1,
+                    units_received: parseInt(c.unitsPerCase) || 1,
+                    mfd: c.mfd,  // Manufacture date
+                    expd: c.expd   // Expiry date
+                };
+            })
         }));
 
+        // Add custom products to items
+        const customItems = customProducts.map(product => ({
+            product_id: product.product_id,
+            product_name: product.product_name,
+            batch: product.batch,
+            units_per_case: product.units_per_case,
+            po_price: parseFloat(product.po_price) || 0,
+            mrp: parseFloat(product.mrp) || parseFloat(product.MRP) || 0,
+            cases: product.cases.map(c => {
+                console.log(`[DeliveryForm] CUSTOM PRODUCT Case ${c.caseLabel}: mfd='${c.mfd}', expd='${c.expd}', unitsPerCase='${c.unitsPerCase}'`);
+                return {
+                    case_number: c.caseNumber,
+                    case_label: c.caseLabel,
+                    units_per_case: parseInt(c.unitsPerCase) || 1,
+                    units_received: parseInt(c.unitsPerCase) || 1,
+                    mfd: c.mfd,
+                    expd: c.expd
+                };
+            })
+        }));
+
+        const allItems = [...items, ...customItems];
+        console.log('[DeliveryForm] Final data to submit:', JSON.stringify({
+            po_id: poData.po_id,
+            vendor_id: poData.vendor_id,
+            payment_mode: paymentMode,
+            payment_status: paymentStatus,
+            gst_filed: gstFiled,
+            items: allItems
+        }, null, 2));
+        
         onSave({
             po_id: poData.po_id,
             vendor_id: poData.vendor_id,
-            po_date: poData.po_date,
-            purchase_date: purchaseDate,
-            po_products: products,
-            custom_products: customProducts.map(cp => ({
-                product_id: cp.product_id,
-                product_name: cp.product_name,
-                quantity: cp.quantity,
-                units_per_case: cp.units_per_case,
-                batch: cp.batch,
-                mrp: cp.mrp,
-                po_price: cp.po_price
-            }))
+            payment_mode: paymentMode,
+            payment_status: paymentStatus,
+            gst_filed: gstFiled,
+            items: allItems
         });
     };
+
+    const getSelfLife = (productId) => {
+        let selfLife = 0;
+        
+        // First try to get from productsMap
+        if (productsMap[productId]?.selfLife) {
+            selfLife = productsMap[productId].selfLife;
+            console.log(`getSelfLife: Found in productsMap for ${productId}: ${selfLife}`);
+            // If it's 0, still try defaults
+            if (selfLife > 0) {
+                return selfLife;
+            }
+        }
+        
+        // Fallback: Try to get directly from products array
+        const product = products?.find(p => {
+            const pid = p.Product_ID || p.productId;
+            return pid === productId;
+        });
+        
+        if (product) {
+            selfLife = convertToDays(product.selfLife || product.Self_Life || product.SELF_LIFE || 0);
+            if (selfLife > 0) {
+                console.log(`getSelfLife fallback for ${productId}: found product, selfLife=${selfLife} days (converted)`);
+                return selfLife;
+            }
+            console.log(`getSelfLife: Product found but selfLife is 0, using intelligent defaults`);
+        }
+        
+        // Use intelligent defaults based on product name/ID patterns
+        const productName = product?.Name || '';
+        const defaultSelfLife = getDefaultSelfLife(productId, productName);
+        console.log(`getSelfLife: Using default for ${productId}: ${defaultSelfLife} days`);
+        return defaultSelfLife;
+    };
+
+    // Validate and format date for input display (yyyy-MM-dd only)
+    const getValidDate = (dateValue) => {
+        if (!dateValue) return '';
+
+        let dateString = '';
+        if (typeof dateValue === 'string') {
+            // Accept raw YYYY-MM-DD
+            const dateOnly = dateValue.match(/^\d{4}-\d{2}-\d{2}/);
+            if (dateOnly) {
+                return dateOnly[0];
+            }
+
+            // Normalize ISO timestamp with microseconds (e.g. 2026-09-22T00:00:00.000000Z)
+            const normalized = dateValue
+                .replace(/\.(\d{3})\d*Z$/, '.$1Z')
+                .replace(/\.(\d{1,2})Z$/, '.$1Z');
+
+            const parsed = new Date(normalized);
+            if (!Number.isNaN(parsed.getTime())) {
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const d = String(parsed.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+
+            return '';
+        }
+
+        if (dateValue instanceof Date && !Number.isNaN(dateValue.getTime())) {
+            const y = dateValue.getFullYear();
+            const m = String(dateValue.getMonth() + 1).padStart(2, '0');
+            const d = String(dateValue.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        return '';
+    };
+
+    const handleAddCustomProduct = (e) => {
+        e.preventDefault();
+        if (!newCustomProduct.product_id || !newCustomProduct.product_name || newCustomProduct.case_count <= 0) {
+            alert('Please fill in all required fields');
+            return;
+        }
+        setCustomProducts([...customProducts, { ...newCustomProduct, id: Date.now() }]);
+        setNewCustomProduct({
+            product_id: '',
+            product_name: '',
+            case_count: 0,
+            units_per_case: 1,
+            po_price: '',
+            batch: 1,
+            mrp: '',
+            cases: []
+        });
+        setShowCustomProductForm(false);
+    };
+
+    const handleRemoveCustomProduct = (id) => {
+        setCustomProducts(customProducts.filter(cp => cp.id !== id));
+    };
+
+    const productsToDeliver = (poData?.items || []).filter(item => !selectedItems[item.product_id]);
+
+    const totalCustomUnits = customProducts.reduce((sum, product) => sum + ((parseInt(product.case_count) || 0) * (parseInt(product.units_per_case) || 1)), 0);
+
+    const totalCases = productDetails.reduce((sum, product) => sum + product.cases.length, 0);
+
+    const totalUnits = productDetails.reduce((sum, product) => {
+        return sum + product.cases.reduce((caseSum, c) => caseSum + (parseInt(c.unitsPerCase) || 0), 0);
+    }, 0);
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto">
@@ -839,14 +1305,14 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                     </div>
                     <div className="text-right text-sm">
                         <div>Products: <strong>{poData?.items?.length || 0}</strong></div>
-                        <div className="text-green-600">To Deliver: <strong>{productsToDeliver.length}</strong></div>
+                        <div className="text-green-600">Cases Added: <strong>{productDetails.reduce((sum, p) => sum + p.cases.length, 0)}</strong></div>
                     </div>
                 </div>
             </div>
 
-            {/* Purchase Date (Manual Entry) */}
+            {/* Purchase Date */}
             <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Purchase Date (Actual Delivery Date) *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Delivery Date *</label>
                 <input
                     type="date"
                     value={purchaseDate}
@@ -854,148 +1320,223 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
                     required
                 />
-                <div className="text-xs text-slate-500 mt-1">Enter the actual date when goods were received from vendor</div>
             </div>
 
-            {/* Common Payment & GST Fields */}
+            {/* Payment Info */}
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                <div className="text-sm font-medium text-slate-700 mb-3">Payment Details (Applied to all products)</div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">Payment Mode</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Payment Mode *</label>
                         <select
                             value={paymentMode}
                             onChange={e => setPaymentMode(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                            required
                         >
-                            <option value="">Select...</option>
                             <option value="Cash">Cash</option>
                             <option value="UPI">UPI</option>
+                            <option value="NEFT">NEFT</option>
                             <option value="Bank Transfer">Bank Transfer</option>
                             <option value="Cheque">Cheque</option>
                             <option value="Credit">Credit</option>
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">Payment Status</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Payment Status *</label>
                         <select
                             value={paymentStatus}
                             onChange={e => setPaymentStatus(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                            required
                         >
+                            <option value="Pending">Pending</option>
                             <option value="Completed">Completed</option>
-                            <option value="Not Completed">Not Completed</option>
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">GST Filed</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">GST Filed *</label>
                         <select
                             value={gstFiled}
                             onChange={e => setGstFiled(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                            required
                         >
-                            <option value="No">No</option>
                             <option value="Yes">Yes</option>
+                            <option value="No">No</option>
                         </select>
                     </div>
                 </div>
             </div>
 
-            {/* Products List */}
-            <div className="space-y-3">
-                <div className="text-sm font-medium text-slate-700">Products in this PO ({productDetails.length} items)</div>
-                <div className="text-xs text-slate-500">Enter details for delivered products. Leave Case Count empty or 0 for items not delivered.</div>
+            {/* Products with Cases */}
+            <div className="space-y-4">
+                <div className="text-sm font-medium text-slate-700">Products ({productDetails.length})</div>
+                <div className="text-xs text-slate-500">Enter case count for each product to automatically generate case details below.</div>
+            </div>
 
+            {/* PO Products with Inline Case Details */}
+            <div className="space-y-6">
                 {productDetails.map((product, index) => (
-                    <div key={index} className={clsx(
-                        "p-4 rounded-lg border",
-                        parseInt(product.case_count) > 0 ? "bg-green-50 border-green-200" : "bg-white border-slate-200"
-                    )}>
-                        {/* Product Header */}
-                        <div className="flex justify-between items-start mb-3">
-                            <div>
-                                <div className="font-medium text-slate-800">{product.product_name}</div>
-                                <div className="text-xs text-slate-500">{product.product_id}</div>
+                    <div key={index} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                        {/* Product Input Row */}
+                        <div className="p-4 border-b border-slate-200">
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                    <div className="font-medium text-slate-800">{product.product_name}</div>
+                                    <div className="text-xs text-slate-500">{product.product_id} • Self Life: {getSelfLife(product.product_id)} days • Stock: {getProductQuantity(product.product_id)} units • Ordered: {product.ordered_cases} cases</div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => removeProduct(index)}
+                                    className="ml-4 p-1 text-red-600 hover:bg-red-100 rounded"
+                                    title="Remove this product"
+                                >
+                                    <X size={18} />
+                                </button>
                             </div>
-                            <div className="text-right">
-                                <div className="text-sm text-slate-600">Ordered: <strong>{product.ordered_cases}</strong> cases</div>
-                                {parseInt(product.case_count) > 0 && (
-                                    <div className="text-sm text-green-600">
-                                        Delivering: <strong>{product.case_count}</strong> cases ({getQuantity(product)} units)
-                                    </div>
-                                )}
+
+                            <div className="grid grid-cols-5 gap-2">
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">Batch</label>
+                                    <input
+                                        type="text"
+                                        value={product.batch}
+                                        onChange={e => updateProduct(index, 'batch', e.target.value)}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                        placeholder="Batch"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">Unit/Case *</label>
+                                    <input
+                                        type="number"
+                                        value={product.units_per_case}
+                                        onChange={e => updateProduct(index, 'units_per_case', e.target.value)}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                        min="1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">Case Count *</label>
+                                    <input
+                                        type="number"
+                                        value={product.case_count}
+                                        onChange={e => updateProduct(index, 'case_count', e.target.value)}
+                                        className={clsx(
+                                            "w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:border-orange-500",
+                                            parseInt(product.case_count) > 0 ? "border-green-400 bg-green-100" : "border-slate-200"
+                                        )}
+                                        placeholder="0"
+                                        min="0"
+                                        max={product.ordered_cases}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">MRP (₹)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={product.mrp}
+                                        onChange={e => updateProduct(index, 'mrp', e.target.value)}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">PO Price (₹) *</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={product.po_price}
+                                        onChange={e => updateProduct(index, 'po_price', e.target.value)}
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                        placeholder="0.00"
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        {/* Product Fields */}
-                        <div className="grid grid-cols-6 gap-2">
-                            <div>
-                                <label className="block text-xs text-slate-500 mb-1">Batch</label>
-                                <input
-                                    type="text"
-                                    value={product.batch}
-                                    onChange={e => updateProduct(index, 'batch', e.target.value)}
-                                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                    placeholder="Batch"
-                                />
+                        {/* Case Details - Shows directly below product if cases exist */}
+                        {product.cases.length > 0 && (
+                            <div className="p-4 bg-orange-50">
+                                <div className="text-xs font-semibold text-orange-800 mb-3">Case Details - Enter Manufacture & Expiry Date</div>
+                                <div className="space-y-3">
+                                    {product.cases.map((caseData, caseIndex) => (
+                                        <div key={caseIndex} className="p-3 bg-white rounded-lg border border-slate-200">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="text-sm font-medium text-slate-700">{caseData.caseLabel}</div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeCaseFromProduct(index, caseIndex)}
+                                                    className="text-red-500 hover:text-red-700 text-xs"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-5 gap-2">
+                                                {/* Units Per Case */}
+                                                <div>
+                                                    <label className="block text-xs text-slate-600 mb-1">Units/Case</label>
+                                                    <input
+                                                        type="number"
+                                                        value={caseData.unitsPerCase}
+                                                        onChange={e => updateCase(index, caseIndex, 'unitsPerCase', e.target.value)}
+                                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                                        min="1"
+                                                    />
+                                                </div>
+
+                                                {/* Manufacture Date (Admin Input) */}
+                                                <div>
+                                                    <label className="block text-xs text-slate-600 mb-1">Manufacture Date *</label>
+                                                    <input
+                                                        type="date"
+                                                        value={getValidDate(caseData.mfd)}
+                                                        onChange={e => updateCase(index, caseIndex, 'mfd', e.target.value)}
+                                                        className={clsx(
+                                                            "w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:border-orange-500",
+                                                            caseData.mfd ? "border-green-400 bg-green-50" : "border-slate-200"
+                                                        )}
+                                                    />
+                                                </div>
+
+                                                {/* Expiry Date (Auto-calculated) */}
+                                                <div>
+                                                    <label className="block text-xs text-slate-600 mb-1">Expiry Date (Auto)</label>
+                                                    <input
+                                                        type="date"
+                                                        value={getValidDate(caseData.expd)}
+                                                        disabled
+                                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                    />
+                                                </div>
+
+                                                {/* Self Life Info */}
+                                                <div>
+                                                    <label className="block text-xs text-slate-600 mb-1">Self Life</label>
+                                                    <div className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-700 font-medium">
+                                                        {getSelfLife(product.product_id)} days
+                                                    </div>
+                                                </div>
+
+                                                {/* Case Label */}
+                                                <div>
+                                                    <label className="block text-xs text-slate-600 mb-1">Case Label</label>
+                                                    <input
+                                                        type="text"
+                                                        value={caseData.caseLabel}
+                                                        onChange={e => updateCase(index, caseIndex, 'caseLabel', e.target.value)}
+                                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                                        placeholder="e.g., Case 1"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-xs text-slate-500 mb-1">Unit/Case *</label>
-                                <input
-                                    type="number"
-                                    value={product.units_per_case}
-                                    onChange={e => updateProduct(index, 'units_per_case', e.target.value)}
-                                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                    min="1"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-slate-500 mb-1">Case Count *</label>
-                                <input
-                                    type="number"
-                                    value={product.case_count}
-                                    onChange={e => updateProduct(index, 'case_count', e.target.value)}
-                                    className={clsx(
-                                        "w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:border-orange-500",
-                                        parseInt(product.case_count) > 0 ? "border-green-400 bg-green-100" : "border-slate-200"
-                                    )}
-                                    placeholder="0"
-                                    min="0"
-                                    max={product.ordered_cases}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-slate-500 mb-1">Quantity</label>
-                                <input
-                                    type="number"
-                                    value={getQuantity(product)}
-                                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-600"
-                                    disabled
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-slate-500 mb-1">MRP (₹)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={product.mrp}
-                                    onChange={e => updateProduct(index, 'mrp', e.target.value)}
-                                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                    placeholder="0.00"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-slate-500 mb-1">PO Price (₹) *</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={product.po_price}
-                                    onChange={e => updateProduct(index, 'po_price', e.target.value)}
-                                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                    placeholder="0.00"
-                                />
-                            </div>
-                        </div>
+                        )}
                     </div>
                 ))}
             </div>
@@ -1044,13 +1585,16 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                             </div>
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Quantity *</label>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Case Count *</label>
                                     <input
                                         type="number"
-                                        value={newCustomProduct.quantity}
-                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, quantity: e.target.value })}
-                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                        placeholder="Units"
+                                        value={newCustomProduct.case_count}
+                                        onChange={(e) => handleCustomProductCaseCountChange(e.target.value)}
+                                        className={clsx(
+                                            "w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:border-orange-500",
+                                            parseInt(newCustomProduct.case_count) > 0 ? "border-green-400 bg-green-100" : "border-slate-200"
+                                        )}
+                                        placeholder="0"
                                         min="1"
                                     />
                                 </div>
@@ -1099,6 +1643,93 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                     />
                                 </div>
                             </div>
+
+                            {/* Case Details for Custom Product - Same structure as PO products */}
+                            {(newCustomProduct.cases && newCustomProduct.cases.length > 0) && (
+                                <div className="p-4 bg-orange-50">
+                                    <div className="text-xs font-semibold text-orange-800 mb-3">Case Details - Enter Manufacture & Expiry Date</div>
+                                    <div className="space-y-3">
+                                        {newCustomProduct.cases.map((caseData, caseIndex) => (
+                                            <div key={caseIndex} className="p-3 bg-white rounded-lg border border-slate-200">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="text-sm font-medium text-slate-700">{caseData.caseLabel}</div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const updatedCases = newCustomProduct.cases.filter((_, idx) => idx !== caseIndex);
+                                                            setNewCustomProduct({ ...newCustomProduct, cases: updatedCases, case_count: updatedCases.length });
+                                                        }}
+                                                        className="text-red-500 hover:text-red-700 text-xs"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </div>
+
+                                                <div className="grid grid-cols-5 gap-2">
+                                                    {/* Units Per Case */}
+                                                    <div>
+                                                        <label className="block text-xs text-slate-600 mb-1">Units/Case</label>
+                                                        <input
+                                                            type="number"
+                                                            value={caseData.unitsPerCase}
+                                                            onChange={(e) => updateCustomProductCase(caseIndex, 'unitsPerCase', e.target.value)}
+                                                            className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                                            min="1"
+                                                        />
+                                                    </div>
+
+                                                    {/* Manufacture Date */}
+                                                    <div>
+                                                        <label className="block text-xs text-slate-600 mb-1">Manufacture Date *</label>
+                                                        <input
+                                                            type="date"
+                                                            value={getValidDate(caseData.mfd)}
+                                                            onChange={(e) => updateCustomProductCase(caseIndex, 'mfd', e.target.value)}
+                                                            className={clsx(
+                                                                "w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:border-orange-500",
+                                                                caseData.mfd ? "border-green-400 bg-green-50" : "border-slate-200"
+                                                            )}
+                                                            required
+                                                        />
+                                                    </div>
+
+                                                    {/* Expiry Date (Auto-calculated) */}
+                                                    <div>
+                                                        <label className="block text-xs text-slate-600 mb-1">Expiry Date (Auto)</label>
+                                                        <input
+                                                            type="date"
+                                                            value={getValidDate(caseData.expd)}
+                                                            disabled
+                                                            className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                        />
+                                                    </div>
+
+                                                    {/* Self Life Info */}
+                                                    <div>
+                                                        <label className="block text-xs text-slate-600 mb-1">Self Life</label>
+                                                        <div className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-700 font-medium">
+                                                            {getSelfLife(newCustomProduct.product_id)} days
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Case Label */}
+                                                    <div>
+                                                        <label className="block text-xs text-slate-600 mb-1">Case Label</label>
+                                                        <input
+                                                            type="text"
+                                                            value={caseData.caseLabel}
+                                                            onChange={(e) => updateCustomProductCase(caseIndex, 'caseLabel', e.target.value)}
+                                                            className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                                            placeholder="e.g., Case 1"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex gap-2">
                                 <button
                                     type="button"
@@ -1126,7 +1757,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                             <div key={index} className="p-3 bg-orange-100 rounded-lg border border-orange-300 flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
                                     <div className="font-medium text-slate-800">{product.product_name}</div>
-                                    <div className="text-xs text-slate-600">ID: {product.product_id} | Qty: {product.quantity} units | Batch: {product.batch || '-'}</div>
+                                    <div className="text-xs text-slate-600">ID: {product.product_id} | Cases: {product.case_count} | Units/Case: {product.units_per_case} | Batch: {product.batch || '-'}</div>
                                 </div>
                                 <button
                                     type="button"
@@ -1468,6 +2099,7 @@ const Inventory = () => {
     const { products, purchases, vendors, warehouse, ourPOs, vendorDeliveries, vendorPurchasesList, loading, refreshData, addToWarehouse, createMultiPO, recordDelivery, fetchVendorPurchases } = useData();
     const [activeTab, setActiveTab] = useState('Product Master');
     const [poSubTab, setPoSubTab] = useState('Your PO'); // Sub-tab for Purchase Orders
+    const [showGenerateBill, setShowGenerateBill] = useState(false); // Modal for generating bills
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [productSortBy, setProductSortBy] = useState('name_asc');
@@ -1497,6 +2129,14 @@ const Inventory = () => {
             fetchVendorPurchases();
         }
     }, [activeTab, poSubTab]);
+
+    // Log products data structure for debugging
+    useEffect(() => {
+        if (products && products.length > 0) {
+            console.log('Inventory: Products loaded, sample:', products[0]);
+            console.log('Inventory: First product selfLife:', products[0].selfLife);
+        }
+    }, [products]);
 
     // Fetch PO items for delivery recording
     const fetchPOItems = async (poId) => {
@@ -1661,7 +2301,7 @@ const Inventory = () => {
             );
         }
 
-        return [...list].sort((a, b) => {
+        let sorted = [...list].sort((a, b) => {
             const dateB = b.Date || b.Purchase_Date || 0;
             const dateA = a.Date || a.Purchase_Date || 0;
             const amountB = (parseFloat(b.PO_Price) || 0) * (parseFloat(b.Quantity) || 0);
@@ -1673,6 +2313,31 @@ const Inventory = () => {
             if (vpSortBy === 'amount_low') return amountA - amountB;
             return 0;
         });
+
+        // Collapse repeated PO-level fields to first item row only for readability
+        const normalized = [];
+        let currentPO = null;
+
+        sorted.forEach(row => {
+            const poId = row.PO_ID || currentPO;
+            const isNewPO = poId && poId !== currentPO;
+
+            const fillRow = {
+                ...row,
+                PO_ID: isNewPO ? row.PO_ID : '',
+                Date: isNewPO ? row.Date : '',
+                Vendor_ID: isNewPO ? row.Vendor_ID : '',
+                Payment_Mode: isNewPO ? row.Payment_Mode : '',
+                Payment_Status: isNewPO ? row.Payment_Status : '',
+                GST_Filed: isNewPO ? row.GST_Filed : ''
+            };
+
+            if (isNewPO) currentPO = poId;
+
+            normalized.push(fillRow);
+        });
+
+        return normalized;
     }, [vendorPurchasesList, searchQuery, vpSortBy]);
 
     if (loading) return null;
@@ -2233,7 +2898,6 @@ const Inventory = () => {
                                             <tr>
                                                 <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">PO ID</th>
                                                 <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Date</th>
-                                                <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Purchase Date</th>
                                                 <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Vendor ID</th>
                                                 <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product ID</th>
                                                 <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product Name</th>
@@ -2251,10 +2915,9 @@ const Inventory = () => {
                                         <tbody className="divide-y divide-slate-100">
                                             {filteredVendorPurchases.map((vp, idx) => (
                                                 <tr key={`vp-${idx}`} className="hover:bg-slate-50">
-                                                    <td className="px-3 py-3 font-semibold text-orange-600">{vp.PO_ID || '-'}</td>
-                                                    <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{vp.Date ? new Date(vp.Date).toLocaleDateString() : '-'}</td>
-                                                    <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{vp.Purchase_Date ? new Date(vp.Purchase_Date).toLocaleDateString() : '-'}</td>
-                                                    <td className="px-3 py-3 font-medium text-slate-700">{vp.Vendor_ID || '-'}</td>
+                                                    <td className="px-3 py-3 font-semibold text-orange-600">{vp.PO_ID || ''}</td>
+                                                    <td className="px-3 py-3 text-slate-600 whitespace-nowrap">{vp.Date ? new Date(vp.Date).toLocaleDateString() : ''}</td>
+                                                    <td className="px-3 py-3 font-medium text-slate-700">{vp.Vendor_ID || ''}</td>
                                                     <td className="px-3 py-3 text-slate-600 font-mono text-xs">{vp.Product_ID || '-'}</td>
                                                     <td className="px-3 py-3 text-slate-800 font-medium max-w-[200px] truncate" title={vp.Product_Name}>{vp.Product_Name || '-'}</td>
                                                     <td className="px-3 py-3 text-center text-slate-600">{vp.Batch || '-'}</td>
@@ -2372,32 +3035,19 @@ const Inventory = () => {
                         onSave={async (deliveryData) => {
                             setSaving(true);
                             try {
-                                const response = await fetch(`${API_URL}/record-delivery`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(deliveryData)
-                                });
-                                const result = await response.json();
+                                // Use normalized route through DataContext recordDelivery proxy
+                                const result = await recordDelivery(deliveryData);
                                 if (!result.success) {
-                                    throw new Error(result.error);
+                                    throw new Error(result.error || 'Failed to record delivery');
                                 }
 
-                                // Build success message with details
-                                const { po_products_recorded, custom_products_recorded, po_products_skipped, both_sheets_updated } = result;
-                                let successMessage = `✅ Delivery Recorded Successfully!\n\n`;
-                                successMessage += `PO Products: ${po_products_recorded} recorded`;
-                                if (po_products_skipped > 0) {
-                                    successMessage += `, ${po_products_skipped} skipped`;
+                                // For normalized route, we have message/details, not sheet counters.
+                                let successMessage = '✅ Delivery Recorded Successfully!\n\n';
+                                if (result.message) {
+                                    successMessage += result.message + '\n';
                                 }
-                                successMessage += `\n`;
-                                if (custom_products_recorded > 0) {
-                                    successMessage += `Custom Products: ${custom_products_recorded} recorded\n`;
-                                }
-
-                                if (both_sheets_updated) {
-                                    successMessage += `\n✓ Data inserted in both sheets\n✓ Status updated to "Completed"`;
-                                } else {
-                                    successMessage += `\n⚠ Partial update - Status remains "Pending"`;
+                                if (result.details) {
+                                    successMessage += result.details;
                                 }
 
                                 alert(successMessage);
