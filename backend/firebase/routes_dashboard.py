@@ -19,6 +19,8 @@ VENDORS_QUERY = """query GetVendors { vendors(limit: 1000) { vendorId vendorName
 
 WAREHOUSE_INVENTORIES_QUERY = """query GetWarehouseInventories { warehouseInventories(limit: 1000) { productId availableUnits unitsPerCase lastReceivedDate notes product { productName } } }"""
 
+WAREHOUSE_ENTRIES_QUERY = """query GetWarehouseEntries { warehouseEntries(limit: 10000) { id productId caseLabel purchasedProductCaseId availableUnits addedDate notes purchasedProductCase { id expd availableUnits } } }"""
+
 MACHINE_STOCK_ASSIGNMENTS_QUERY = """query GetMSA { machineStockAssignments(limit: 1000, orderBy: [{batch: ASC}, {stockLabel: ASC}, {coverLabel: ASC}]) { id batch assignedDate machineId stockLabel coverLabel coverStatus productId units status product { productName } } }"""
 
 VENDOR_PURCHASE_ORDERS_QUERY = """query GetVendorPurchaseOrders { vendorPurchaseOrders(limit: 1000) { purchaseOrderId poId vendorId receivedDate paymentMode paymentStatus gstFiled } }"""
@@ -109,6 +111,7 @@ def dashboard():
             ("refillLogs", REFILL_LOGS_QUERY),
             ("vendors", VENDORS_QUERY),
             ("warehouseInventories", WAREHOUSE_INVENTORIES_QUERY),
+            ("warehouseEntries", WAREHOUSE_ENTRIES_QUERY),
             ("machineStockAssignments", MACHINE_STOCK_ASSIGNMENTS_QUERY),
             ("vendorPurchaseOrders", VENDOR_PURCHASE_ORDERS_QUERY),
             ("vendorPurchaseItems", VENDOR_PURCHASE_ITEMS_QUERY),

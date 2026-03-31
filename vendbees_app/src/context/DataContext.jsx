@@ -14,6 +14,7 @@ export const DataProvider = ({ children }) => {
         refills: [],
         vendors: [],
         warehouse: [],
+        warehouse_entries: [],
         purchased_products: [],
         purchased_product_cases: [],
         stocks: [],
@@ -166,6 +167,19 @@ export const DataProvider = ({ children }) => {
                 Last_Received_Date: w.Last_Received_Date || '',
                 Notes: w.Notes || ''
             })).filter(w => w.Product_ID);
+
+            // 8x. Warehouse Entries Mapping (tracks individual cases in warehouse with expiry dates)
+            const warehouse_entries = (json.warehouseEntries || []).map(e => ({
+                id: e.id || '',
+                productId: String(e.productId || '').trim(),
+                caseLabel: e.caseLabel || '',
+                purchasedProductCaseId: e.purchasedProductCaseId || '',
+                availableUnits: parseInt(e.availableUnits || 0) || 0,
+                addedDate: e.addedDate || '',
+                notes: e.notes || '',
+                // Expiry date from linked purchasedProductCase
+                expd: e.purchasedProductCase?.expd || ''
+            })).filter(e => e.productId);
 
             // 8a. Purchased_Products Mapping (items received from vendors, pending warehouse approval)
             const purchased_products = (json.purchased_products || []).map(i => ({
@@ -363,6 +377,7 @@ export const DataProvider = ({ children }) => {
                 refills,
                 vendors,
                 warehouse,
+                warehouse_entries,
                 purchased_products,
                 purchased_product_cases: purchased_product_cases,
                 stocks,

@@ -1,17 +1,29 @@
 import React from 'react';
-import { LayoutDashboard, Monitor, Package, Archive, Box, Warehouse, FileText, Bell } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { LayoutDashboard, Monitor, Package, Archive, Box, Warehouse, Bell, LogOut, Users } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Sidebar = () => {
+    const navigate = useNavigate();
+    const { user, logout } = useAuth();
+
     const navItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
         { name: 'Machines', icon: Monitor, path: '/machines' },
         { name: 'Restock', icon: Box, path: '/restock' },
         { name: 'Inventory', icon: Archive, path: '/inventory' },
         { name: 'Warehouse', icon: Warehouse, path: '/warehouse' },
-        { name: 'Generate Bill', icon: FileText, path: '/generate-bill' },
         { name: 'Notifications', icon: Bell, path: '/notifications' },
     ];
+
+    const adminItems = user?.role === 'admin' ? [
+        { name: 'User Management', icon: Users, path: '/users' },
+    ] : [];
+
+    const handleLogout = async () => {
+        await logout();
+        navigate('/login');
+    };
 
     return (
         <div className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0 z-10">
@@ -39,7 +51,54 @@ const Sidebar = () => {
                         {item.name}
                     </NavLink>
                 ))}
+
+                {/* Admin Section */}
+                {adminItems.length > 0 && (
+                    <>
+                        <div className="my-4 pt-4 border-t border-slate-200">
+                            <p className="text-xs font-semibold text-slate-400 uppercase px-3 mb-2">Admin</p>
+                            {adminItems.map((item) => (
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    className={({ isActive }) =>
+                                        `flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${isActive
+                                            ? 'bg-orange-50 text-orange-600 font-medium'
+                                            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                                        }`
+                                    }
+                                >
+                                    <item.icon size={20} className="stroke-[1.5]" />
+                                    {item.name}
+                                </NavLink>
+                            ))}
+                        </div>
+                    </>
+                )}
             </nav>
+
+            {/* User Info & Logout */}
+            <div className="p-4 border-t border-slate-200">
+                <div className="mb-4 p-3 bg-slate-50 rounded-lg">
+                    <p className="text-xs text-slate-500 uppercase font-semibold">Logged in as</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-1">{user?.fullName || user?.email}</p>
+                    <p className="text-xs text-slate-400 mt-1">{user?.email}</p>
+                    <span className={`inline-block text-xs font-semibold mt-2 px-2 py-1 rounded ${
+                        user?.role === 'admin' 
+                            ? 'bg-red-100 text-red-700' 
+                            : 'bg-blue-100 text-blue-700'
+                    }`}>
+                        {user?.role?.toUpperCase()}
+                    </span>
+                </div>
+                <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors font-medium"
+                >
+                    <LogOut size={20} className="stroke-[1.5]" />
+                    Logout
+                </button>
+            </div>
         </div>
     );
 };

@@ -1,0 +1,94 @@
+
+=== add-from-purchase request ===
+Request data: {'product_id': 'BING009', 'units_to_add': 56, 'notes': ''}
+product_id=BING009, units_to_add=56
+Fetching all cases...
+Executing cases query...
+Cases query response keys: ['purchasedProductCases']
+Total cases fetched: 6
+Sample case keys: ['id', 'caseLabel', 'purchasedProductBatchId', 'expd', 'availableUnits']
+Sample case: {'id': 'e95bf08d126c4be9b9233ea070243863', 'caseLabel': 'VP-20260326005102-A103_BING001_c2', 'purchasedProductBatchId': 'e64ed65e81e3413ba2c50ed3f67fe57f', 'expd': '2026-08-26T00:00:00.000000Z', 'availableUnits': 60}
+Fetching all batches...
+Total batches fetched: 3
+Batch IDs for product BING009: ['9eb042ae77a34759bf012195a44a68ad']
+  Added case: Custom_BING009_c1 from batch 9eb042ae77a34759bf012195a44a68ad
+  Added case: Custom_BING009_c2 from batch 9eb042ae77a34759bf012195a44a68ad
+Filtered to 2 cases for product BING009
+Processing case Custom_BING009_c1: id=f6ed37eb5e0f4c0d8e15669b119360f0, available=56, expd=2026-08-23T00:00:00.000000Z
+  Allocated 56 from Custom_BING009_c1
+Allocation complete: 1 cases used
+Updating case Custom_BING009_c1: {'caseId': 'f6ed37eb5e0f4c0d8e15669b119360f0', 'availableUnits': 0}
+Case update result: {'purchasedProductCase_update': {'id': 'f6ed37eb5e0f4c0d8e15669b119360f0'}}
+Inserting warehouse entry: {'productId': 'BING009', 'caseLabel': 'Custom_BING009_c1', 'purchasedProductCaseId': 'f6ed37eb5e0f4c0d8e15669b119360f0', 'availableUnits': 56, 'addedDate': '2026-03-29T02:57:14Z', 'notes': 'Added to warehouse from Custom_BING009_c1'}
+ERROR processing allocation Custom_BING009_c1: Cannot query field "id" on type "WarehouseEntry_KeyOutput".
+
+EXCEPTION: [warehouse] Error adding to warehouse: Cannot query field "id" on type "WarehouseEntry_KeyOutput".
+Full error: Exception('Cannot query field "id" on type "WarehouseEntry_KeyOutput".')
+
+=== add-from-purchase request ===
+Request data: {'product_id': 'BING009', 'units_to_add': 56, 'notes': ''}
+product_id=BING009, units_to_add=56
+Fetching all cases...
+Executing cases query...
+Cases query response keys: ['purchasedProductCases']
+Total cases fetched: 6
+Sample case keys: ['expd', 'availableUnits', 'id', 'caseLabel', 'purchasedProductBatchId']
+Sample case: {'expd': '2026-08-26T00:00:00.000000Z', 'availableUnits': 60, 'id': 'e95bf08d126c4be9b9233ea070243863', 'caseLabel': 'VP-20260326005102-A103_BING001_c2', 'purchasedProductBatchId': 'e64ed65e81e3413ba2c50ed3f67fe57f'}
+Fetching all batches...
+Total batches fetched: 3
+Batch IDs for product BING009: ['9eb042ae77a34759bf012195a44a68ad']
+  Added case: Custom_BING009_c2 from batch 9eb042ae77a34759bf012195a44a68ad
+Filtered to 1 cases for product BING009
+Processing case Custom_BING009_c2: id=379296b5824944e4991a8131deefb882, available=56, expd=2026-08-27T00:00:00.000000Z
+  Allocated 56 from Custom_BING009_c2
+Allocation complete: 1 cases used
+Updating case Custom_BING009_c2: {'caseId': '379296b5824944e4991a8131deefb882', 'availableUnits': 0}
+Case update result: {'purchasedProductCase_update': {'id': '379296b5824944e4991a8131deefb882'}}
+Inserting warehouse entry: {'productId': 'BING009', 'caseLabel': 'Custom_BING009_c2', 'purchasedProductCaseId': '379296b5824944e4991a8131deefb882', 'availableUnits': 56, 'addedDate': '2026-03-29T02:57:23Z', 'notes': 'Added to warehouse from Custom_BING009_c2'}
+ERROR processing allocation Custom_BING009_c2: Cannot query field "id" on type "WarehouseEntry_KeyOutput".
+
+EXCEPTION: [warehouse] Error adding to warehouse: Cannot query field "id" on type "WarehouseEntry_KeyOutput".
+Full error: Exception('Cannot query field "id" on type "WarehouseEntry_KeyOutput".')
+
+=== add-from-purchase request ===
+Request data: {'product_id': 'BING009', 'units_to_add': 56, 'notes': ''}
+product_id=BING009, units_to_add=56
+Fetching all cases...
+Executing cases query...
+Cases query response keys: ['purchasedProductCases']
+Total cases fetched: 6
+Sample case keys: ['id', 'caseLabel', 'purchasedProductBatchId', 'expd', 'availableUnits']
+Sample case: {'id': 'e95bf08d126c4be9b9233ea070243863', 'caseLabel': 'VP-20260326005102-A103_BING001_c2', 'purchasedProductBatchId': 'e64ed65e81e3413ba2c50ed3f67fe57f', 'expd': '2026-08-26T00:00:00.000000Z', 'availableUnits': 60}
+Fetching all batches...
+Total batches fetched: 3
+Batch IDs for product BING009: ['9eb042ae77a34759bf012195a44a68ad']
+Filtered to 0 cases for product BING009
+ERROR: No available cases found for product BING009
+
+=== add-from-purchase request ===
+Request data: {'product_id': 'BING005', 'units_to_add': 75, 'notes': ''}
+product_id=BING005, units_to_add=75
+Fetching all cases...
+Executing cases query...
+Cases query response keys: ['purchasedProductCases']
+Total cases fetched: 6
+Sample case keys: ['id', 'caseLabel', 'purchasedProductBatchId', 'expd', 'availableUnits']
+Sample case: {'id': 'e95bf08d126c4be9b9233ea070243863', 'caseLabel': 'VP-20260326005102-A103_BING001_c2', 'purchasedProductBatchId': 'e64ed65e81e3413ba2c50ed3f67fe57f', 'expd': '2026-08-26T00:00:00.000000Z', 'availableUnits': 60}
+Fetching all batches...
+Total batches fetched: 3
+Batch IDs for product BING005: ['ae7cfa511f164fe6bd938aa08e2f2d1b']
+  Added case: VP-20260326005102-A103_BING005_c1 from batch ae7cfa511f164fe6bd938aa08e2f2d1b
+  Added case: VP-20260326005102-A103_BING005_c2 from batch ae7cfa511f164fe6bd938aa08e2f2d1b
+Filtered to 2 cases for product BING005
+Processing case VP-20260326005102-A103_BING005_c1: id=2048e26c117b42ba9b921fae770630be, available=56, expd=2026-03-30T00:00:00.000000Z
+  Allocated 56 from VP-20260326005102-A103_BING005_c1
+Processing case VP-20260326005102-A103_BING005_c2: id=226094a303ec4a7b8bcacf5fb72e3a48, available=56, expd=2026-04-02T00:00:00.000000Z
+  Allocated 19 from VP-20260326005102-A103_BING005_c2
+Allocation complete: 2 cases used
+Updating case VP-20260326005102-A103_BING005_c1: {'caseId': '2048e26c117b42ba9b921fae770630be', 'availableUnits': 0}
+Case update result: {'purchasedProductCase_update': {'id': '2048e26c117b42ba9b921fae770630be'}}
+Inserting warehouse entry: {'productId': 'BING005', 'caseLabel': 'VP-20260326005102-A103_BING005_c1', 'purchasedProductCaseId': '2048e26c117b42ba9b921fae770630be', 'availableUnits': 56, 'addedDate': '2026-03-30T23:57:55Z', 'notes': 'Added to warehouse from VP-20260326005102-A103_BING005_c1'}
+ERROR processing allocation VP-20260326005102-A103_BING005_c1: Cannot query field "id" on type "WarehouseEntry_KeyOutput".
+
+EXCEPTION: [warehouse] Error adding to warehouse: Cannot query field "id" on type "WarehouseEntry_KeyOutput".
+Full error: Exception('Cannot query field "id" on type "WarehouseEntry_KeyOutput".')

@@ -37,3 +37,46 @@ auth_session = get_auth_session()
 print(f"Data Connect Session initialized with endpoint: {DATACONNECT_ENDPOINT}")
 
 
+class DataConnectSession:
+    """Wrapper around AuthorizedSession to execute GraphQL queries against Data Connect."""
+    
+    def __init__(self, auth_session, endpoint):
+        self.auth_session = auth_session
+        self.endpoint = endpoint
+    
+    def execute_graphql(self, query: str, variables: dict = None):
+        """Execute a GraphQL query against Data Connect.
+        
+        Args:
+            query: GraphQL query/mutation string
+            variables: Dictionary of variables for the query
+            
+        Returns:
+            Dictionary with response data
+        """
+        if variables is None:
+            variables = {}
+        
+        payload = {
+            "query": query,
+            "variables": variables
+        }
+        
+        try:
+            response = self.auth_session.post(
+                self.endpoint,
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"GraphQL request failed: {e}")
+            raise
+
+
+def get_session():
+    """Get a Data Connect session for executing GraphQL queries."""
+    return DataConnectSession(auth_session, DATACONNECT_ENDPOINT)
+
+

@@ -176,6 +176,29 @@ type WarehouseInventory @table(key: "productId") {
   product: Product! @ref(fields: "productId")
 }
 
+# WAREHOUSE ENTRY: Tracks individual case units added to warehouse
+type WarehouseEntry @table(key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+
+  # Product reference
+  productId: String!
+
+  # Case reference (from PurchasedProductCase)
+  caseLabel: String!              # Unique identifier: e.g., "PO123_PROD456_c1" (denormalized for easy access)
+  purchasedProductCaseId: UUID!   # Link to PurchasedProductCase to get expiry dates
+
+  # Warehouse inventory tracking
+  availableUnits: Int!            # Units still available in warehouse from this case (decremented when transferred)
+
+  # Metadata
+  addedDate: Timestamp!
+  notes: String
+
+  # Relations
+  product: Product! @ref(fields: "productId")
+  purchasedProductCase: PurchasedProductCase! @ref(fields: "purchasedProductCaseId")
+}
+
 # ==============================
 # MACHINE STOCK TABLES
 # ==============================
@@ -254,4 +277,39 @@ type RefillLog @table(key: "refillId") {
 
   machine: Machine! @ref(fields: "machineId")
   product: Product! @ref(fields: "productId")
+}
+
+# ==============================
+# AUTHENTICATION & USER MANAGEMENT
+# ==============================
+
+type UserRole @table(key: "roleId") {
+  roleId: String!
+  roleName: String!      # "admin" or "user"
+  permissions: [String]  # Array of permissions
+  description: String
+}
+
+type User @table(key: "userId") {
+  userId: String!
+  email: String!         # Unique email
+  fullName: String
+  passwordHash: String!  # bcrypt hashed password
+  role: String!          # "admin" or "user"
+  status: String!        # "active" or "inactive"
+  createdAt: Timestamp!
+  createdBy: String      # Admin who created this user (userId)
+  lastLogin: Timestamp
+  updatedAt: Timestamp!
+}
+
+type AuditLog @table(key: "logId") {
+  logId: String!
+  userId: String!        # Who performed the action
+  action: String!        # LOGIN, LOGOUT, CREATE_USER, UPDATE_USER, DELETE_USER, CHANGE_PASSWORD, etc.
+  resourceType: String   # "user", "product", "order", etc.
+  resourceId: String     # ID of the resource affected
+  details: String        # JSON details of the action
+  timestamp: Timestamp!
+  ipAddress: String
 }
