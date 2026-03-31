@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { X, Plus, Trash2, Download } from 'lucide-react';
 import clsx from 'clsx';
 import { generateInvoicePDF } from '../utils/invoiceUtils';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 
-const GenerateBillModal = ({ isOpen, onClose }) => {
-    const navigate = useNavigate();
+const GenerateBillModal = ({ isOpen, onClose, onSuccess }) => {
+    const { token } = useAuth();
     // Get Firebase data directly from context
     const { purchased_product_cases: purchased_products, products } = useData();
     const [billItems, setBillItems] = useState([]);
@@ -268,11 +268,16 @@ const GenerateBillModal = ({ isOpen, onClose }) => {
     // Clear all bill items
     const handleClearBill = () => {
         if (billItems.length === 0) {
-            navigate('/');
+            alert('No items to clear');
             return;
         }
-        if (window.confirm('Are you sure you want to clear all items and go to Dashboard?')) {
-            navigate('/');
+        if (window.confirm('Are you sure you want to clear all items?')) {
+            setBillItems([]);
+            setSelectedProductId('');
+            setSelectedQuantity('');
+            setSelectedCases('');
+            setSearchTerm('');
+            setShowProductSuggestions(false);
         }
     };
 
@@ -285,7 +290,65 @@ const GenerateBillModal = ({ isOpen, onClose }) => {
 
         setGenerating(true);
         try {
+            // Generate PDF
             await generateInvoicePDF(billItems, billDate);
+            
+            // Generate bill number to save to database
+            const invoiceDate = new Date(billDate);
+            const billNumber = `INV-${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}-${String(invoiceDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+            
+            // Calculate totals
+            const totalAmount = billItems.reduce((sum, item) => sum + item.Total_Amount, 0);
+            const totalProducts = billItems.length; // Unique line items
+            const totalItems = billItems.reduce((sum, item) => sum + item.Quantity, 0);
+            
+            // Prepare bill data as stringified JSON
+            const billData = JSON.stringify({
+                billNumber,
+                billDate,
+                items: billItems,
+                totalAmount,
+                totalProducts,
+                totalItems,
+                gst: billItems.reduce((sum, item) => sum + (item.Total_Amount * item.GST), 0),
+                grandTotal: totalAmount + billItems.reduce((sum, item) => sum + (item.Total_Amount * item.GST), 0)
+            });
+            
+            // Save bill to database via API
+            const response = await fetch('http://localhost:3002/api/bills/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    billNumber,
+                    totalAmount,
+                    totalProducts,
+                    totalItems,
+                    billData
+                })
+            });
+            
+            if (response.ok) {
+                // Clear bill items and trigger history refresh
+                setBillItems([]);
+                setSelectedProductId('');
+                setSelectedQuantity('');
+                setSelectedCases('');
+                setSearchTerm('');
+                
+                // Call parent callback to refresh bill history
+                if (onSuccess) {
+                    onSuccess();
+                }
+                
+                alert('Bill generated and saved successfully!');
+            } else {
+                const errorData = await response.json();
+                console.error('Error saving bill:', errorData);
+                alert('Bill generated but failed to save to history. Please try again.');
+            }
         } catch (error) {
             console.error('Error generating bill:', error);
             alert('Failed to generate bill. Please try again.');
@@ -313,7 +376,7 @@ const GenerateBillModal = ({ isOpen, onClose }) => {
                         <p className="text-orange-100 text-sm">Create and download bill from purchased products</p>
                     </div>
                     <button
-                        onClick={() => navigate('/')}
+                        onClick={onClose}
                         className="p-2 hover:bg-orange-700 rounded-lg transition"
                     >
                         <X size={24} />
@@ -679,7 +742,7 @@ const GenerateBillModal = ({ isOpen, onClose }) => {
                     {/* Action Buttons */}
                     <div className="flex gap-3 pt-4 border-t border-slate-200">
                         <button
-                            onClick={() => navigate('/')}
+                            onClick={onClose}
                             className="px-6 py-3 border-2 border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg font-medium transition"
                         >
                             Cancel

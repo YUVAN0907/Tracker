@@ -313,3 +313,29 @@ type AuditLog @table(key: "logId") {
   timestamp: Timestamp!
   ipAddress: String
 }
+
+# ==============================
+# BILL HISTORY & INVOICING
+# ==============================
+
+type BillHistory @table(key: "billId") {
+  billId: String!
+  userId: String!                # User who generated the bill
+  billNumber: String!            # Invoice/Bill number
+  billDate: Timestamp!
+  totalAmount: Float!            # Total amount of bill
+  totalProducts: Int!            # Total number of products in bill
+  totalItems: Int!               # Total quantity of items
+  billData: String               # JSON data of bill (serialized)
+  downloadedAt: Timestamp        # When bill was downloaded
+  downloadCount: Int! @default(value: 0)
+  status: String! @default(value: "generated")  # generated, downloaded, archived
+  notes: String
+  
+  # Metadata
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+  
+  # Optional relation to user
+  user: User! @ref(fields: "userId")
+}

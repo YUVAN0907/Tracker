@@ -80,6 +80,13 @@ try:
 except Exception as e:
     print(f"[DEBUG] ❌ Failed to import stocks_batch_bp: {e}")
 
+try:
+    from routes_bills import bills_bp
+    print("[DEBUG] ✅ bills_bp imported successfully")
+except Exception as e:
+    print(f"[DEBUG] ❌ Failed to import bills_bp: {e}")
+    bills_bp = None
+
 print("[DEBUG] All imports completed")
 
 # --------------------------------------------------
@@ -112,6 +119,12 @@ print("[DEBUG] ✅ warehouse_bp registered")
 
 app.register_blueprint(stocks_batch_bp)
 print("[DEBUG] ✅ stocks_batch_bp registered")
+
+if bills_bp:
+    app.register_blueprint(bills_bp)
+    print("[DEBUG] ✅ bills_bp registered")
+else:
+    print("[DEBUG] ❌ bills_bp is None, skipping registration")
 
 print("[DEBUG] All blueprints registered")
 
