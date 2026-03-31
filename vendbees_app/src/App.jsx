@@ -10,6 +10,8 @@ import Warehouse from "./pages/Warehouse";
 import Notifications from "./pages/Notifications";
 import LoginPage from "./pages/LoginPage";
 import UserManagement from "./pages/UserManagement";
+import Complaints from "./pages/Complaints";
+import GenerateBill from "./pages/GenerateBill";
 import { DataProvider } from "./context/DataContext";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -32,6 +34,8 @@ function App() {
                 <Route path="restock/create-batch" element={<CreateBatchPage />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="warehouse" element={<Warehouse />} />
+                <Route path="complaints" element={<Complaints />} />
+                <Route path="generate-bill" element={<GenerateBill />} />
                 <Route path="notifications" element={<Notifications />} />
               </Route>
             </Route>
