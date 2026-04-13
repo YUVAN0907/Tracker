@@ -14,6 +14,8 @@ export const DataProvider = ({ children }) => {
         refills: [],
         vendors: [],
         warehouse: [],
+        warehouses: [],
+        warehouseStocks: [],
         warehouse_entries: [],
         purchased_products: [],
         purchased_product_cases: [],
@@ -159,27 +161,77 @@ export const DataProvider = ({ children }) => {
             }).filter(v => v.Vendor_ID && v.Vendor_ID !== 'VENDOR ID');
 
             // 8. Warehouse Mapping
-            const warehouse = (json.warehouse || []).map(w => ({
-                Product_ID: String(w.Product_ID || '').trim(),
-                Product_Name: w.Product_Name || '',
-                Available_Units: parseInt(w.Available_Units || 0) || 0,
-                Units_Per_Case: parseInt(w.Units_Per_Case || 1) || 1,
-                Last_Received_Date: w.Last_Received_Date || '',
-                Notes: w.Notes || ''
+            const rawWarehouseStocks = json.warehouseStocks || [];
+            const warehouseStocks = rawWarehouseStocks.map(w => ({
+                Stock_ID: w.Stock_ID || w.stockId || '',
+                Warehouse_ID: w.Warehouse_ID || w.warehouseId || '',
+                Warehouse_Name: w.Warehouse_Name || w.warehouseName || (w.warehouse || {}).name || '',
+                Location: w.Location || w.location || (w.warehouse || {}).location || '',
+                PO_ID: w.PO_ID || w.poId || '',
+                Product_ID: String(w.Product_ID || w.productId || '').trim(),
+                Product_Name: w.Product_Name || w.productName || (w.product || {}).productName || '',
+                Batch: w.Batch || w.batch || null,
+                Units_Per_Case: parseInt(w.Units_Per_Case || w.unitsPerCase || 1) || 1,
+                Case_Label: w.Case_Label || w.caseLabel || '',
+                Available_Units: parseInt(w.Available_Units || w.availableUnits || 0) || 0,
+                Received_Date: w.Received_Date || w.receivedDate || '',
+                MFD: w.MFD || w.mfd || '',
+                EXPD: w.EXPD || w.expd || '',
+                Notes: w.Notes || w.notes || ''
             })).filter(w => w.Product_ID);
 
-            // 8x. Warehouse Entries Mapping (tracks individual cases in warehouse with expiry dates)
-            const warehouse_entries = (json.warehouseEntries || []).map(e => ({
-                id: e.id || '',
-                productId: String(e.productId || '').trim(),
-                caseLabel: e.caseLabel || '',
-                purchasedProductCaseId: e.purchasedProductCaseId || '',
-                availableUnits: parseInt(e.availableUnits || 0) || 0,
-                addedDate: e.addedDate || '',
-                notes: e.notes || '',
-                // Expiry date from linked purchasedProductCase
-                expd: e.purchasedProductCase?.expd || ''
-            })).filter(e => e.productId);
+            const warehouse = Object.values(rawWarehouseStocks.reduce((acc, w) => {
+                const productId = String(w.productId || w.Product_ID || '').trim();
+                if (!productId) return acc;
+                const availableUnits = parseInt(w.availableUnits || w.Available_Units || 0) || 0;
+                const unitsPerCase = parseInt(w.unitsPerCase || w.Units_Per_Case || 1) || 1;
+                const receivedDate = w.receivedDate || w.Received_Date || '';
+                const notes = w.notes || w.Notes || '';
+                if (!acc[productId]) {
+                    acc[productId] = {
+                        Product_ID: productId,
+                        Product_Name: (w.product || {}).productName || w.productName || w.Product_Name || 'Unknown Product',
+                        Available_Units: 0,
+                        Units_Per_Case: unitsPerCase,
+                        Last_Received_Date: receivedDate,
+                        Notes: notes
+                    };
+                }
+                acc[productId].Available_Units += availableUnits;
+                if (receivedDate && receivedDate > acc[productId].Last_Received_Date) {
+                    acc[productId].Last_Received_Date = receivedDate;
+                }
+                if (!acc[productId].Notes && notes) {
+                    acc[productId].Notes = notes;
+                }
+                return acc;
+            }, {}));
+
+            const warehouse_entries = warehouseStocks.map(e => ({
+                id: e.Stock_ID,
+                productId: e.Product_ID,
+                productName: e.Product_Name,
+                poId: e.PO_ID,
+                caseLabel: e.Case_Label,
+                purchasedProductCaseId: '',
+                availableUnits: e.Available_Units,
+                addedDate: e.Received_Date,
+                notes: e.Notes,
+                expd: e.EXPD,
+                mfd: e.MFD,
+                warehouseId: e.Warehouse_ID,
+                warehouseName: e.Warehouse_Name
+            }));
+
+            const warehouses = (json.warehouses || []).map(w => ({
+                Warehouse_ID: w.Warehouse_ID || w.warehouseId || '',
+                Warehouse_Name: w.Warehouse_Name || w.name || '',
+                Location: w.Location || w.location || '',
+                Address: w.Address || w.address || '',
+                Notes: w.Notes || w.notes || '',
+                Created_At: w.Created_At || w.createdAt || '',
+                Updated_At: w.Updated_At || w.updatedAt || ''
+            })).filter(w => w.Warehouse_ID);
 
             // 8a. Purchased_Products Mapping (items received from vendors, pending warehouse approval)
             const purchased_products = (json.purchased_products || []).map(i => ({
@@ -377,6 +429,8 @@ export const DataProvider = ({ children }) => {
                 refills,
                 vendors,
                 warehouse,
+                warehouses,
+                warehouseStocks,
                 warehouse_entries,
                 purchased_products,
                 purchased_product_cases: purchased_product_cases,

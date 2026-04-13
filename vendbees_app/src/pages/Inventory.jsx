@@ -22,7 +22,7 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
         xl: 'max-w-4xl'
     };
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} mx-4 max-h-[90vh] overflow-hidden flex flex-col`} onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0">
                     <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
@@ -668,7 +668,7 @@ const MultiPOForm = ({ products, vendors, warehouse, onSave, onCancel, saving })
 };
 
 // Comprehensive Delivery Recording Form (for recording stock-in from vendor) - All products in PO + Custom products
-const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [] }) => {
+const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [], warehouses = [] }) => {
     const today = new Date().toISOString().split('T')[0];
     // Use local backend for normalized delivery recording (falls back to production if not available)
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
@@ -680,6 +680,13 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
     const [paymentMode, setPaymentMode] = useState('Cash');
     const [paymentStatus, setPaymentStatus] = useState('Pending');
     const [gstFiled, setGstFiled] = useState('No');
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses?.[0]?.Warehouse_ID || '');
+
+    useEffect(() => {
+        if (!selectedWarehouseId && warehouses && warehouses.length > 0) {
+            setSelectedWarehouseId(warehouses[0].Warehouse_ID);
+        }
+    }, [warehouses, selectedWarehouseId]);
 
     // Map of productId -> {productName, selfLife}
     const [productsMap, setProductsMap] = useState({});
@@ -688,7 +695,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
     const [newCustomProduct, setNewCustomProduct] = useState({
         product_id: '',
         product_name: '',
-        case_count: 0,
+        case_count: '',
         units_per_case: 1,
         po_price: '',
         batch: 1,
@@ -712,7 +719,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             setNewCustomProduct({
                 product_id: '',
                 product_name: '',
-                case_count: 0,
+                case_count: '',
                 units_per_case: 1,
                 po_price: '',
                 batch: 1,
@@ -727,7 +734,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             setNewCustomProduct({
                 product_id: selectedProduct.Product_ID,
                 product_name: selectedProduct.Name || selectedProduct.Product_Name || '',
-                case_count: 0,
+                case_count: '',
                 units_per_case: selectedProduct.Units_Per_Case || 1,
                 po_price: selectedProduct.PO_Price || selectedProduct.MRP || '',
                 batch: 1,
@@ -739,12 +746,14 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
 
     // Handle case count change for custom products
     const handleCustomProductCaseCountChange = (value) => {
-        const caseCount = parseInt(value) || 0;
+        const caseCount = value === '' ? '' : parseInt(value, 10);
         const currentCases = (newCustomProduct.cases || []).length;
         
         let updatedCases = [...(newCustomProduct.cases || [])];
         
-        if (caseCount > currentCases) {
+        if (caseCount === '' || caseCount <= 0) {
+            updatedCases = [];
+        } else if (caseCount > currentCases) {
             // Add new cases
             for (let i = currentCases; i < caseCount; i++) {
                 const caseNumber = i + 1;
@@ -764,7 +773,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         
         setNewCustomProduct({
             ...newCustomProduct,
-            case_count: caseCount,
+            case_count: value,
             cases: updatedCases
         });
     };
@@ -807,7 +816,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                 po_price: item.PO_Price || '',
                 mrp: productInfo?.MRP || '',
                 batch: 1, // Default batch number
-                case_count: 0, // Track how many cases to generate (for quantity calculation)
+                case_count: '', // Track how many cases to generate (for quantity calculation)
                 cases: [] // Array of case objects: {caseNumber, unitsPerCase, mfd, expd, caseLabel}
             };
         });
@@ -997,10 +1006,12 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             
             if (field === 'case_count') {
                 // When case count changes, auto-generate case blocks
-                const caseCount = parseInt(value) || 0;
+                const caseCount = value === '' ? '' : parseInt(value, 10);
                 const currentCases = product.cases.length;
                 
-                if (caseCount > currentCases) {
+                if (caseCount === '' || caseCount <= 0) {
+                    product.cases = [];
+                } else if (caseCount > currentCases) {
                     // Add new cases
                     for (let i = currentCases; i < caseCount; i++) {
                         const caseNumber = i + 1;
@@ -1018,7 +1029,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                     product.cases = product.cases.slice(0, caseCount);
                 }
                 // Update the case_count field
-                product.case_count = caseCount;
+                product.case_count = value;
             } else {
                 product[field] = value;
             }
@@ -1085,6 +1096,11 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
 
         if (!gstFiled) {
             alert('Please select GST Filed');
+            return;
+        }
+
+        if (!selectedWarehouseId) {
+            alert('Please select a warehouse for this delivery');
             return;
         }
 
@@ -1179,6 +1195,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         onSave({
             po_id: poData.po_id,
             vendor_id: poData.vendor_id,
+            warehouse_id: selectedWarehouseId,
             payment_mode: paymentMode,
             payment_status: paymentStatus,
             gst_filed: gstFiled,
@@ -1261,7 +1278,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
 
     const handleAddCustomProduct = (e) => {
         e.preventDefault();
-        if (!newCustomProduct.product_id || !newCustomProduct.product_name || newCustomProduct.case_count <= 0) {
+        if (!newCustomProduct.product_id || !newCustomProduct.product_name || !newCustomProduct.case_count || parseInt(newCustomProduct.case_count, 10) <= 0) {
             alert('Please fill in all required fields');
             return;
         }
@@ -1269,7 +1286,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         setNewCustomProduct({
             product_id: '',
             product_name: '',
-            case_count: 0,
+            case_count: '',
             units_per_case: 1,
             po_price: '',
             batch: 1,
@@ -1324,7 +1341,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
 
             {/* Payment Info */}
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">Payment Mode *</label>
                         <select
@@ -1363,6 +1380,22 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                         >
                             <option value="Yes">Yes</option>
                             <option value="No">No</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Warehouse *</label>
+                        <select
+                            value={selectedWarehouseId}
+                            onChange={e => setSelectedWarehouseId(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                            required
+                        >
+                            <option value="">Select Warehouse</option>
+                            {warehouses.map(wh => (
+                                <option key={wh.Warehouse_ID} value={wh.Warehouse_ID}>
+                                    {wh.Warehouse_Name} {wh.Location ? `- ${wh.Location}` : ''}
+                                </option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -1426,9 +1459,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                             "w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:border-orange-500",
                                             parseInt(product.case_count) > 0 ? "border-green-400 bg-green-100" : "border-slate-200"
                                         )}
-                                        placeholder="0"
-                                        min="0"
-                                        max={product.ordered_cases}
+                                        placeholder=""
                                     />
                                 </div>
                                 <div>
@@ -1594,8 +1625,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                             "w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:border-orange-500",
                                             parseInt(newCustomProduct.case_count) > 0 ? "border-green-400 bg-green-100" : "border-slate-200"
                                         )}
-                                        placeholder="0"
-                                        min="1"
+                                        placeholder=""
                                     />
                                 </div>
                                 <div>
@@ -2096,7 +2126,7 @@ const NewVendorPurchaseForm = ({ products, vendors, onSave, onCancel, saving }) 
 };
 
 const Inventory = () => {
-    const { products, purchases, vendors, warehouse, ourPOs, vendorDeliveries, vendorPurchasesList, loading, refreshData, addToWarehouse, createMultiPO, recordDelivery, fetchVendorPurchases } = useData();
+    const { products, purchases, vendors, warehouse, warehouses, ourPOs, vendorDeliveries, vendorPurchasesList, loading, refreshData, addToWarehouse, createMultiPO, recordDelivery, fetchVendorPurchases } = useData();
     const [activeTab, setActiveTab] = useState('Product Master');
     const [poSubTab, setPoSubTab] = useState('Your PO'); // Sub-tab for Purchase Orders
     const [showGenerateBill, setShowGenerateBill] = useState(false); // Modal for generating bills
@@ -3032,6 +3062,7 @@ const Inventory = () => {
                         poData={poDataForDelivery}
                         products={products}
                         vendors={vendors}
+                        warehouses={warehouses}
                         onSave={async (deliveryData) => {
                             setSaving(true);
                             try {

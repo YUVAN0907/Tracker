@@ -130,6 +130,47 @@ mutation InsertPurchasedProductCase(
 }
 """
 
+GET_WAREHOUSE_QUERY = """
+query GetWarehouseById($warehouseId: String!) {
+  warehouses(where: { warehouseId: { eq: $warehouseId } }) {
+    warehouseId
+  }
+}
+"""
+
+# Insert into WarehouseStock for warehouse-level inventory tracking
+INSERT_WAREHOUSE_STOCK_MUTATION = """
+mutation InsertWarehouseStock(
+  $warehouseId: String!,
+  $poId: String,
+  $productId: String!,
+  $batch: Int,
+  $unitsPerCase: Int,
+  $caseLabel: String,
+  $availableUnits: Int!,
+  $mfd: Timestamp,
+  $expd: Timestamp,
+  $receivedDate: Timestamp,
+  $notes: String
+) {
+  warehouseStock_insert(data: {
+    warehouseId: $warehouseId,
+    poId: $poId,
+    productId: $productId,
+    batch: $batch,
+    unitsPerCase: $unitsPerCase,
+    caseLabel: $caseLabel,
+    availableUnits: $availableUnits,
+    mfd: $mfd,
+    expd: $expd,
+    receivedDate: $receivedDate,
+    notes: $notes,
+    createdAt: $receivedDate,
+    updatedAt: $receivedDate
+  })
+}
+"""
+
 # Insert batch - Data Connect auto-generates UUID when id is not provided
 GET_OR_CREATE_BATCH_MUTATION = """
 mutation InsertPurchasedProductBatch(
@@ -313,6 +354,7 @@ def record_delivery():
         
         po_id = str(data.get('po_id', data.get('PO_ID', ''))).strip()
         vendor_id_parent = str(data.get('vendor_id', data.get('Vendor_ID', ''))).strip()
+        warehouse_id = str(data.get('warehouse_id', data.get('warehouseId', data.get('Warehouse_ID', '')))).strip()
         items = data.get('items', [])
 
         payment_mode = str(data.get('payment_mode', data.get('paymentMode', 'Cash')) or 'Cash').strip()
@@ -325,6 +367,22 @@ def record_delivery():
         if not po_id or not items:
             error_msg = f'PO ID and items are required. Got: po_id={po_id}, items_count={len(items)}'
             print(f"[record_delivery] Validation error: {error_msg}", file=sys.stderr, flush=True)
+            return jsonify({'error': error_msg}), 400
+
+        if not warehouse_id:
+            error_msg = 'Warehouse ID is required for delivery recording.'
+            print(f"[record_delivery] Validation error: {error_msg}", file=sys.stderr, flush=True)
+            return jsonify({'error': error_msg}), 400
+
+        try:
+            warehouse_check = execute_graphql(GET_WAREHOUSE_QUERY, {"warehouseId": warehouse_id})
+            if not warehouse_check or not warehouse_check.get('warehouses'):
+                error_msg = f'Warehouse {warehouse_id} not found.'
+                print(f"[record_delivery] Validation error: {error_msg}", file=sys.stderr, flush=True)
+                return jsonify({'error': error_msg}), 400
+        except Exception as wh_err:
+            error_msg = f'Error verifying warehouse: {wh_err}'
+            print(f"[record_delivery] {error_msg}", file=sys.stderr, flush=True)
             return jsonify({'error': error_msg}), 400
         
         print(f"[record_delivery] Validation passed. Starting processing...", file=sys.stderr, flush=True)
@@ -394,6 +452,24 @@ def record_delivery():
             batch = int(item.get('batch', item.get('Batch', 1)))
             cases = item.get('cases', [])
             product_notes = str(item.get('notes', '')).strip()
+            
+            # Deduplicate cases by case label, manufacture date, expiry date, and units per case
+            unique_cases = []
+            seen_case_keys = set()
+            for case in cases:
+                case_label = str(case.get('case_label', case.get('caseLabel', '') or '')).strip()
+                mfd_val = str(case.get('mfd', case.get('ManufactureDate', '') or '')).strip()
+                expd_val = str(case.get('expd', case.get('ExpiryDate', '') or '')).strip()
+                units_per_case_val = int(case.get('units_per_case', case.get('unitsPerCase', 1)) or 1)
+                case_key = (case_label, mfd_val, expd_val, units_per_case_val)
+                if case_key in seen_case_keys:
+                    continue
+                seen_case_keys.add(case_key)
+                unique_cases.append(case)
+
+            if len(unique_cases) < len(cases):
+                print(f"[record_delivery] Removed {len(cases) - len(unique_cases)} duplicate case(s) for product {product_id}", file=sys.stderr, flush=True)
+            cases = unique_cases
             
             is_custom = 'Custom_' in product_id or product_id not in [b.get('poId') for b in purchased_product_batches_out] if 'purchased_product_batches_out' in locals() else False
             item_type = 'CUSTOM' if is_custom else 'PO'
@@ -557,7 +633,28 @@ def record_delivery():
                     case_result = execute_graphql(INSERT_PURCHASED_PRODUCT_CASE_MUTATION, case_vars)
                     insertion_count += 1
                     print(f"[record_delivery] ✓ Case {case_label} inserted successfully", file=sys.stderr, flush=True)
-                    
+
+                    # Insert corresponding warehouse stock record for this delivered case
+                    try:
+                        warehouse_stock_vars = {
+                            "warehouseId": warehouse_id,
+                            "poId": po_id,
+                            "productId": product_id,
+                            "batch": batch,
+                            "unitsPerCase": units_per_case,
+                            "caseLabel": case_label,
+                            "availableUnits": units_received,
+                            "mfd": format_timestamp(mfd_dt),
+                            "expd": format_timestamp(expd_dt),
+                            "receivedDate": received_date,
+                            "notes": product_notes or f"Delivered via PO {po_id}"
+                        }
+                        execute_graphql(INSERT_WAREHOUSE_STOCK_MUTATION, warehouse_stock_vars)
+                        print(f"[record_delivery] ✓ WarehouseStock record inserted for case {case_label}", file=sys.stderr, flush=True)
+                    except Exception as warehouse_stock_err:
+                        print(f"[record_delivery] ✗ ERROR inserting WarehouseStock for case {case_label}: {warehouse_stock_err}", file=sys.stderr, flush=True)
+                        traceback.print_exc(file=sys.stderr)
+                        return jsonify({'error': f'Error creating warehouse stock record for case {case_label}: {warehouse_stock_err}'}), 400
                 except Exception as case_err:
                     error_detail = str(case_err)
                     print(f"[record_delivery] ✗ ERROR processing case {case_idx}: {error_detail}", file=sys.stderr, flush=True)

@@ -11,8 +11,10 @@ warehouse_bp = Blueprint('warehouse', __name__)
 # ==========================================
 
 GET_WAREHOUSE_INV_QUERY = """
-query GetWarehouse($productId: String!) {
-  warehouseInventory(key: { productId: $productId }) {
+query GetWarehouseStocksByProduct($productId: String!) {
+  warehouseStocks(where: { productId: { eq: $productId } }, limit: 1000) {
+    stockId
+    warehouseId
     productId
     availableUnits
     unitsPerCase
@@ -20,140 +22,111 @@ query GetWarehouse($productId: String!) {
 }
 """
 
-# Get all purchased product cases for a product (sorted by expiry)
-GET_PURCHASED_PRODUCT_CASES_FOR_PRODUCT = """
-query GetPurchasedProductCases($productId: String!) {
-  purchasedProductBatches(
-    where: { productId: { eq: $productId } }
-    limit: 1000
-  ) {
-    id
+GET_WAREHOUSE_STOCKS_FOR_PRODUCT = """
+query GetWarehouseStocksForProduct($productId: String!) {
+  warehouseStocks(where: { productId: { eq: $productId } }, limit: 1000) {
+    stockId
+    warehouseId
     productId
-  }
-}
-"""
-
-# Get warehouse entries for dashboard (with case expiry info)
-GET_WAREHOUSE_ENTRIES = """
-query GetWarehouseEntries {
-  warehouseEntries(limit: 10000) {
-    id
-    productId
+    batch
+    unitsPerCase
     caseLabel
-    purchasedProductCaseId
     availableUnits
-    addedDate
+    mfd
+    expd
+    receivedDate
     notes
-    purchasedProductCase {
-      id
-      expd
-      availableUnits
-    }
   }
 }
 """
 
-# Insert new warehouse entry
-INSERT_WAREHOUSE_ENTRY_MUTATION = """
-mutation InsertWarehouseEntry(
+GET_WAREHOUSES_QUERY = """
+query GetWarehouses {
+  warehouses(limit: 1000) {
+    warehouseId
+    name
+    location
+  }
+}
+"""
+
+GET_WAREHOUSE_STOCKS_QUERY = """
+query GetWarehouseStocks {
+  warehouseStocks(limit: 10000) {
+    stockId
+    warehouseId
+    productId
+    batch
+    unitsPerCase
+    caseLabel
+    availableUnits
+    mfd
+    expd
+    receivedDate
+    notes
+    warehouse { warehouseId name location }
+    product { productName }
+  }
+}
+"""
+
+# Insert new warehouse stock record
+INSERT_WAREHOUSE_STOCK_MUTATION = """
+mutation InsertWarehouseStock(
+  $warehouseId: String!,
+  $poId: String,
   $productId: String!,
-  $caseLabel: String!,
-  $purchasedProductCaseId: UUID!,
+  $batch: Int,
+  $unitsPerCase: Int,
+  $caseLabel: String,
   $availableUnits: Int!,
-  $addedDate: Timestamp!,
+  $mfd: Timestamp,
+  $expd: Timestamp,
+  $receivedDate: Timestamp,
   $notes: String
 ) {
-  warehouseEntry_insert(data: {
+  warehouseStock_insert(data: {
+    warehouseId: $warehouseId,
+    poId: $poId,
     productId: $productId,
-    caseLabel: $caseLabel,
-    purchasedProductCaseId: $purchasedProductCaseId,
-    availableUnits: $availableUnits,
-    addedDate: $addedDate,
-    notes: $notes
-  }) {
-    id
-    productId
-    caseLabel
-    availableUnits
-  }
-}
-"""
-
-# Update purchased product case available units
-UPDATE_PURCHASED_PRODUCT_CASE_MUTATION = """
-mutation UpdatePurchasedProductCase(
-  $caseId: UUID!,
-  $availableUnits: Int!
-) {
-  purchasedProductCase_update(
-    key: { id: $caseId }
-    data: { availableUnits: $availableUnits }
-  )
-}
-"""
-
-UPSERT_WAREHOUSE_MUTATION = """
-mutation UpsertWarehouse($productId: String!, $availableUnits: Int!, $unitsPerCase: Int, $notes: String, $lastReceivedDate: Timestamp) {
-  warehouseInventory_upsert(data: {
-    productId: $productId,
-    availableUnits: $availableUnits,
+    batch: $batch,
     unitsPerCase: $unitsPerCase,
+    caseLabel: $caseLabel,
+    availableUnits: $availableUnits,
+    mfd: $mfd,
+    expd: $expd,
+    receivedDate: $receivedDate,
     notes: $notes,
-    lastReceivedDate: $lastReceivedDate
-  }) {
-    productId
-    availableUnits
-  }
+    createdAt: $receivedDate,
+    updatedAt: $receivedDate
+  })
 }
 """
 
-DELETE_WAREHOUSE_MUTATION = """
-mutation DeleteWarehouse($productId: String!) {
-  warehouseInventory_delete(key: { productId: $productId }) {
-    productId
-  }
-}
-"""
-
-# Get warehouse entries for a product (with case details)
-GET_WAREHOUSE_ENTRIES_FOR_PRODUCT = """
-query GetWarehouseEntriesForProduct($productId: String!) {
-  warehouseEntries(where: { productId: { eq: $productId } }, limit: 10000) {
-    id
-    productId
-    caseLabel
-    purchasedProductCaseId
-    availableUnits
-    addedDate
-    notes
-    purchasedProductCase {
-      id
-      expd
-      availableUnits
-    }
-  }
-}
-"""
-
-# Update warehouse entry units available
-UPDATE_WAREHOUSE_ENTRY_MUTATION = """
-mutation UpdateWarehouseEntry(
-  $id: UUID!,
-  $availableUnits: Int!
+UPDATE_WAREHOUSE_STOCK_MUTATION = """
+mutation UpdateWarehouseStock(
+  $stockId: String!,
+  $availableUnits: Int,
+  $unitsPerCase: Int,
+  $notes: String,
+  $receivedDate: Timestamp
 ) {
-  warehouseEntry_update(
-    key: { id: $id }
-    data: { availableUnits: $availableUnits }
+  warehouseStock_update(
+    key: { stockId: $stockId }
+    data: {
+      availableUnits: $availableUnits,
+      unitsPerCase: $unitsPerCase,
+      notes: $notes,
+      receivedDate: $receivedDate,
+      updatedAt: $receivedDate
+    }
   )
 }
 """
 
-# Delete warehouse entries for a product
-DELETE_WAREHOUSE_ENTRIES_MUTATION = """
-mutation DeleteWarehouseEntry($id: UUID!) {
-  warehouseEntry_delete(key: { id: $id }) {
-    id
-  }
+DELETE_WAREHOUSE_STOCK_MUTATION = """
+mutation DeleteWarehouseStock($stockId: String!) {
+  warehouseStock_delete(key: { stockId: $stockId })
 }
 """
 
@@ -527,33 +500,95 @@ def add_to_warehouse():
     data = request.json
     try:
         product_id = str(data.get('product_id', data.get('Product_ID', ''))).strip()
+        warehouse_id = str(data.get('warehouse_id', data.get('warehouseId', data.get('Warehouse_ID', '')))).strip()
+        notes = data.get('notes', data.get('Notes', ''))
+        cases = data.get('cases', [])
+
+        if not product_id:
+            return jsonify({'error': 'Valid Product ID is required'}), 400
+
+        if not warehouse_id:
+            warehouse_res = execute_graphql(GET_WAREHOUSES_QUERY, {})
+            warehouses = warehouse_res.get('warehouses', []) if warehouse_res else []
+            if not warehouses:
+                return jsonify({'error': 'No warehouse found. Please create a warehouse first.'}), 400
+            warehouse_id = warehouses[0].get('warehouseId')
+
+        if cases and not isinstance(cases, list):
+            return jsonify({'error': 'Cases must be provided as a list'}), 400
+
+        inserted = []
+        if cases:
+            for idx, case_data in enumerate(cases, start=1):
+                units_received = int(case_data.get('units_received', case_data.get('Units', case_data.get('units', 0))))
+                if units_received <= 0:
+                    continue
+
+                units_per_case = int(case_data.get('units_per_case', case_data.get('Units_Per_Case', 1)))
+                case_label = str(case_data.get('case_label', case_data.get('Case_Label', f"{product_id}_{idx}_{datetime.now().strftime('%Y%m%d%H%M%S')}"))).strip()
+                mfd_value = case_data.get('mfd', case_data.get('ManufactureDate', ''))
+                expd_value = case_data.get('expd', case_data.get('ExpiryDate', ''))
+
+                if mfd_value:
+                    try:
+                        mfd_dt = datetime.fromisoformat(str(mfd_value))
+                    except Exception:
+                        mfd_dt = datetime.strptime(str(mfd_value), '%Y-%m-%d')
+                else:
+                    mfd_dt = datetime.now()
+
+                expd_dt = None
+                if expd_value:
+                    try:
+                        expd_dt = datetime.fromisoformat(str(expd_value))
+                    except Exception:
+                        expd_dt = datetime.strptime(str(expd_value), '%Y-%m-%d')
+
+                stock_vars = {
+                    "warehouseId": warehouse_id,
+                    "poId": data.get('po_id', ''),
+                    "productId": product_id,
+                    "batch": int(case_data.get('batch', case_data.get('Batch', 1))),
+                    "unitsPerCase": units_per_case,
+                    "caseLabel": case_label,
+                    "availableUnits": units_received,
+                    "mfd": format_timestamp(mfd_dt),
+                    "expd": format_timestamp(expd_dt) if expd_dt else None,
+                    "receivedDate": format_timestamp(datetime.now()),
+                    "notes": case_data.get('notes', notes)
+                }
+                execute_graphql(INSERT_WAREHOUSE_STOCK_MUTATION, stock_vars)
+                inserted.append({'caseLabel': case_label, 'availableUnits': units_received})
+
+            if not inserted:
+                return jsonify({'error': 'No valid case records were provided'}), 400
+
+            return jsonify({
+                'message': f'Success: Added {len(inserted)} case(s) to warehouse {warehouse_id} for {product_id}',
+                'cases': inserted
+            })
+
         units_received = int(data.get('units_received', data.get('Units', data.get('units', 0))))
         units_per_case = int(data.get('units_per_case', data.get('Units_Per_Case', 1)))
-        notes = data.get('notes', data.get('Notes', ''))
+        if units_received <= 0:
+            return jsonify({'error': 'Valid units > 0 are required'}), 400
 
-        if not product_id or units_received <= 0:
-            return jsonify({'error': 'Valid Product ID and units > 0 are required'}), 400
-
-        # Current stock
-        res = execute_graphql(GET_WAREHOUSE_INV_QUERY, {"productId": product_id})
-        current_inv = res.get("warehouseInventory")
-        
-        current_units = 0
-        if current_inv:
-            current_units = int(current_inv.get("availableUnits", 0))
-            
-        new_units = current_units + units_received
-
-        vars = {
+        stock_vars = {
+            "warehouseId": warehouse_id,
+            "poId": data.get('po_id', ''),
             "productId": product_id,
-            "availableUnits": new_units,
+            "batch": int(data.get('batch', 1)),
             "unitsPerCase": units_per_case,
-            "notes": notes,
-            "lastReceivedDate": format_timestamp(datetime.now())
+            "caseLabel": data.get('case_label', data.get('Case_Label', f"{product_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}")),
+            "availableUnits": units_received,
+            "mfd": format_timestamp(datetime.now()),
+            "expd": None,
+            "receivedDate": format_timestamp(datetime.now()),
+            "notes": notes
         }
-        execute_graphql(UPSERT_WAREHOUSE_MUTATION, vars)
+        execute_graphql(INSERT_WAREHOUSE_STOCK_MUTATION, stock_vars)
 
-        return jsonify({'message': f'Success: Stock updated to {new_units} units for {product_id}'})
+        return jsonify({'message': f'Success: Added {units_received} units to warehouse {warehouse_id} for {product_id}'})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

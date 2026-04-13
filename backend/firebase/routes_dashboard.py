@@ -17,9 +17,11 @@ REFILL_LOGS_QUERY = """query GetRefillLogs { refillLogs(limit: 1000) { refillId 
 
 VENDORS_QUERY = """query GetVendors { vendors(limit: 1000) { vendorId vendorName mobileNumber email } }"""
 
-WAREHOUSE_INVENTORIES_QUERY = """query GetWarehouseInventories { warehouseInventories(limit: 1000) { productId availableUnits unitsPerCase lastReceivedDate notes product { productName } } }"""
+WAREHOUSE_INVENTORIES_QUERY = """query GetWarehouseInventories { warehouseStocks(limit: 1000) { stockId warehouseId poId productId batch unitsPerCase caseLabel availableUnits mfd expd receivedDate notes warehouse { warehouseId name location } product { productName } } }"""
 
-WAREHOUSE_ENTRIES_QUERY = """query GetWarehouseEntries { warehouseEntries(limit: 10000) { id productId caseLabel purchasedProductCaseId availableUnits addedDate notes purchasedProductCase { id expd availableUnits } } }"""
+WAREHOUSES_QUERY = """query GetWarehouses { warehouses(limit: 1000) { warehouseId name location address notes createdAt updatedAt } }"""
+
+WAREHOUSE_STOCKS_QUERY = """query GetWarehouseStocks { warehouseStocks(limit: 10000) { stockId warehouseId poId productId batch unitsPerCase caseLabel availableUnits mfd expd receivedDate notes warehouse { warehouseId name location } product { productName } } }"""
 
 MACHINE_STOCK_ASSIGNMENTS_QUERY = """query GetMSA { machineStockAssignments(limit: 1000, orderBy: [{batch: ASC}, {stockLabel: ASC}, {coverLabel: ASC}]) { id batch assignedDate machineId stockLabel coverLabel coverStatus productId units status product { productName } } }"""
 
@@ -110,8 +112,8 @@ def dashboard():
             ("sales", SALES_QUERY),
             ("refillLogs", REFILL_LOGS_QUERY),
             ("vendors", VENDORS_QUERY),
-            ("warehouseInventories", WAREHOUSE_INVENTORIES_QUERY),
-            ("warehouseEntries", WAREHOUSE_ENTRIES_QUERY),
+            ("warehouses", WAREHOUSES_QUERY),
+            ("warehouseStocks", WAREHOUSE_STOCKS_QUERY),
             ("machineStockAssignments", MACHINE_STOCK_ASSIGNMENTS_QUERY),
             ("vendorPurchaseOrders", VENDOR_PURCHASE_ORDERS_QUERY),
             ("vendorPurchaseItems", VENDOR_PURCHASE_ITEMS_QUERY),
@@ -248,18 +250,81 @@ def dashboard():
                 "VENDOR_ID": v.get("vendorId"),
                 "VENDOR": v.get("vendorName")
             })
-            
-        # 8. Map Warehouse
-        warehouse_out = []
-        for w in data.get("warehouseInventories", []):
-            warehouse_out.append({
+
+        # 8. Map Warehouses and Warehouse Stocks
+        warehouses_out = []
+        for w in data.get("warehouses", []):
+            warehouses_out.append({
+                "Warehouse_ID": w.get("warehouseId"),
+                "Warehouse_Name": w.get("name", ""),
+                "Location": w.get("location", ""),
+                "Address": w.get("address", ""),
+                "Notes": w.get("notes", ""),
+                "Created_At": w.get("createdAt", ""),
+                "Updated_At": w.get("updatedAt", "")
+            })
+
+        warehouse_stocks_out = []
+        for w in data.get("warehouseStocks", []):
+            warehouse_stocks_out.append({
+                "Stock_ID": w.get("stockId"),
+                "Warehouse_ID": w.get("warehouseId"),
+                "Warehouse_Name": (w.get("warehouse") or {}).get("name", ""),
+                "Location": (w.get("warehouse") or {}).get("location", ""),
+                "PO_ID": w.get("poId", ""),
                 "Product_ID": w.get("productId"),
                 "Product_Name": (w.get("product") or {}).get("productName", "Unknown Product"),
-                "Available_Units": w.get("availableUnits", 0),
+                "Batch": w.get("batch"),
                 "Units_Per_Case": w.get("unitsPerCase", 1),
-                "Last_Received_Date": w.get("lastReceivedDate", ""),
+                "Case_Label": w.get("caseLabel", ""),
+                "Available_Units": w.get("availableUnits", 0),
+                "Received_Date": w.get("receivedDate", ""),
+                "MFD": w.get("mfd", ""),
+                "EXPD": w.get("expd", ""),
                 "Notes": w.get("notes", "")
             })
+
+        warehouse_entries_out = []
+        for w in data.get("warehouseStocks", []):
+            warehouse_entries_out.append({
+                "id": w.get("stockId"),
+                "productId": w.get("productId"),
+                "caseLabel": w.get("caseLabel", ""),
+                "purchasedProductCaseId": "",
+                "availableUnits": w.get("availableUnits", 0),
+                "addedDate": w.get("receivedDate", ""),
+                "notes": w.get("notes", ""),
+                "purchasedProductCase": {
+                    "expd": w.get("expd", "")
+                }
+            })
+
+        warehouse_out = []
+        warehouse_aggregation = {}
+        for w in data.get("warehouseStocks", []):
+            product_id = w.get("productId")
+            if not product_id:
+                continue
+            if product_id not in warehouse_aggregation:
+                warehouse_aggregation[product_id] = {
+                    "Product_ID": product_id,
+                    "Product_Name": (w.get("product") or {}).get("productName", "Unknown Product"),
+                    "Available_Units": 0,
+                    "Units_Per_Case": w.get("unitsPerCase", 1) or 1,
+                    "Last_Received_Date": w.get("receivedDate", ""),
+                    "Notes": w.get("notes", "")
+                }
+            warehouse_aggregation[product_id]["Available_Units"] += int(w.get("availableUnits", 0) or 0)
+            if w.get("receivedDate"):
+                warehouse_aggregation[product_id]["Last_Received_Date"] = max(
+                    warehouse_aggregation[product_id]["Last_Received_Date"],
+                    w.get("receivedDate")
+                )
+            if not warehouse_aggregation[product_id]["Notes"]:
+                warehouse_aggregation[product_id]["Notes"] = w.get("notes", "")
+
+        for agg in warehouse_aggregation.values():
+            warehouse_out.append(agg)
             
         # 8a. Map Purchased Products (using new normalized structure)
         purchased_products_out = []
@@ -388,6 +453,9 @@ def dashboard():
             'refills': refills_out,
             'vendors': vendors_out,
             'warehouse': warehouse_out,
+            'warehouses': warehouses_out,
+            'warehouseEntries': warehouse_entries_out,
+            'warehouseStocks': warehouse_stocks_out,
             'purchased_products': purchased_products_out,
             'purchasedProductBatches': purchased_product_batches_out,
             'purchasedProductCases': purchased_product_cases_out,

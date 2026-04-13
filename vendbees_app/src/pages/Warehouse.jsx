@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
-import { Warehouse as WarehouseIcon, Package, ArrowRight, Plus, Pencil, Trash2, X, Search, AlertCircle, CheckCircle, Calendar, TrendingUp } from 'lucide-react';
+import { Warehouse as WarehouseIcon, Package, X, Search, AlertCircle, CheckCircle, Calendar, TrendingUp } from 'lucide-react';
 import clsx from 'clsx';
 
 const KPI = ({ title, value, subtext, highlight }) => (
@@ -22,7 +22,7 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
         xl: 'max-w-4xl'
     };
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} mx-4 max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center p-6 border-b border-slate-100">
                     <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
@@ -397,108 +397,13 @@ const AddStockForm = ({ products, onSave, onCancel, saving }) => {
     );
 };
 
-// Transfer Form
-const TransferForm = ({ warehouseItem, machines, refillers, onSave, onCancel, saving }) => {
-    const [form, setForm] = useState({
-        refiller_id: '',
-        refiller_name: '',
-        units: ''
-    });
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSave({
-            product_id: warehouseItem.productId,
-            refiller_id: form.refiller_id,
-            refiller_name: form.refiller_name,
-            units: parseInt(form.units)
-        });
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="bg-slate-50 p-4 rounded-lg">
-                <div className="text-sm text-slate-500">Transferring from</div>
-                <div className="font-semibold text-slate-800">{warehouseItem.productName}</div>
-                <div className="text-xs text-slate-400 mt-1">Available: {warehouseItem.totalUnits} units ({warehouseItem.entries.length} cases tracked)</div>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Refiller Name *</label>
-                <select
-                    value={form.refiller_id}
-                    onChange={e => {
-                        const selected = refillers.find(r => r.id === e.target.value);
-                        setForm({ ...form, refiller_id: e.target.value, refiller_name: selected?.name || e.target.value });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
-                    required
-                >
-                    <option value="">-- Select a refiller --</option>
-                    {refillers.map(r => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                    <option value="OTHER">Other (Enter manually)</option>
-                </select>
-                {form.refiller_id === 'OTHER' && (
-                    <input
-                        type="text"
-                        value={form.refiller_name}
-                        onChange={e => setForm({ ...form, refiller_name: e.target.value })}
-                        className="w-full mt-2 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
-                        placeholder="Enter refiller name"
-                        required
-                    />
-                )}
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Units to Transfer *</label>
-                <input
-                    type="number"
-                    min="1"
-                    max={warehouseItem.totalUnits}
-                    value={form.units}
-                    onChange={e => setForm({ ...form, units: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
-                    placeholder="100"
-                    required
-                />
-                <div className="text-xs text-slate-400 mt-1">Max: {warehouseItem.totalUnits} units</div>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-                <button type="button" onClick={onCancel} className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium" disabled={saving}>
-                    Cancel
-                </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50" disabled={saving || !form.units}>
-                    {saving ? 'Transferring...' : 'Transfer'}
-                </button>
-            </div>
-        </form>
-    );
-};
-
 const Warehouse = () => {
-    const { products, machines, warehouse_entries, warehouse, refills, loading, refreshData, transferFromWarehouse, deleteWarehouseItem } = useData();
+    const { products, warehouse_entries, warehouses, loading, refreshData } = useData();
     const [searchQuery, setSearchQuery] = useState('');
+    const [detailSearchQuery, setDetailSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('name_asc');
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [transferItem, setTransferItem] = useState(null);
-    const [deleteItem, setDeleteItem] = useState(null);
-    const [saving, setSaving] = useState(false);
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState(null);
     const [notification, setNotification] = useState(null);
-
-    // Get unique refillers from refill history
-    const refillers = useMemo(() => {
-        const uniqueRefillers = new Map();
-        (refills || []).forEach(r => {
-            if (r.Refiller_ID && r.Refiller_ID !== 'WAREHOUSE') {
-                uniqueRefillers.set(r.Refiller_ID, { id: r.Refiller_ID, name: r.Refiller_ID });
-            }
-        });
-        return Array.from(uniqueRefillers.values());
-    }, [refills]);
 
     // Calculate stats from warehouse entries (grouped by product)
     const stats = useMemo(() => {
@@ -516,105 +421,166 @@ const Warehouse = () => {
         return { totalUnits, totalItems, lowStock: 0, outOfStock: 0 };
     }, [warehouse_entries]);
 
-    // Group warehouse entries by product and filter/sort
-    const filteredWarehouse = useMemo(() => {
-        const productMap = new Map();
-        (warehouse_entries || []).forEach(entry => {
-            if (!productMap.has(entry.productId)) {
-                // Find product info from products array
-                const productInfo = products.find(p => p.productId === entry.productId);
-                productMap.set(entry.productId, {
-                    productId: entry.productId,
-                    productName: productInfo?.productName || entry.productId,
-                    totalUnits: 0,
-                    entries: []
-                });
-            }
-            const product = productMap.get(entry.productId);
-            product.totalUnits += entry.availableUnits || 0;
-            product.entries.push(entry);
+    // Warehouse summary grouped by warehouse
+    const warehouseSummary = useMemo(() => {
+        const summary = {};
+
+        // Ensure every warehouse is represented, even if it has no products yet.
+        (warehouses || []).forEach(warehouse => {
+            const warehouseId = warehouse.Warehouse_ID || warehouse.warehouseId || '';
+            if (!warehouseId) return;
+            summary[warehouseId] = {
+                warehouseId,
+                warehouseName: warehouse.Warehouse_Name || warehouse.warehouseName || warehouseId,
+                location: warehouse.Location || warehouse.location || '',
+                totalUnits: 0,
+                casesCount: 0,
+                productMap: {},
+                entries: []
+            };
         });
-        
-        let filtered = Array.from(productMap.values());
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            filtered = filtered.filter(p =>
-                p.productId?.toLowerCase().includes(q) ||
-                p.productName?.toLowerCase().includes(q)
+
+        (warehouse_entries || []).forEach(entry => {
+            const warehouseId = entry.warehouseId || entry.Warehouse_ID || '';
+            if (!warehouseId) return;
+            if (!summary[warehouseId]) {
+                summary[warehouseId] = {
+                    warehouseId,
+                    warehouseName: warehouseId,
+                    location: '',
+                    totalUnits: 0,
+                    casesCount: 0,
+                    productMap: {},
+                    entries: []
+                };
+            }
+            const group = summary[warehouseId];
+            group.totalUnits += entry.availableUnits || 0;
+            group.casesCount += 1;
+            group.entries.push(entry);
+
+            const productId = entry.productId || entry.Product_ID || '';
+            if (!productId) return;
+            if (!group.productMap[productId]) {
+                const productInfo = (products || []).find(p => (p.Product_ID || p.productId) === productId);
+                group.productMap[productId] = {
+                    productId,
+                    productName: productInfo?.Name || productInfo?.productName || productId,
+                    totalUnits: 0,
+                    cases: []
+                };
+            }
+            const productGroup = group.productMap[productId];
+            productGroup.totalUnits += entry.availableUnits || 0;
+            productGroup.cases.push(entry);
+        });
+
+        return Object.values(summary).map(group => ({
+            warehouseId: group.warehouseId,
+            warehouseName: group.warehouseName,
+            location: group.location,
+            totalUnits: group.totalUnits,
+            casesCount: group.casesCount,
+            products: Object.values(group.productMap),
+            entries: group.entries
+        }));
+    }, [warehouse_entries, warehouses, products]);
+
+    const filteredWarehouseSummary = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return warehouseSummary;
+
+        return warehouseSummary.filter(warehouse => {
+            if (warehouse.warehouseId.toLowerCase().includes(q) ||
+                warehouse.warehouseName.toLowerCase().includes(q) ||
+                warehouse.location.toLowerCase().includes(q)) {
+                return true;
+            }
+
+            if (warehouse.products.some(product =>
+                (product.productId || '').toLowerCase().includes(q) ||
+                (product.productName || '').toLowerCase().includes(q)
+            )) {
+                return true;
+            }
+
+            return warehouse.entries.some(entry =>
+                (entry.productId || '').toLowerCase().includes(q) ||
+                (entry.productName || '').toLowerCase().includes(q) ||
+                (entry.caseLabel || '').toLowerCase().includes(q) ||
+                (entry.poId || '').toLowerCase().includes(q)
             );
-        }
-        return filtered.sort((a, b) => {
+        });
+    }, [searchQuery, warehouseSummary]);
+
+    const selectedWarehouseGroups = useMemo(() => {
+        if (!selectedWarehouseId) return [];
+        const group = warehouseSummary.find(w => w.warehouseId === selectedWarehouseId);
+        if (!group) return [];
+
+        const entries = group.entries.map(entry => {
+            const productInfo = products.find(p => (p.Product_ID || p.productId) === (entry.productId || entry.Product_ID));
+            return {
+                ...entry,
+                productName: productInfo?.Name || productInfo?.productName || entry.productName || entry.Product_Name || '',
+                poId: entry.poId || entry.PO_ID || ''
+            };
+        });
+
+        const q = detailSearchQuery.trim().toLowerCase();
+        const filtered = q ? entries.filter(e =>
+            (e.productId || '').toLowerCase().includes(q) ||
+            (e.productName || '').toLowerCase().includes(q) ||
+            (e.caseLabel || '').toLowerCase().includes(q) ||
+            (e.poId || '').toLowerCase().includes(q)
+        ) : entries;
+
+        const grouped = filtered.reduce((acc, entry) => {
+            const key = `${entry.productId || ''}||${entry.poId || ''}`;
+            if (!acc[key]) {
+                acc[key] = {
+                    productId: entry.productId,
+                    productName: entry.productName || '',
+                    poId: entry.poId || '',
+                    addedDate: entry.addedDate,
+                    rows: [],
+                    totalUnits: 0
+                };
+            }
+            acc[key].rows.push(entry);
+            acc[key].totalUnits += entry.availableUnits || 0;
+            if (entry.addedDate && entry.addedDate > acc[key].addedDate) {
+                acc[key].addedDate = entry.addedDate;
+            }
+            return acc;
+        }, {});
+
+        return Object.values(grouped).sort((a, b) => {
             if (sortBy === 'name_asc') return (a.productName || '').localeCompare(b.productName || '');
             if (sortBy === 'name_desc') return (b.productName || '').localeCompare(a.productName || '');
             if (sortBy === 'units_high') return (b.totalUnits || 0) - (a.totalUnits || 0);
             if (sortBy === 'units_low') return (a.totalUnits || 0) - (b.totalUnits || 0);
-            if (sortBy === 'last_received') return new Date(b.lastReceivedDate || 0) - new Date(a.lastReceivedDate || 0);
+            if (sortBy === 'last_received') return new Date(b.addedDate || 0) - new Date(a.addedDate || 0);
             return 0;
         });
-    }, [warehouse_entries, searchQuery, sortBy, products]);
+    }, [selectedWarehouseId, warehouseSummary, products, searchQuery, sortBy]);
 
     const showNotification = (message, type = 'success') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 3000);
     };
 
-    const handleAddFromPurchase = async (form) => {
-        setSaving(true);
-        try {
-            const response = await fetch('http://localhost:3002/api/warehouse/add-from-purchase', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
-            });
-            const data = await response.json();
-            setSaving(false);
-            if (response.ok) {
-                setShowAddModal(false);
-                refreshData();
-                showNotification(`Added ${form.units_to_add} units from ${data.cases_used.length} case(s) to warehouse`);
-            } else {
-                showNotification(data.error || 'Error adding to warehouse', 'error');
-            }
-        } catch (error) {
-            setSaving(false);
-            showNotification(error.message, 'error');
-        }
-    };
 
 
 
-    const handleTransfer = async (data) => {
-        setSaving(true);
-        const result = await transferFromWarehouse(data.product_id, data.refiller_id || data.refiller_name, data.units);
-        setSaving(false);
-        if (result.success) {
-            setTransferItem(null);
-            showNotification(`Transferred ${data.units} units to ${data.refiller_name}. Remaining: ${result.remaining}`);
-        } else {
-            showNotification(result.error, 'error');
-        }
-    };
 
 
-
-    const handleDelete = async () => {
-        if (!deleteItem) return;
-        setSaving(true);
-        const result = await deleteWarehouseItem(deleteItem.productId);
-        setSaving(false);
-        if (result.success) {
-            setDeleteItem(null);
-            showNotification('Product entries removed from warehouse');
-        } else {
-            showNotification(result.error, 'error');
-        }
-    };
 
     if (loading) return null;
 
     return (
         <div className="space-y-6 pb-10">
-            <Header title="Warehouse (Godown)" subtitle="Manage warehouse stock and machine transfers" />
+            <Header title="Warehouse (Godown)" subtitle="Browse warehouse stock by location and product" />
 
             {/* Notification */}
             {notification && (
@@ -658,111 +624,152 @@ const Warehouse = () => {
                             <option value="units_low">Units (Lowest)</option>
                             <option value="last_received">Last Received</option>
                         </select>
-                        <button
-                            onClick={() => setShowAddModal(true)}
-                            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap"
-                        >
-                            <Plus size={16} /> Add from Purchase
-                        </button>
-                    </div>
+                            </div>
                 </div>
 
-                {/* Warehouse Table */}
+                {/* Warehouse Inventory List */}
                 <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-slate-50">
                         <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                             <WarehouseIcon size={20} className="text-orange-500" />
                             Warehouse Inventory
                         </h3>
+                        <p className="text-sm text-slate-500 mt-2">Choose a warehouse card to view products stored there.</p>
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-                                <tr>
-                                    <th className="px-6 py-4 font-medium">Product</th>
-                                    <th className="px-6 py-4 font-medium">Total Units</th>
-                                    <th className="px-6 py-4 font-medium">Cases (Tracking)</th>
-                                    <th className="px-6 py-4 font-medium">Earliest Expiry</th>
-                                    <th className="px-6 py-4 font-medium">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredWarehouse.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="5" className="px-6 py-8 text-center text-slate-400">
-                                            {searchQuery ? 'No items match your search' : 'No items in warehouse. Add stock from purchased products to get started.'}
-                                        </td>
-                                    </tr>
-                                ) : filteredWarehouse.map((product, idx) => {
-                                    const earliestExpiry = product.entries
+                    <div className="p-6 space-y-6">
+                        {filteredWarehouseSummary.length === 0 ? (
+                            <div className="text-center text-slate-400 py-12">
+                                No warehouse matches your search. Clear the search or try another filter.
+                            </div>
+                        ) : (
+                            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                {filteredWarehouseSummary.map((warehouseItem) => {
+                                    const earliestExpiry = warehouseItem.entries
                                         .map(e => new Date(e.expd))
+                                        .filter(d => !Number.isNaN(d.getTime()))
                                         .sort((a, b) => a - b)[0];
                                     const isExpired = earliestExpiry && earliestExpiry < new Date();
-                                    const isExpiringSoon = earliestExpiry && 
+                                    const isExpiringSoon = earliestExpiry &&
                                         (earliestExpiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) < 30;
 
                                     return (
-                                        <tr key={product.productId || idx} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                            <td className="px-6 py-4">
-                                                <div className="font-medium text-slate-700">{product.productName}</div>
-                                                <div className="text-[10px] text-slate-400">{product.productId}</div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={clsx("font-semibold",
-                                                    product.totalUnits === 0 ? "text-red-500" : "text-slate-800")}>
-                                                    {product.totalUnits}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-slate-600">
-                                                <div className="text-sm">{product.entries.length} case{product.entries.length !== 1 ? 's' : ''}</div>
-                                                <div className="text-xs text-slate-400 space-y-1 mt-1">
-                                                    {product.entries.slice(0, 2).map((entry, i) => (
-                                                        <div key={i} className="truncate">{entry.caseLabel}</div>
-                                                    ))}
-                                                    {product.entries.length > 2 && <div className="text-slate-400">+{product.entries.length - 2} more</div>}
+                                        <button
+                                            key={warehouseItem.warehouseId}
+                                            type="button"
+                                            onClick={() => setSelectedWarehouseId(warehouseItem.warehouseId)}
+                                            className={clsx(
+                                                "text-left border rounded-2xl p-5 bg-slate-50 shadow-sm transition hover:shadow-md",
+                                                selectedWarehouseId === warehouseItem.warehouseId ? 'border-orange-400 bg-orange-50' : 'border-slate-200'
+                                            )}
+                                        >
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div>
+                                                    <div className="font-semibold text-slate-800 text-lg">{warehouseItem.warehouseName}</div>
+                                                    <div className="text-xs text-slate-500 mt-1">{warehouseItem.location || warehouseItem.warehouseId}</div>
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className={clsx("text-sm font-medium",
-                                                    isExpired ? "text-red-600" :
-                                                    isExpiringSoon ? "text-orange-600" : "text-slate-600")}>
-                                                    {earliestExpiry ? new Date(earliestExpiry).toLocaleDateString(undefined, {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        year: 'numeric'
-                                                    }) : '-'}
+                                                <div className="text-right">
+                                                    <div className="text-2xl font-bold text-slate-800">{warehouseItem.totalUnits}</div>
+                                                    <div className="text-xs text-slate-500">Units</div>
                                                 </div>
-                                                {isExpired && <div className="text-xs text-red-500 font-semibold">EXPIRED</div>}
-                                                {isExpiringSoon && !isExpired && <div className="text-xs text-orange-500 font-semibold">Expiring Soon</div>}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => setTransferItem(product)}
-                                                        disabled={product.totalUnits === 0}
-                                                        className={clsx("flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
-                                                            product.totalUnits === 0
-                                                                ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                                                                : "bg-green-50 text-green-600 hover:bg-green-100")}
-                                                        title="Transfer to Machine"
-                                                    >
-                                                        <ArrowRight size={14} /> Transfer
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setDeleteItem(product)}
-                                                        className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
-                                                        title="Remove"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                            </div>
+
+                                            <div className="mt-4 space-y-2 text-sm text-slate-600">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="font-medium">Products</span>
+                                                    <span>{warehouseItem.products.length}</span>
                                                 </div>
-                                            </td>
-                                        </tr>
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="font-medium">Cases tracked</span>
+                                                    <span>{warehouseItem.casesCount}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="font-medium">Earliest expiry</span>
+                                                    <span className={clsx(
+                                                        isExpired ? 'text-red-600' : isExpiringSoon ? 'text-orange-600' : 'text-slate-600'
+                                                    )}>
+                                                        {earliestExpiry ? earliestExpiry.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                                                    </span>
+                                                </div>
+                                                {isExpired && <div className="text-xs text-red-500 font-semibold">Expired stock present</div>}
+                                                {isExpiringSoon && !isExpired && <div className="text-xs text-orange-500 font-semibold">Expiring soon</div>}
+                                            </div>
+                                        </button>
                                     );
                                 })}
-                            </tbody>
-                        </table>
+                            </div>
+                        )}
+
+                        {selectedWarehouseId && (
+                            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                                    <div>
+                                        <h4 className="font-semibold text-slate-800">{warehouseSummary.find(w => w.warehouseId === selectedWarehouseId)?.warehouseName}</h4>
+                                        <div className="text-sm text-slate-500">{warehouseSummary.find(w => w.warehouseId === selectedWarehouseId)?.location || selectedWarehouseId}</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedWarehouseId(null)}
+                                        className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-slate-700 bg-white hover:bg-slate-100 text-sm"
+                                    >
+                                        Back to Warehouses
+                                    </button>
+                                </div>
+
+                                <div className="mb-6">
+                    <div className="relative max-w-md">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            value={detailSearchQuery}
+                            onChange={e => setDetailSearchQuery(e.target.value)}
+                            placeholder="Filter products, PO ID or case label within this warehouse..."
+                            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 bg-white"
+                        />
+                    </div>
+                </div>
+                {selectedWarehouseGroups.length === 0 ? (
+                                    <div className="text-center text-slate-500 py-12">No products found in this warehouse.</div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-left text-sm divide-y divide-slate-200">
+                                            <thead className="bg-slate-100 text-slate-700">
+                                                <tr>
+                                                    <th className="px-4 py-3 font-semibold">PO ID</th>
+                                                    <th className="px-4 py-3 font-semibold">Product ID</th>
+                                                    <th className="px-4 py-3 font-semibold">Product Name</th>
+                                                    <th className="px-4 py-3 font-semibold">Received Date</th>
+                                                    <th className="px-4 py-3 font-semibold">Case Label</th>
+                                                    <th className="px-4 py-3 font-semibold">Available Units</th>
+                                                    <th className="px-4 py-3 font-semibold">Expiry Date</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-slate-200">
+                                                {selectedWarehouseGroups.map((group, groupIndex) => (
+                                                    group.rows.map((entry, rowIndex) => (
+                                                        <tr key={`${group.productId}-${group.poId}-${rowIndex}`} className="hover:bg-slate-50">
+                                                            {rowIndex === 0 && (
+                                                                <>
+                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-700 align-top">{group.poId || '-'}</td>
+                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-700 font-medium align-top">{group.productId}</td>
+                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-700 align-top">{group.productName || '-'}</td>
+                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-500 align-top">{group.addedDate ? new Date(group.addedDate).toLocaleDateString() : '-'}</td>
+                                                                </>
+                                                            )}
+                                                            <td className="px-4 py-4 text-slate-700">{entry.caseLabel || '-'}</td>
+                                                            <td className="px-4 py-4 text-slate-700">{entry.availableUnits ?? 0}</td>
+                                                            <td className={clsx("px-4 py-4 font-medium", entry.expd && new Date(entry.expd) < new Date() ? 'text-red-600' : 'text-slate-700')}>
+                                                                {entry.expd ? new Date(entry.expd).toLocaleDateString() : '-'}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -773,56 +780,13 @@ const Warehouse = () => {
                         <li>• <strong>Case-Level Tracking</strong>: Track expiry dates from purchased products at case level</li>
                         <li>• <strong>Smart Allocation</strong>: When adding to warehouse, automatically takes from cases expiring soonest first</li>
                         <li>• <strong>Maintain Expiry Awareness</strong>: All warehouse entries include MFD/EXP dates for monitoring</li>
-                        <li>• <strong>Transfer to Machines</strong>: Move units to machines/refillers as needed</li>
+                        <li>• <strong>Consolidated Product View</strong>: Inspect inventory per warehouse and product without direct transfer actions</li>
                         <li>• <strong>Risk Tracking</strong>: Easily identify expiring or expired stock</li>
                         <li>• <strong>Historical Records</strong>: View case labels and accumulation history</li>
                     </ul>
                 </div>
             </div>
 
-            {/* Add Stock Modal */}
-            <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Add Stock from Purchased Products" size="lg">
-                <AddFromPurchaseForm onSave={handleAddFromPurchase} onCancel={() => setShowAddModal(false)} saving={saving} />
-            </Modal>
-
-            {/* Transfer Modal */}
-            <Modal isOpen={!!transferItem} onClose={() => setTransferItem(null)} title="Transfer to Refiller">
-                {transferItem && (
-                    <TransferForm
-                        warehouseItem={transferItem}
-                        machines={machines}
-                        refillers={refillers}
-                        onSave={handleTransfer}
-                        onCancel={() => setTransferItem(null)}
-                        saving={saving}
-                    />
-                )}
-            </Modal>
-
-            {/* Edit Modal */}
-            
-            <Modal isOpen={!!deleteItem} onClose={() => setDeleteItem(null)} title="Confirm Removal">
-                <div className="space-y-4">
-                    <p className="text-slate-600">
-                        Remove all <span className="font-semibold">"{deleteItem?.productName}"</span> entries from warehouse?
-                    </p>
-                    <p className="text-sm text-slate-400">This will remove all case tracking for this product. The physical stock should be accounted for separately.</p>
-                    <div className="flex gap-3 pt-4">
-                        <button
-                            onClick={() => setDeleteItem(null)}
-                            className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleDelete}
-                            className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium"
-                        >
-                            Remove All Cases
-                        </button>
-                    </div>
-                </div>
-            </Modal>
         </div>
     );
 };

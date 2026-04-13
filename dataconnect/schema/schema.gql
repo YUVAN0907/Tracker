@@ -163,40 +163,40 @@ type PurchasedProductCase @table(key: "id") {
 }
 
 # ==============================
-# WAREHOUSE INVENTORY
+# WAREHOUSE MODEL
 # ==============================
 
-type WarehouseInventory @table(key: "productId") {
-  productId: String!
-  availableUnits: Int
-  unitsPerCase: Int
-  lastReceivedDate: Timestamp
+# A physical warehouse location with name and location metadata
+# Each warehouse can hold multiple product cases from deliveries.
+type Warehouse @table(key: "warehouseId") {
+  warehouseId: String!
+  name: String!
+  location: String
+  address: String
   notes: String
-
-  product: Product! @ref(fields: "productId")
+  createdAt: Timestamp
+  updatedAt: Timestamp
 }
 
-# WAREHOUSE ENTRY: Tracks individual case units added to warehouse
-type WarehouseEntry @table(key: "id") {
-  id: UUID! @default(expr: "uuidV4()")
-
-  # Product reference
+# Warehouse stock records store product case-level inventory in a specific warehouse.
+type WarehouseStock @table(key: "stockId") {
+  stockId: UUID! @default(expr: "uuidV4()")
+  warehouseId: String!
+  poId: String
   productId: String!
-
-  # Case reference (from PurchasedProductCase)
-  caseLabel: String!              # Unique identifier: e.g., "PO123_PROD456_c1" (denormalized for easy access)
-  purchasedProductCaseId: UUID!   # Link to PurchasedProductCase to get expiry dates
-
-  # Warehouse inventory tracking
-  availableUnits: Int!            # Units still available in warehouse from this case (decremented when transferred)
-
-  # Metadata
-  addedDate: Timestamp!
+  batch: Int
+  unitsPerCase: Int
+  caseLabel: String
+  availableUnits: Int!
+  mfd: Timestamp
+  expd: Timestamp
+  receivedDate: Timestamp
   notes: String
+  createdAt: Timestamp
+  updatedAt: Timestamp
 
-  # Relations
+  warehouse: Warehouse! @ref(fields: "warehouseId")
   product: Product! @ref(fields: "productId")
-  purchasedProductCase: PurchasedProductCase! @ref(fields: "purchasedProductCaseId")
 }
 
 # ==============================
