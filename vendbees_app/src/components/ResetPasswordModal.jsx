@@ -18,6 +18,7 @@ export default function ResetPasswordModal({ user, onClose, onSuccess }) {
     confirm: false
   });
 
+  
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({

@@ -30,103 +30,28 @@ CORS(app,
 # --------------------------------------------------
 # IMPORT ROUTE MODULES
 # --------------------------------------------------
-print("[DEBUG] Importing routes...")
-try:
-    from routes_auth import auth_bp
-    print("[DEBUG] ✅ auth_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import auth_bp: {e}")
-    auth_bp = None
-
-try:
-    from routes_dashboard import dashboard_bp
-    print("[DEBUG] ✅ dashboard_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import dashboard_bp: {e}")
-
-try:
-    from routes_products import products_bp
-    print("[DEBUG] ✅ products_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import products_bp: {e}")
-
-try:
-    from routes_po import po_bp
-    print("[DEBUG] ✅ po_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import po_bp: {e}")
-
-try:
-    from routes_purchases import purchases_bp
-    print("[DEBUG] ✅ purchases_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import purchases_bp: {e}")
-
-try:
-    from routes_stock_ops import stock_ops_bp
-    print("[DEBUG] ✅ stock_ops_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import stock_ops_bp: {e}")
-
-try:
-    from routes_warehouse import warehouse_bp
-    print("[DEBUG] ✅ warehouse_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import warehouse_bp: {e}")
-
-try:
-    from routes_stocks_batch import stocks_batch_bp
-    print("[DEBUG] ✅ stocks_batch_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import stocks_batch_bp: {e}")
-
-try:
-    from routes_bills import bills_bp
-    print("[DEBUG] ✅ bills_bp imported successfully")
-except Exception as e:
-    print(f"[DEBUG] ❌ Failed to import bills_bp: {e}")
-    bills_bp = None
-
-print("[DEBUG] All imports completed")
+from routes_auth import auth_bp
+from routes_dashboard import dashboard_bp
+from routes_products import products_bp
+from routes_po import po_bp
+from routes_purchases import purchases_bp
+from routes_stock_ops import stock_ops_bp
+from routes_warehouse import warehouse_bp
+from routes_stocks_batch import stocks_batch_bp
+from routes_bills import bills_bp
 
 # --------------------------------------------------
 # REGISTER BLUEPRINTS
 # --------------------------------------------------
-print("[DEBUG] Registering blueprints...")
-if auth_bp:
-    app.register_blueprint(auth_bp)
-    print("[DEBUG] ✅ auth_bp registered")
-else:
-    print("[DEBUG] ❌ auth_bp is None, skipping registration")
-
+app.register_blueprint(auth_bp)
 app.register_blueprint(dashboard_bp)
-print("[DEBUG] ✅ dashboard_bp registered")
-
 app.register_blueprint(products_bp)
-print("[DEBUG] ✅ products_bp registered")
-
 app.register_blueprint(po_bp)
-print("[DEBUG] ✅ po_bp registered")
-
 app.register_blueprint(purchases_bp)
-print("[DEBUG] ✅ purchases_bp registered")
-
 app.register_blueprint(stock_ops_bp)
-print("[DEBUG] ✅ stock_ops_bp registered")
-
 app.register_blueprint(warehouse_bp)
-print("[DEBUG] ✅ warehouse_bp registered")
-
 app.register_blueprint(stocks_batch_bp)
-print("[DEBUG] ✅ stocks_batch_bp registered")
-
-if bills_bp:
-    app.register_blueprint(bills_bp)
-    print("[DEBUG] ✅ bills_bp registered")
-else:
-    print("[DEBUG] ❌ bills_bp is None, skipping registration")
-
-print("[DEBUG] All blueprints registered")
+app.register_blueprint(bills_bp)
 
 # Health Check
 @app.route('/api/health')
@@ -166,13 +91,4 @@ def handle_error(e):
 # --------------------------------------------------
 if __name__ == "__main__":
     print(f"🚀 Firebase Data Connect backend starting on port {PORT}")
-    
-    # List all registered routes
-    print(f"\n📋 Registered routes:")
-    for rule in sorted(app.url_map.iter_rules(), key=lambda r: str(r)):
-        if not rule.rule.startswith('/static'):
-            methods = ','.join(sorted(rule.methods - {'HEAD', 'OPTIONS'}))
-            print(f"  {rule.rule:40} [{methods}]")
-    print()
-    
     app.run(host="0.0.0.0", port=PORT, debug=False)

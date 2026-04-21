@@ -31,20 +31,21 @@ const Restock = () => {
     // Log when stocks data changes
     useEffect(() => {
         if (stocks && stocks.length > 0) {
-            console.log('✔ Restock.jsx: Stocks data updated:', stocks.length, 'batches');
-            stocks.forEach(s => console.log(`  - ${s.Stock_ID}: ${s.Batch_Number || 'N/A'} (${s.Total_Units} units)`));
+            console.log('✔ Restock.jsx: Stocks data updated:', stocks.length, 'rows');
+            stocks.forEach((s, idx) => {
+                if (idx < 3) console.log(`  - Batch: ${s.batch || s.Batch_Number}, Stock: ${s.stockLabel || s.Stock}, Cover: ${s.coverLabel || s.cover}, Product: ${s.productId || s.product_id}`);
+            });
         } else {
             console.log('⚠️ Restock.jsx: No stocks data loaded');
         }
         
-        // Debug products data
-        if (products && Array.isArray(products)) {
-            console.log('✔ Restock.jsx: Products loaded:', products.length);
-            console.log('  Product names:', products.map(p => p.Product_Name || p.name || p.productName).slice(0, 5));
+        // Debug stock_assignments (new Firebase data)
+        if (stock_assignments && Array.isArray(stock_assignments)) {
+            console.log('✔ Restock.jsx: Stock Assignments loaded:', stock_assignments.length);
         } else {
-            console.log('⚠️ Restock.jsx: Products not loaded or not array:', typeof products);
+            console.log('⚠️ Restock.jsx: Stock Assignments not available');
         }
-    }, [stocks, products]);
+    }, [stocks, stock_assignments]);
 
     if (loading) return null;
 
@@ -140,7 +141,7 @@ const Restock = () => {
                     <KPI title="Low Stock" value={lowCount} icon={Package} colorClass="bg-yellow-50 text-yellow-600" />
                     <KPI title="Safe Stock" value={safeCount} icon={CheckCircle} colorClass="bg-green-50 text-green-600" />
                     <KPI title={activeTab === 'batches' ? 'Active Batches' : 'Active Stocks'} 
-                        value={activeTab === 'batches' ? (new Set(stocks.filter(s => s.Status === 'Active' && s.Batch).map(s => s.Batch)).size || 0) : stocks.length} 
+                        value={activeTab === 'batches' ? (new Set(stocks.filter(s => (s.Status || s.status) === 'Active' && (s.Batch || s.batch)).map(s => (s.Batch || s.batch))).size || 0) : stocks.length} 
                         icon={Box} 
                         colorClass="bg-blue-50 text-blue-600" 
                     />
@@ -182,7 +183,7 @@ const Restock = () => {
                         onClick={() => setActiveTab('batches')}
                         className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'batches' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
                     >
-                        Stock Batches ({stocks ? new Set(stocks.filter(s => s.Batch).map(s => s.Batch)).size : 0})
+                        Stock Batches ({stocks ? new Set(stocks.map(s => s.batch || s.Batch).filter(b => b)).size : 0})
                     </button>
                 </div>
 
@@ -440,14 +441,14 @@ const Restock = () => {
                             <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-12 text-center">
                                 <Package size={40} className="mx-auto text-slate-300 mb-3" />
                                 <p className="text-slate-600 font-medium">No stock batches found</p>
-                                <p className="text-sm text-slate-500 mt-2">Create your first batch to get started, or check if data exists in the Stocks sheet</p>
+                                <p className="text-sm text-slate-500 mt-2">Create your first batch to get started</p>
                             </div>
                         ) : (
                             <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                                 <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-orange-50 to-white">
                                     <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                                         <Box size={18} className="text-orange-600" />
-                                        All Stock Batches ({stocks ? new Set(stocks.filter(s => s.Batch).map(s => s.Batch)).size : 0} batches)
+                                        All Stock Batches ({stocks ? new Set(stocks.map(s => s.batch || s.Batch)).filter(b => b).size : 0} batches)
                                     </h3>
                                             </div>
                                 <div className="overflow-x-auto">
@@ -468,55 +469,69 @@ const Restock = () => {
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {stocks && stocks.length > 0 ? (
-                                                stocks.map((row, idx) => (
-                                                    <tr key={`batch-${idx}`} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-4 py-3 font-bold text-orange-600">{row.Batch || ''}</td>
-                                                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                                                            {row.Date ? new Date(row.Date).toLocaleDateString() : ''}
-                                                        </td>
-                                                        <td className="px-4 py-3 font-medium text-slate-700">{row.Machine || ''}</td>
-                                                        <td className="px-4 py-3 text-slate-700 font-semibold">{row.Stock || ''}</td>
-                                                        <td className="px-4 py-3 text-slate-700 font-medium">{row.cover || ''}</td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            {row.cover_status ? (
+                                                stocks.map((row, idx) => {
+                                                    // Support both old format (Batch) and new format (batch)
+                                                    const batch = row.batch || row.Batch_Number;
+                                                    const date = row.assignedDate || row.Date;
+                                                    const machine = row.machineId || row.Machine;
+                                                    const stock = row.stockLabel || row.Stock;
+                                                    const cover = row.coverLabel || row.cover;
+                                                    const coverStatus = row.coverStatus || row.cover_status;
+                                                    const productId = row.productId || row.product_id;
+                                                    const productName = row.product?.productName || row.product_name;
+                                                    const units = row.units || row.Units;
+                                                    const status = row.status || row.Status;
+                                                    
+                                                    return (
+                                                        <tr key={`batch-${idx}`} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="px-4 py-3 font-bold text-orange-600">{batch || ''}</td>
+                                                            <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                                                                {date ? (typeof date === 'string' && date.includes('T') ? new Date(date).toLocaleDateString() : date) : ''}
+                                                            </td>
+                                                            <td className="px-4 py-3 font-medium text-slate-700">{machine || ''}</td>
+                                                            <td className="px-4 py-3 text-slate-700 font-semibold">{stock || ''}</td>
+                                                            <td className="px-4 py-3 text-slate-700 font-medium">{cover || ''}</td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                {coverStatus ? (
                                             <span className={clsx("px-2 py-1 rounded text-xs font-medium", 
-                                                                    row.cover_status === 'covered' 
+                                                                    coverStatus.toLowerCase() === 'covered' || coverStatus.toLowerCase() === 'active'
                                                                         ? "bg-green-100 text-green-700" 
                                                                         : "bg-slate-100 text-slate-600")}>
-                                                                    {row.cover_status}
+                                                                    {coverStatus}
                                             </span>
                                                             ) : (
                                                                 <span className="text-slate-400">-</span>
                                                             )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-slate-600 font-mono text-xs">{row.product_id || ''}</td>
-                                                        <td className="px-4 py-3 text-slate-800 font-medium max-w-[200px] truncate" title={row.product_name}>
-                                                            {row.product_name || ''}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right">
-                                                            <span className={clsx("px-2 py-1 rounded text-sm font-bold inline-block", 
-                                                                row.units > 0 
-                                                                    ? "bg-blue-100 text-blue-700" 
-                                                                    : "bg-gray-100 text-gray-600")}>
-                                                                {row.units || 0}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            {row.Status ? (
-                                                                <span className={clsx("px-3 py-1 rounded-full text-xs font-bold uppercase inline-block", 
-                                                                    row.Status === 'Active' 
-                                                                        ? "bg-green-100 text-green-700" 
-                                                                        : row.Status === 'Inactive'
-                                                                        ? "bg-slate-100 text-slate-600"
-                                                                        : "bg-blue-100 text-blue-700")}>
-                                                                    {row.Status}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-slate-600 font-mono text-xs">{productId || ''}</td>
+                                                            <td className="px-4 py-3 text-slate-800 font-medium max-w-[200px] truncate" title={productName}>
+                                                                {productName || ''}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <span className={clsx("px-2 py-1 rounded text-sm font-bold inline-block", 
+                                                                    (units || 0) > 0 
+                                                                        ? "bg-blue-100 text-blue-700" 
+                                                                        : "bg-gray-100 text-gray-600")}>
+                                                                    {units || 0}
                                                                 </span>
-                                                            ) : (
-                                                                <span className="text-slate-400">-</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                {status ? (
+                                                                    <span className={clsx("px-3 py-1 rounded-full text-xs font-bold uppercase inline-block", 
+                                                                        status === 'Active' 
+                                                                            ? "bg-green-100 text-green-700" 
+                                                                            : status === 'Inactive'
+                                                                            ? "bg-slate-100 text-slate-600"
+                                                                            : "bg-blue-100 text-blue-700")}>
+                                                                        {status}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-slate-400">-</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
                                             ) : (
                                                 <tr>
                                                     <td colSpan="10" className="px-4 py-8 text-center text-slate-500">

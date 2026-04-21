@@ -2149,7 +2149,9 @@ const Inventory = () => {
     const [loadingPOItems, setLoadingPOItems] = useState(false);
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
 
-    const API_URL = 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? 'http://localhost:3002/api'
+        : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // Fetch vendor purchases when tab changes
     useEffect(() => {

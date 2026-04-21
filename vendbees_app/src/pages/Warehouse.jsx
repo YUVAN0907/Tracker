@@ -535,35 +535,42 @@ const Warehouse = () => {
             (e.poId || '').toLowerCase().includes(q)
         ) : entries;
 
+        // Group by PO_ID first, then by Product within each PO
         const grouped = filtered.reduce((acc, entry) => {
-            const key = `${entry.productId || ''}||${entry.poId || ''}`;
-            if (!acc[key]) {
-                acc[key] = {
-                    productId: entry.productId,
-                    productName: entry.productName || '',
-                    poId: entry.poId || '',
-                    addedDate: entry.addedDate,
-                    rows: [],
-                    totalUnits: 0
+            const poId = entry.poId || 'NO_PO';
+            const addedDate = entry.addedDate;
+            const poKey = `PO::${poId}||${addedDate}`;
+            
+            if (!acc[poKey]) {
+                acc[poKey] = {
+                    poId: poId,
+                    addedDate: addedDate,
+                    products: {}, // Will contain products grouped under this PO
+                    totalRows: 0
                 };
             }
-            acc[key].rows.push(entry);
-            acc[key].totalUnits += entry.availableUnits || 0;
-            if (entry.addedDate && entry.addedDate > acc[key].addedDate) {
-                acc[key].addedDate = entry.addedDate;
+            
+            // Group products within this PO
+            const productKey = entry.productId || 'UNKNOWN';
+            if (!acc[poKey].products[productKey]) {
+                acc[poKey].products[productKey] = {
+                    productId: entry.productId,
+                    productName: entry.productName || '',
+                    rows: []
+                };
             }
+            
+            acc[poKey].products[productKey].rows.push(entry);
+            acc[poKey].totalRows += 1;
             return acc;
         }, {});
 
+        // Convert the nested structure to an array of PO groups
         return Object.values(grouped).sort((a, b) => {
-            if (sortBy === 'name_asc') return (a.productName || '').localeCompare(b.productName || '');
-            if (sortBy === 'name_desc') return (b.productName || '').localeCompare(a.productName || '');
-            if (sortBy === 'units_high') return (b.totalUnits || 0) - (a.totalUnits || 0);
-            if (sortBy === 'units_low') return (a.totalUnits || 0) - (b.totalUnits || 0);
-            if (sortBy === 'last_received') return new Date(b.addedDate || 0) - new Date(a.addedDate || 0);
-            return 0;
+            // Sort by PO ID
+            return (a.poId || '').localeCompare(b.poId || '');
         });
-    }, [selectedWarehouseId, warehouseSummary, products, searchQuery, sortBy]);
+    }, [selectedWarehouseId, warehouseSummary, products, detailSearchQuery]);
 
     const showNotification = (message, type = 'success') => {
         setNotification({ message, type });
@@ -736,34 +743,48 @@ const Warehouse = () => {
                                             <thead className="bg-slate-100 text-slate-700">
                                                 <tr>
                                                     <th className="px-4 py-3 font-semibold">PO ID</th>
+                                                    <th className="px-4 py-3 font-semibold">Received Date</th>
                                                     <th className="px-4 py-3 font-semibold">Product ID</th>
                                                     <th className="px-4 py-3 font-semibold">Product Name</th>
-                                                    <th className="px-4 py-3 font-semibold">Received Date</th>
                                                     <th className="px-4 py-3 font-semibold">Case Label</th>
                                                     <th className="px-4 py-3 font-semibold">Available Units</th>
                                                     <th className="px-4 py-3 font-semibold">Expiry Date</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-slate-200">
-                                                {selectedWarehouseGroups.map((group, groupIndex) => (
-                                                    group.rows.map((entry, rowIndex) => (
-                                                        <tr key={`${group.productId}-${group.poId}-${rowIndex}`} className="hover:bg-slate-50">
-                                                            {rowIndex === 0 && (
-                                                                <>
-                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-700 align-top">{group.poId || '-'}</td>
-                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-700 font-medium align-top">{group.productId}</td>
-                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-700 align-top">{group.productName || '-'}</td>
-                                                                    <td rowSpan={group.rows.length} className="px-4 py-4 text-slate-500 align-top">{group.addedDate ? new Date(group.addedDate).toLocaleDateString() : '-'}</td>
-                                                                </>
-                                                            )}
-                                                            <td className="px-4 py-4 text-slate-700">{entry.caseLabel || '-'}</td>
-                                                            <td className="px-4 py-4 text-slate-700">{entry.availableUnits ?? 0}</td>
-                                                            <td className={clsx("px-4 py-4 font-medium", entry.expd && new Date(entry.expd) < new Date() ? 'text-red-600' : 'text-slate-700')}>
-                                                                {entry.expd ? new Date(entry.expd).toLocaleDateString() : '-'}
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                ))}
+                                                {selectedWarehouseGroups.map((poGroup) => {
+                                                    const allProducts = Object.values(poGroup.products);
+                                                    return allProducts.map((product, productIndex) => (
+                                                        product.rows.map((entry, caseIndex) => {
+                                                            // Show PO ID and Received Date only for first product's first case
+                                                            const isFirstRow = productIndex === 0 && caseIndex === 0;
+                                                            // Show Product ID and Name only for first case of this product
+                                                            const isFirstProductCase = caseIndex === 0;
+                                                            
+                                                            return (
+                                                                <tr key={`${poGroup.poId}-${product.productId}-${caseIndex}`} className="hover:bg-slate-50">
+                                                                    {isFirstRow && (
+                                                                        <>
+                                                                            <td rowSpan={poGroup.totalRows} className="px-4 py-4 text-slate-700 font-medium align-top">{poGroup.poId || '-'}</td>
+                                                                            <td rowSpan={poGroup.totalRows} className="px-4 py-4 text-slate-500 align-top">{poGroup.addedDate ? new Date(poGroup.addedDate).toLocaleDateString() : '-'}</td>
+                                                                        </>
+                                                                    )}
+                                                                    {isFirstProductCase && (
+                                                                        <>
+                                                                            <td rowSpan={product.rows.length} className="px-4 py-4 text-slate-700 font-medium align-top">{product.productId}</td>
+                                                                            <td rowSpan={product.rows.length} className="px-4 py-4 text-slate-700 align-top">{product.productName || '-'}</td>
+                                                                        </>
+                                                                    )}
+                                                                    <td className="px-4 py-4 text-slate-700">{entry.caseLabel || '-'}</td>
+                                                                    <td className="px-4 py-4 text-slate-700">{entry.availableUnits ?? 0}</td>
+                                                                    <td className={clsx("px-4 py-4 font-medium", entry.expd && new Date(entry.expd) < new Date() ? 'text-red-600' : 'text-slate-700')}>
+                                                                        {entry.expd ? new Date(entry.expd).toLocaleDateString() : '-'}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })
+                                                    ));
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
