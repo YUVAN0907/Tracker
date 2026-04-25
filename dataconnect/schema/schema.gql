@@ -109,60 +109,6 @@ type VendorPurchaseItem @table(key: "itemId") {
 }
 
 # ==============================
-# NORMALIZED PURCHASED PRODUCTS (3NF)
-# ==============================
-
-# LEVEL 1: PO + Product Delivery (Common per product per PO)
-type PurchasedProductBatch @table(key: "id") {
-  id: UUID! @default(expr: "uuidV4()")
-
-  # Foreign Keys
-  poId: String!
-  productId: String!
-
-  # Common fields for this product in this PO
-  batch: Int!              # Batch number (1, 2, 3...)
-  unitsPerCase: Int!       # Standard units per case for this product in this PO
-  totalUnitsReceived: Int! # Total units received for this product in this PO (sum of all cases)
-  receivedDate: Timestamp  # When this product batch was received (PO level data)
-  notes: String            # Notes common to all cases of this product in this PO
-
-  # Metadata
-  status: String           # active, closed, partial
-  createdAt: Timestamp
-  updatedAt: Timestamp
-
-  # Relations
-  purchaseOrderHeader: PurchaseOrderHeader! @ref(fields: "poId")
-  product: Product! @ref(fields: "productId")
-}
-
-# LEVEL 2: Individual Cases (Case-specific data)
-type PurchasedProductCase @table(key: "id") {
-  id: UUID! @default(expr: "uuidV4()")
-
-  # Foreign Key to batch
-  purchasedProductBatchId: UUID!
-
-  # Auto-generated case label (poId_productId_c1, c2, c3...)
-  caseLabel: String!       # Unique identifier: e.g., "PO123_PROD456_c1"
-
-
-  # Case-specific dates
-  mfd: Timestamp!          # Manufacture Date
-  expd: Timestamp!         # Expiry Date
-
-  # Case inventory
-  availableUnits: Int!     # Current available units in this case
-
-  # Metadata
-  lastUpdated: Timestamp
-
-  # Relations
-  purchasedProductBatch: PurchasedProductBatch! @ref(fields: "purchasedProductBatchId")
-}
-
-# ==============================
 # WAREHOUSE MODEL
 # ==============================
 
@@ -213,26 +159,48 @@ type MachineInventory @table(key: "machineInventoryId") {
   product: Product! @ref(fields: "productId")
 }
 
-type MachineStockAssignment @table(key: "id") {
+# ==============================
+# NORMALIZED BATCH ASSIGNMENT (3NF)
+# ==============================
+
+# LEVEL 1: Batch-level information (one record per batch)
+type BatchAssignment @table(key: "batch") {
+  batch: Int!
+  assignedDate: Timestamp!
+  status: String                 # "Active", "Inactive", "Completed"
+}
+
+# LEVEL 2: Stock-Cover combinations (one record per stock-cover per machine)
+type StockCoverAssignment @table(key: "id") {
   id: UUID! @default(expr: "uuidV4()")
-
-  batch: Int
-  assignedDate: Timestamp
-
+  batch: Int!
   machineId: String!
   stockLabel: String!
-  caseLabel: String          # Case label to track specific case with expiry date
   coverLabel: String!
+  coverStatus: String            # "covered", "uncovered", "open", "sealed"
 
-  coverStatus: String
+  # Foreign key relationships
+  batchAssignment: BatchAssignment! @ref(fields: "batch")
+  machine: Machine! @ref(fields: "machineId")
 
+  # Uniqueness constraint: one stock-cover per machine per batch
+  # UNIQUE(batch, machineId, stockLabel, coverLabel)
+}
+
+# LEVEL 3: Products assigned to stock-covers (many products per stock-cover)
+type StockCoverProductAssignment @table(key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  stockCoverAssignmentId: UUID!
   productId: String!
   units: Int
+  caseLabel: String              # Case label to track specific case with expiry date
 
-  status: String
-
-  machine: Machine! @ref(fields: "machineId")
+  # Foreign key relationships
+  stockCoverAssignment: StockCoverAssignment! @ref(fields: "stockCoverAssignmentId")
   product: Product! @ref(fields: "productId")
+
+  # Uniqueness constraint: one product per stock-cover
+  # UNIQUE(stockCoverAssignmentId, productId)
 }
 
 # ==============================
@@ -338,4 +306,26 @@ type BillHistory @table(key: "billId") {
   
   # Optional relation to user
   user: User! @ref(fields: "userId")
+}
+
+# ==============================
+# QR CODE GENERATION HISTORY
+# ==============================
+
+type QrCodeHistory @table(key: "qrId") {
+  qrId: UUID! @default(expr: "uuidV4()")
+  userId: String!                # User who generated the QR codes
+  machineIds: [String!]!         # Array of machine IDs for which QR codes were generated
+  qrData: String!                # JSON data containing QR code information (machine details, URLs, etc.)
+  pdfGenerated: Boolean! @default(value: false)
+  pdfDownloadCount: Int! @default(value: 0)
+  lastDownloadedAt: Timestamp
+  notes: String
+  
+  # Metadata
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+  
+  # Optional relation to user (for development, user may not exist yet)
+  user: User @ref(fields: "userId")
 }

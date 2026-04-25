@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import Machines from "./pages/Machines";
 import Restock from "./pages/Restock";
 import CreateBatchPage from "./pages/CreateBatchPage";
+import MachineOut from "./pages/MachineOut";
 import Inventory from "./pages/Inventory";
 import Warehouse from "./pages/Warehouse";
 import Notifications from "./pages/Notifications";
@@ -32,6 +33,7 @@ function App() {
                 <Route path="machines" element={<Machines />} />
                 <Route path="restock" element={<Restock />} />
                 <Route path="restock/create-batch" element={<CreateBatchPage />} />
+                <Route path="machine-out" element={<MachineOut />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="warehouse" element={<Warehouse />} />
                 <Route path="complaints" element={<Complaints />} />

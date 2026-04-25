@@ -1417,29 +1417,6 @@ const CreateBatchPage = () => {
                                 </h2>
                                 <p className="text-xs text-slate-500 mt-1">📌 Assign a machine to each stock position</p>
                             </div>
-                            <div className="space-x-2">
-                                {/* ✅ Quick Action: Use Same for All */}
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (selectedMachines[0]) {
-                                            setSelectedMachines(Array(numMachines).fill(selectedMachines[0]));
-                                        }
-                                    }}
-                                    disabled={!selectedMachines[0]}
-                                    className="px-3 py-1 bg-blue-100 hover:bg-blue-200 disabled:bg-slate-100 disabled:text-slate-400 rounded text-xs font-medium text-blue-700 transition-colors"
-                                >
-                                    📋 Use S1 for All
-                                </button>
-                                {/* ✅ Quick Action: Clear All */}
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedMachines(Array(numMachines).fill(''))}
-                                    className="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs font-medium text-slate-700 transition-colors"
-                                >
-                                    🔄 Clear
-                                </button>
-                            </div>
                         </div>
                         
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

@@ -289,7 +289,7 @@ const Dashboard = () => {
 
             <div className="px-8 space-y-6">
                 {/* KPIs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
                     <KPICard
                         title="Total Stock Value"
                         value={`₹${statsStock.totalStockValue.toLocaleString()}`}
@@ -311,6 +311,18 @@ const Dashboard = () => {
                         value={stats.activeMachines || 0}
                         icon={Monitor}
                         colorClass="bg-green-50 text-green-600"
+                    />
+                    <KPICard
+                        title="Active Batches"
+                        value={stats.activeBatches || 0}
+                        icon={Package}
+                        colorClass="bg-indigo-50 text-indigo-600"
+                    />
+                    <KPICard
+                        title="Inactive Batches"
+                        value={stats.inactiveBatches || 0}
+                        icon={Package}
+                        colorClass="bg-gray-50 text-gray-600"
                     />
                     <KPICard
                         title="Out of Stock"

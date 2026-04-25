@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 from dataconnect_db import execute_graphql
+from batch_assignment_queries import get_batch_assignments_flat
 import sys
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -23,15 +24,12 @@ WAREHOUSES_QUERY = """query GetWarehouses { warehouses(limit: 1000) { warehouseI
 
 WAREHOUSE_STOCKS_QUERY = """query GetWarehouseStocks { warehouseStocks(limit: 10000) { stockId warehouseId poId productId batch unitsPerCase caseLabel availableUnits mfd expd receivedDate notes warehouse { warehouseId name location } product { productName } } }"""
 
-MACHINE_STOCK_ASSIGNMENTS_QUERY = """query GetMSA { machineStockAssignments(limit: 1000, orderBy: [{batch: ASC}, {stockLabel: ASC}, {coverLabel: ASC}]) { id batch assignedDate machineId stockLabel coverLabel coverStatus productId units status product { productName } } }"""
+# Query to fetch batch-level status from BatchAssignment table
+BATCH_ASSIGNMENTS_QUERY = """query GetBatchAssignments { batchAssignments(limit: 1000) { batch assignedDate status } }"""
 
 VENDOR_PURCHASE_ORDERS_QUERY = """query GetVendorPurchaseOrders { vendorPurchaseOrders(limit: 1000) { purchaseOrderId poId vendorId receivedDate paymentMode paymentStatus gstFiled } }"""
 
 VENDOR_PURCHASE_ITEMS_QUERY = """query GetVendorPurchaseItems { vendorPurchaseItems(limit: 1000) { itemId purchaseOrderId productId batch unitsPerCase caseCount totalUnits mrp poPrice product { productName } } }"""
-
-PURCHASED_PRODUCT_BATCHES_QUERY = """query GetPurchasedProductBatches { purchasedProductBatches(limit: 1000) { id poId productId batch unitsPerCase totalUnitsReceived receivedDate notes product { productName } } }"""
-
-PURCHASED_PRODUCT_CASES_QUERY = """query GetPurchasedProductCases { purchasedProductCases(limit: 1000) { id purchasedProductBatchId caseLabel mfd expd availableUnits } }"""
 
 PURCHASE_ORDER_HEADERS_QUERY = """query GetPurchaseOrderHeaders { purchaseOrderHeaders(limit: 1000) { poId vendorId createdDate totalAmount status vendor { vendorName } } }"""
 
@@ -101,6 +99,7 @@ def convert_to_days(value):
 
 @dashboard_bp.route('/api/dashboard', methods=['GET'])
 def dashboard():
+    print("DASHBOARD FUNCTION CALLED", file=sys.stderr)
     try:
         # Execute individual queries since Firebase Data Connect doesn't support multi-root queries
         data = {}
@@ -114,13 +113,11 @@ def dashboard():
             ("vendors", VENDORS_QUERY),
             ("warehouses", WAREHOUSES_QUERY),
             ("warehouseStocks", WAREHOUSE_STOCKS_QUERY),
-            ("machineStockAssignments", MACHINE_STOCK_ASSIGNMENTS_QUERY),
             ("vendorPurchaseOrders", VENDOR_PURCHASE_ORDERS_QUERY),
             ("vendorPurchaseItems", VENDOR_PURCHASE_ITEMS_QUERY),
-            ("purchasedProductBatches", PURCHASED_PRODUCT_BATCHES_QUERY),
-            ("purchasedProductCases", PURCHASED_PRODUCT_CASES_QUERY),
             ("purchaseOrderHeaders", PURCHASE_ORDER_HEADERS_QUERY),
             ("purchaseOrderLines", PURCHASE_ORDER_LINES_QUERY),
+            ("batchAssignments", BATCH_ASSIGNMENTS_QUERY),
         ]
         
         for query_name, query_string in queries:
@@ -134,10 +131,15 @@ def dashboard():
                 print(f"[DASHBOARD] Error executing {query_name}: {str(query_error)}", file=sys.stderr)
                 data[query_name] = []
         
-        # DEBUG: Log purchasedProductCases data
-        print(f"[DEBUG] purchasedProductCases count: {len(data.get('purchasedProductCases', []))}", file=sys.stderr)
-        if data.get('purchasedProductCases'):
-            print(f"[DEBUG] First purchasedProductCase: {data['purchasedProductCases'][0]}", file=sys.stderr)
+        # UPDATED: Get machineStockAssignments from normalized tables
+        # This queries BatchAssignment -> StockCoverAssignment -> StockCoverProductAssignment
+        # and returns flattened results for backward compatibility
+        try:
+            msa_records = get_batch_assignments_flat()
+            data['machineStockAssignments'] = msa_records
+        except Exception as msa_error:
+            print(f"[DASHBOARD] Error getting normalized batch assignments: {str(msa_error)}", file=sys.stderr)
+            data['machineStockAssignments'] = []
         
         # We need to reshape the GraphQL response to match the exact JSON keys 
         # the frontend `DataContext.jsx` expects to avoid breaking the UI.
@@ -326,71 +328,35 @@ def dashboard():
         for agg in warehouse_aggregation.values():
             warehouse_out.append(agg)
             
-        # 8a. Map Purchased Products (using new normalized structure)
-        purchased_products_out = []
-        
-        # Get all purchased product cases with their batch info
-        cases_by_batch = {}
-        for batch in data.get("purchasedProductBatches", []):
-            batch_id = batch.get("id")
-            cases_by_batch[batch_id] = batch
-        
-        # Map each case to purchased products format
-        for case in data.get("purchasedProductCases", []):
-            batch_id = case.get("purchasedProductBatchId")
-            batch_info = cases_by_batch.get(batch_id, {})
-            
-            purchased_products_out.append({
-                "EXP_Id": case.get("id"),
-                "expd": case.get("expd", ""),
-                "mfd": case.get("mfd", ""),
-                "PO_ID": batch_info.get("poId"),
-                "Product_ID": batch_info.get("productId"),
-                "Product_Name": (batch_info.get("product") or {}).get("productName", "Unknown Product"),
-                "Available_Units": case.get("availableUnits", 0),
-                "Units_Per_Case": batch_info.get("unitsPerCase", 1),
-                "Batch": batch_info.get("batch"),
-                "Received_Date": batch_info.get("receivedDate", ""),
-                "Case_Label": case.get("caseLabel", ""),
-                "Status": batch_info.get("status", "active")
-            })
-            
-        # 8b. Return separate arrays for purchasedProductBatches and purchasedProductCases
-        purchased_product_batches_out = []
-        for batch in data.get("purchasedProductBatches", []):
-            purchased_product_batches_out.append({
-                "id": batch.get("id"),
-                "poId": batch.get("poId"),
-                "productId": batch.get("productId"),
-                "batch": batch.get("batch"),
-                "unitsPerCase": batch.get("unitsPerCase", 1),
-                "totalUnitsReceived": batch.get("totalUnitsReceived", 0),
-                "receivedDate": batch.get("receivedDate", ""),
-                "notes": batch.get("notes", ""),
-                "product": batch.get("product", {})
-            })
-            
-        purchased_product_cases_out = []
-        for case in data.get("purchasedProductCases", []):
-            purchased_product_cases_out.append({
-                "id": case.get("id"),
-                "purchasedProductBatchId": case.get("purchasedProductBatchId"),
-                "caseLabel": case.get("caseLabel", ""),
-                "mfd": case.get("mfd", ""),
-                "expd": case.get("expd", ""),
-                "availableUnits": case.get("availableUnits", 0)
-            })
-            
-        # 8b. Map Stocks / Assignments (MachineStockAssignment)
-        # In Excel this was 3 sheets (Stocks, StockProducts, StockAssignments)
+        # 8b. Map Stocks / Assignments (from normalized BatchAssignment structure)
+        # Queried from: BatchAssignment -> StockCoverAssignment -> StockCoverProductAssignment
         # The frontend expects "stocks" and "stock_assignments"
+        
+        # Build a map of batch statuses from BatchAssignment table
+        batch_status_map = {}
+        for batch_assign in data.get("batchAssignments", []):
+            batch_num = batch_assign.get("batch")
+            status = batch_assign.get("status", "Active")
+            batch_status_map[batch_num] = {
+                "status": status,
+                "assignedDate": batch_assign.get("assignedDate")
+            }
+        
         stocks_out = []
         stock_assignments_out = []
         for msa in data.get("machineStockAssignments", []):
             product_dict = msa.get("product") or {}
+            batch_num = msa.get("batch")
+            
+            # Get batch-level status from BatchAssignment table
+            batch_info = batch_status_map.get(batch_num, {})
+            batch_status = batch_info.get("status", "Active")
+            batch_date = batch_info.get("assignedDate") or msa.get("assignedDate")
+            
             stocks_out.append({
-                "Batch": msa.get("batch"),
-                "Date": msa.get("assignedDate"),
+                "id": msa.get("id"),  # CRITICAL: Include id for update-units endpoint
+                "Batch": batch_num,
+                "Date": batch_date,
                 "Machine": msa.get("machineId"),
                 "Stock": msa.get("stockLabel"),
                 "cover": msa.get("coverLabel"),
@@ -398,15 +364,28 @@ def dashboard():
                 "product_id": msa.get("productId"),
                 "product_name": product_dict.get("productName", ""),
                 "units": msa.get("units", 0),
-                "Status": msa.get("status"),
-                "Stock_ID": msa.get("id")
+                "Status": batch_status,  # Use batch-level status from BatchAssignment
+                "caseLabel": msa.get("caseLabel"),
+                "Stock_ID": msa.get("id"),
+                "stockLabel": msa.get("stockLabel"),
+                "coverLabel": msa.get("coverLabel"),
+                "machineId": msa.get("machineId"),
+                "status": batch_status  # Use batch-level status
             })
             stock_assignments_out.append({
                 "Stock_ID": msa.get("id"),
                 "Product_ID": msa.get("productId"),
+                "Product_Name": product_dict.get("productName", ""),
                 "Units": msa.get("units", 0),
                 "Machine_ID": msa.get("machineId"),
-                "Assignment_Status": msa.get("status")
+                "Assignment_Status": batch_status,
+                "stockLabel": msa.get("stockLabel"),
+                "coverLabel": msa.get("coverLabel"),
+                "coverStatus": msa.get("coverStatus"),
+                "caseLabel": msa.get("caseLabel"),
+                "status": batch_status,
+                "batch": batch_num,
+                "assignedDate": batch_date
             })
             
         # 9. Map OUR_POs from PurchaseOrderLines with embedded header info
@@ -437,10 +416,16 @@ def dashboard():
         total_units = sum(int(inv.get("Current_Stock", 0)) for inv in stock_out)
         active_machines = sum(1 for m in machines_out if str(m.get("Status")).lower() == 'active')
         
+        # Calculate active and inactive batches
+        active_batches = sum(1 for batch_info in batch_status_map.values() if batch_info.get("status") == "Active")
+        inactive_batches = sum(1 for batch_info in batch_status_map.values() if batch_info.get("status") == "Inactive")
+        
         metrics = {
             "totalStockValue": round(total_value, 2),
             "totalUnits": total_units,
             "activeMachines": active_machines,
+            "activeBatches": active_batches,
+            "inactiveBatches": inactive_batches,
             "outOfStockMachines": sum(1 for m in machines_out if sum(1 for s in stock_out if s["Machine_ID"] == m["Machine_ID"] and s["Current_Stock"] > 0) == 0)
         }
 
@@ -449,16 +434,13 @@ def dashboard():
             'machines': machines_out,
             'stock': stock_out,
             'sales': sales_out,
-            'purchases': purchases_out,
+            'purchased_products': purchases_out,
             'refills': refills_out,
             'vendors': vendors_out,
             'warehouse': warehouse_out,
             'warehouses': warehouses_out,
             'warehouseEntries': warehouse_entries_out,
             'warehouseStocks': warehouse_stocks_out,
-            'purchased_products': purchased_products_out,
-            'purchasedProductBatches': purchased_product_batches_out,
-            'purchasedProductCases': purchased_product_cases_out,
             'stocks': stocks_out,
             'stock_assignments': stock_assignments_out,
             'our_pos': our_pos_out,

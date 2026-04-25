@@ -17,7 +17,7 @@ query GetProduct($productId: String!) {
 
 UPSERT_WAREHOUSE_MUTATION = """
 mutation UpsertWarehouse($productId: String!, $availableUnits: Int!, $unitsPerCase: Int, $notes: String, $lastReceivedDate: Timestamp) {
-  warehouseStock_upsert(data: {
+  warehouseInventory_upsert(data: {
     productId: $productId,
     availableUnits: $availableUnits,
     unitsPerCase: $unitsPerCase,

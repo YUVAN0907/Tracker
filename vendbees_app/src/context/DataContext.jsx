@@ -274,13 +274,23 @@ export const DataProvider = ({ children }) => {
                     product_name: getCleanValue('product name', 'product_name'),
                     units: parseFloat(getCleanValue('units', 'Units') || 0) || 0,
                     Status: getCleanValue('Status', 'Status'),  // Empty if NaN/null
+                    caseLabel: s.caseLabel || '',  // Add caseLabel support
                     // Keep old names for compatibility
                     Stock_ID: getCleanValue('Stock_ID', 'Stock_ID'),
                     Batch_Number: getCleanValue('Batch_Number', 'Batch'),
                     Stock_Name: getCleanValue('Stock_Name', 'Stock'),
                     Cover_Name: getCleanValue('Cover_Name', 'cover'),
                     Total_Products: parseFloat(getCleanValue('Total_Products', 'Total_Products') || 0) || 0,
-                    Total_Units: parseFloat(getCleanValue('Total_Units', 'Total_Units') || 0) || 0
+                    Total_Units: parseFloat(getCleanValue('Total_Units', 'Total_Units') || 0) || 0,
+                    // Add camelCase fields for new Firebase schema support
+                    id: s.id || getCleanValue('id', 'id'),  // StockCoverProductAssignment ID
+                    machineId: s.machineId || getCleanValue('Machine', 'Machine_ID'),
+                    stockLabel: s.stockLabel || getCleanValue('Stock', 'Stock_Name'),
+                    coverLabel: s.coverLabel || getCleanValue('cover', 'Cover_Name'),
+                    coverStatus: s.coverStatus || getCleanValue('cover status', 'cover_status'),
+                    productId: s.productId || getCleanValue('product id', 'product_id'),
+                    status: s.status || getCleanValue('Status', 'Status'),
+                    assignedDate: s.Date || s.assignedDate || ''
                 };
             }).filter(s => {
                 // Include row if it has product_id (all product rows should have this)
@@ -291,7 +301,7 @@ export const DataProvider = ({ children }) => {
             if (stocks.length > 0) {
                 console.log('✔ Loaded stocks from Stocks sheet:', stocks.length, 'rows');
                 stocks.slice(0, 10).forEach((s, idx) => {
-                    console.log(`  Row ${idx + 1}: Batch=${s.Batch || '-'}, Stock=${s.Stock || '-'}, Cover=${s.cover || '-'}, Status=${s.Status || '-'}, Cover_Status=${s.cover_status || '-'}, Product=${s.product_name}`);
+                    console.log(`  Row ${idx + 1}: Batch=${s.Batch || '-'}, Stock=${s.Stock || '-'}, Cover=${s.cover || '-'}, Status=${s.Status || '-'}, CaseLabel=${s.caseLabel || '-'}, Cover_Status=${s.cover_status || '-'}, Product=${s.product_name}`);
                 });
             }
 
@@ -303,7 +313,14 @@ export const DataProvider = ({ children }) => {
                 Units: parseInt(sa.Units || 0) || 0,
                 Assignment_Status: sa.Assignment_Status || 'In_Stock',
                 Machine_ID: sa.Machine_ID || '',
-                Assigned_Date: sa.Assigned_Date || ''
+                Assigned_Date: sa.Assigned_Date || '',
+                stockLabel: sa.stockLabel || '',
+                coverLabel: sa.coverLabel || '',
+                coverStatus: sa.coverStatus || '',
+                caseLabel: sa.caseLabel || '',
+                status: sa.status || '',
+                batch: sa.batch || '',
+                assignedDate: sa.assignedDate || ''
             }));
 
             // 9. OUR_PO Mapping - Fetch from normalized schema via API
@@ -368,30 +385,8 @@ export const DataProvider = ({ children }) => {
                 GST_Filed: d['GST FILED'] || d.GST_Filed || d.gstFiled || ''
             })).filter(d => d.Vendor_ID || d.Product_ID);
 
-            // 8c. Purchased Product Cases Mapping (normalized schema)
-            // Build a map of purchased product batches by their ID
-            const purchasedProductBatchMap = (json.purchasedProductBatches || []).reduce((map, batch) => {
-                map[batch.id] = batch;
-                return map;
-            }, {});
-
-            let purchased_product_cases = (json.purchasedProductCases || []).map(c => {
-                const batch = purchasedProductBatchMap[c.purchasedProductBatchId] || {};
-                return {
-                    id: c.id || '',
-                    poId: batch.poId || '',
-                    productId: batch.productId || '',
-                    productName: (batch.product || {}).productName || batch.productName || '',
-                    receivedDate: batch.receivedDate || '',
-                    caseLabel: c.caseLabel || '',
-                    availableUnits: parseInt(c.availableUnits || 0) || 0,
-                    expd: c.expd || '',
-                    expiry: c.expd || '',
-                    mfd: c.mfd || '',
-                    batch: batch.batch || '',
-                    unitsPerCase: parseInt(batch.unitsPerCase || 1) || 1
-                };
-            });
+            // Purchased product cases removed - now using WarehouseStock directly
+            let purchased_product_cases = [];
 
             console.log('DataContext: purchasedProductCases from API:', json.purchasedProductCases?.length || 0);
             if (json.purchasedProductCases?.length > 0) {

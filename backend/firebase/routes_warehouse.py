@@ -452,12 +452,10 @@ def add_to_warehouse_from_purchase():
         try:
             log(f"Fetching warehouse inventory for {product_id}")
             warehouse_res = execute_graphql(GET_WAREHOUSE_INV_QUERY, {"productId": product_id})
-            warehouse_stocks = warehouse_res.get("warehouseStocks", [])
+            current_inv = warehouse_res.get("warehouseInventory", {})
+            current_units = int(current_inv.get("availableUnits", 0))
             
-            # Sum up all units from all warehouse stocks for this product
-            current_units = sum(int(ws.get("availableUnits", 0)) for ws in warehouse_stocks)
-            units_per_case = int(warehouse_stocks[0].get("unitsPerCase", 1)) if warehouse_stocks else 1
-            
+            units_per_case = int(current_inv.get("unitsPerCase", 1)) if current_inv else 1
             new_total_units = current_units + units_to_add
             
             warehouse_vars = {
@@ -669,13 +667,11 @@ def update_warehouse_item():
             return jsonify({'error': 'No updates provided'}), 400
             
         res = execute_graphql(GET_WAREHOUSE_INV_QUERY, {"productId": product_id})
-        warehouse_stocks = res.get("warehouseStocks", [])
+        current_inv = res.get("warehouseInventory")
         
-        if not warehouse_stocks:
+        if not current_inv:
             return jsonify({'error': 'Item not found in warehouse'}), 404
 
-        # Use the first warehouse stock entry
-        current_inv = warehouse_stocks[0]
         new_units = int(available_units) if available_units is not None else int(current_inv.get('availableUnits', 0))
         new_upc = int(units_per_case) if units_per_case is not None else int(current_inv.get('unitsPerCase', 1))
 

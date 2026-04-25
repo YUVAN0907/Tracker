@@ -2,31 +2,54 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
-import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2, QrCode, Download, History } from 'lucide-react';
+import { createRoot } from 'react-dom/client';
+import QRCode from 'react-qr-code';
 import clsx from 'clsx';
-
-const KPI = ({ title, value, icon: Icon, colorClass }) => (
-    <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-        <div className={clsx("p-3 rounded-lg", colorClass)}>
-            <Icon size={24} />
-        </div>
-        <div className="text-right">
-            <div className="text-sm text-slate-500 font-medium">{title}</div>
-            <div className="text-3xl font-bold text-slate-800 mt-1">{value}</div>
-        </div>
-    </div>
-);
+import html2pdf from 'html2pdf.js';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import KPI from '../components/KPI';
 
 const Restock = () => {
     const navigate = useNavigate();
-    const { products, machines, stock, vendors, purchased_product_cases = [], stocks = [], stock_assignments = [], loading, refreshData } = useData();
-    const purchased_products = purchased_product_cases;
-    const uniquePurchasedProducts = new Set((purchased_products || []).map(it => (it.Product_ID || it.productId || it.Product_Id || '').trim())).size;
+    const { products, machines, stock, vendors, warehouseStocks = [], stocks = [], stock_assignments = [], loading, refreshData } = useData();
+    const { user } = useAuth();
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
     const [notification, setNotification] = useState(null);
-    const API_URL = 'http://127.0.0.1:3001/api';
+    
+    // QR Code generation state
+    const [selectedMachines, setSelectedMachines] = useState([]);
+    const [qrHistory, setQrHistory] = useState([]);
+    const [generatingQr, setGeneratingQr] = useState(false);
+    const [qrNotes, setQrNotes] = useState('');
+    
+    // Build batch status summary for Restock counts
+    const batchStatusMap = stocks.reduce((map, s) => {
+        const batchKey = (s.batch || s.Batch || '').toString().trim();
+        const statusValue = (s.status || s.Status || '').toString().trim();
+        if (!batchKey) return map;
+        if (!map[batchKey] && statusValue) {
+            map[batchKey] = statusValue;
+        }
+        return map;
+    }, {});
+
+    const activeBatchCount = Object.values(batchStatusMap).filter(status => status === 'Active').length;
+    const inactiveBatchCount = Object.values(batchStatusMap).filter(status => status === 'Inactive').length;
+
+    // Use same API URL logic as DataContext for consistency
+    const isLocalhost = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' || 
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.startsWith('192.168')
+    );
+    const API_URL = isLocalhost 
+        ? 'http://localhost:3002/api'
+        : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
 
     // Log when stocks data changes
     useEffect(() => {
@@ -46,6 +69,48 @@ const Restock = () => {
             console.log('⚠️ Restock.jsx: Stock Assignments not available');
         }
     }, [stocks, stock_assignments]);
+
+    // Download all QR codes as PNG images (zipped)
+    const downloadQrPngZip = async (qrItem) => {
+        try {
+            const QRCodeLib = await import('qrcode');
+            const zip = new JSZip();
+
+            // Determine machine records
+            const machineRecords = qrItem.qrData?.machines?.length
+                ? qrItem.qrData.machines
+                : (qrItem.machineIds || []).map(id => ({ machineId: id, location: '' }));
+
+            if (machineRecords.length === 0) {
+                alert('No machine data available for this QR code set.');
+                return;
+            }
+
+            for (const machine of machineRecords) {
+                const machineId = machine.machineId || machine.machineId || '';
+                const machineLocation = machine.location || machine.Location || '';
+                
+                // Encode both Machine ID and Location in the QR code
+                const qrData = `${machineId}|${machineLocation}`;
+                
+                const pngDataUrl = await QRCodeLib.toDataURL(qrData, {
+                    width: 400,
+                    margin: 2,
+                    color: { dark: '#000000', light: '#ffffff' }
+                });
+                // Convert dataURL to blob
+                const res = await fetch(pngDataUrl);
+                const blob = await res.blob();
+                zip.file(`${machineId}.png`, blob);
+            }
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            saveAs(zipBlob, `machine-qr-codes-${qrItem.qrId.slice(-8)}.zip`);
+        } catch (err) {
+            alert('Failed to generate PNG zip: ' + err.message);
+            console.error('PNG zip error:', err);
+        }
+    };
 
     if (loading) return null;
 
@@ -131,20 +196,326 @@ const Restock = () => {
         // This function is kept for backward compatibility but no longer used
     };
 
+    // QR Code functions
+    const handleMachineSelect = (machineId) => {
+        setSelectedMachines(prev => 
+            prev.includes(machineId) 
+                ? prev.filter(id => id !== machineId)
+                : [...prev, machineId]
+        );
+    };
+
+    const handleGenerateQrCodes = async () => {
+        if (selectedMachines.length === 0) {
+            setNotification({ type: 'error', message: 'Please select at least one machine' });
+            return;
+        }
+
+        if (!user || !user.userId) {
+            setNotification({ type: 'error', message: 'You must be logged in to generate QR codes' });
+            return;
+        }
+
+        setGeneratingQr(true);
+        try {
+            const response = await fetch(`${API_URL}/qr/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: user.userId,
+                    machineIds: selectedMachines,
+                    notes: qrNotes
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setNotification({ type: 'success', message: `Generated QR codes for ${selectedMachines.length} machines` });
+                setSelectedMachines([]);
+                setQrNotes('');
+                loadQrHistory(); // Refresh history
+            } else {
+                const error = await response.json();
+                setNotification({ type: 'error', message: `Failed to generate QR codes: ${error.message || 'Unknown error'}` });
+            }
+        } catch (error) {
+            console.error('Error generating QR codes:', error);
+            setNotification({ type: 'error', message: `Error: ${error.message}` });
+        } finally {
+            setGeneratingQr(false);
+        }
+    };
+
+    const loadQrHistory = async () => {
+        if (!user || !user.userId) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/qr/history?userId=${user.userId}`, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setQrHistory(data.history || []);
+            } else {
+                console.error('Failed to load QR history');
+            }
+        } catch (error) {
+            console.error('Error loading QR history:', error);
+        }
+    };
+
+    const handleDownloadPdf = async (qrId) => {
+        try {
+            // Update download count
+            await fetch(`${API_URL}/qr/download/${qrId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            // Get QR data from history
+            const qrItem = qrHistory.find(item => item.qrId === qrId);
+            if (!qrItem) {
+                setNotification({ type: 'error', message: 'QR data not found' });
+                return;
+            }
+
+            // Generate PNG ZIP with QR codes
+            await downloadQrPngZip(qrItem);
+            
+            setNotification({ type: 'success', message: 'PNG ZIP downloaded successfully' });
+        } catch (error) {
+            console.error('Error downloading PDF:', error);
+            setNotification({ type: 'error', message: 'Failed to download PDF' });
+        }
+    };
+
+    const handleDeleteQr = async (qrId) => {
+        try {
+            const response = await fetch(`${API_URL}/qr/delete/${qrId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (response.ok) {
+                setNotification({ type: 'success', message: 'QR history deleted successfully' });
+                loadQrHistory();
+            } else {
+                const error = await response.json();
+                console.error('Failed to delete QR history:', error);
+                setNotification({ type: 'error', message: `Failed to delete QR history: ${error.message || 'Unknown error'}` });
+            }
+        } catch (error) {
+            console.error('Error deleting QR history:', error);
+            setNotification({ type: 'error', message: 'Failed to delete QR history' });
+        }
+    };
+
+    const generateQrPdf = async (qrItem) => {
+        // Create a temporary div for PDF generation
+        const pdfContainer = document.createElement('div');
+        pdfContainer.style.width = '210mm'; // A4 width
+        pdfContainer.style.minHeight = '297mm'; // A4 height
+        pdfContainer.style.padding = '20mm';
+        pdfContainer.style.boxSizing = 'border-box';
+        pdfContainer.style.fontFamily = 'Arial, sans-serif';
+        pdfContainer.style.backgroundColor = 'white';
+
+        // Add header
+        const header = document.createElement('div');
+        header.style.textAlign = 'center';
+        header.style.marginBottom = '30px';
+        header.style.borderBottom = '2px solid #333';
+        header.style.paddingBottom = '20px';
+
+        const title = document.createElement('h1');
+        title.textContent = 'Machine QR Codes';
+        title.style.color = '#333';
+        title.style.fontSize = '24px';
+        title.style.margin = '0 0 10px 0';
+
+        const subtitle = document.createElement('p');
+        subtitle.textContent = `Generated on ${new Date(qrItem.createdAt).toLocaleString()}`;
+        subtitle.style.color = '#666';
+        subtitle.style.fontSize = '14px';
+        subtitle.style.margin = '0';
+
+        header.appendChild(title);
+        header.appendChild(subtitle);
+        pdfContainer.appendChild(header);
+
+        // Add QR codes grid
+        const gridContainer = document.createElement('div');
+        gridContainer.style.display = 'grid';
+        gridContainer.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        gridContainer.style.gap = '20px';
+        gridContainer.style.marginTop = '20px';
+
+        const qrRoots = [];
+        const qrCanvases = [];
+        const machineRecords = qrItem.qrData?.machines?.length
+            ? qrItem.qrData.machines
+            : (qrItem.machineIds || []).map(id => ({ machineId: id, location: '' }));
+
+        if (machineRecords.length === 0) {
+            const emptyMessage = document.createElement('p');
+            emptyMessage.textContent = 'No machine data available for this QR code set.';
+            emptyMessage.style.color = '#444';
+            emptyMessage.style.fontSize = '14px';
+            emptyMessage.style.margin = '20px 0';
+            pdfContainer.appendChild(emptyMessage);
+        }
+
+        // Generate QR codes for each machine
+        for (const machine of machineRecords) {
+            const machineTitleText = machine.machineId || machine.machineId || '';
+            const machineLocationText = machine.location || machine.Location || '';
+
+            const qrCard = document.createElement('div');
+            qrCard.style.border = '1px solid #ddd';
+            qrCard.style.borderRadius = '8px';
+            qrCard.style.padding = '15px';
+            qrCard.style.textAlign = 'center';
+            qrCard.style.backgroundColor = '#f9f9f9';
+
+            // Machine info
+            const machineTitle = document.createElement('h3');
+            machineTitle.textContent = machineTitleText;
+            machineTitle.style.color = '#333';
+            machineTitle.style.fontSize = '16px';
+            machineTitle.style.margin = '0 0 5px 0';
+            machineTitle.style.fontWeight = 'bold';
+
+            const machineLocation = document.createElement('p');
+            machineLocation.textContent = machineLocationText;
+            machineLocation.style.color = '#666';
+            machineLocation.style.fontSize = '12px';
+            machineLocation.style.margin = '0 0 15px 0';
+
+            // QR Code container
+            const qrContainer = document.createElement('div');
+            qrContainer.style.display = 'inline-flex';
+            qrContainer.style.backgroundColor = 'white';
+            qrContainer.style.padding = '10px';
+            qrContainer.style.borderRadius = '4px';
+            qrContainer.style.border = '1px solid #ccc';
+            qrContainer.style.textAlign = 'center';
+            qrContainer.style.width = '150px';
+            qrContainer.style.height = '150px';
+            qrContainer.style.alignItems = 'center';
+            qrContainer.style.justifyContent = 'center';
+
+            const qrRoot = createRoot(qrContainer);
+            qrRoot.render(
+                <QRCode
+                    value={machineTitleText}
+                    size={130}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                    level="H"
+                />
+            );
+
+            qrRoots.push(qrRoot);
+
+            // QR code label
+            const qrLabel = document.createElement('p');
+            qrLabel.textContent = 'Scan to view machine details';
+            qrLabel.style.color = '#666';
+            qrLabel.style.fontSize = '10px';
+            qrLabel.style.margin = '5px 0 0 0';
+
+            qrCard.appendChild(machineTitle);
+            qrCard.appendChild(machineLocation);
+            qrCard.appendChild(qrContainer);
+            qrCard.appendChild(qrLabel);
+
+            gridContainer.appendChild(qrCard);
+        }
+
+        pdfContainer.appendChild(gridContainer);
+
+        // Add notes if present
+        if (qrItem.notes) {
+            const notesSection = document.createElement('div');
+            notesSection.style.marginTop = '30px';
+            notesSection.style.padding = '15px';
+            notesSection.style.backgroundColor = '#f0f0f0';
+            notesSection.style.borderRadius = '4px';
+
+            const notesTitle = document.createElement('h4');
+            notesTitle.textContent = 'Notes:';
+            notesTitle.style.color = '#333';
+            notesTitle.style.fontSize = '14px';
+            notesTitle.style.margin = '0 0 5px 0';
+            notesTitle.style.fontWeight = 'bold';
+
+            const notesText = document.createElement('p');
+            notesText.textContent = qrItem.notes;
+            notesText.style.color = '#666';
+            notesText.style.fontSize = '12px';
+            notesText.style.margin = '0';
+            notesText.style.lineHeight = '1.4';
+
+            notesSection.appendChild(notesTitle);
+            notesSection.appendChild(notesText);
+            pdfContainer.appendChild(notesSection);
+        }
+
+        // Add to DOM temporarily for PDF generation
+        document.body.appendChild(pdfContainer);
+        pdfContainer.style.position = 'absolute';
+        pdfContainer.style.top = '0';
+        pdfContainer.style.left = '-9999px';
+        pdfContainer.style.pointerEvents = 'none';
+        pdfContainer.style.zIndex = '-1000';
+
+        // Wait for the QR components to render into the DOM
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Generate PDF
+        const opt = {
+            margin: 0.5,
+            filename: `machine-qr-codes-${qrItem.qrId.slice(-8)}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+
+        await html2pdf().set(opt).from(pdfContainer).save();
+
+        // Clean up
+        qrRoots.forEach((root) => root.unmount());
+        qrCanvases.length = 0; // Clear the array
+        document.body.removeChild(pdfContainer);
+    };
+
+    // Load QR history when QR tab is active and user is available
+    useEffect(() => {
+        if (activeTab === 'qr' && user && user.userId) {
+            loadQrHistory();
+        }
+    }, [activeTab, user]);
+
     return (
         <div className="space-y-6 pb-10">
             <Header title="Restock & Stock Management" subtitle="Monitor stock levels and create batches for distribution" />
 
             <div className="px-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <KPI title="Critical Items" value={criticalCount} icon={AlertTriangle} colorClass="bg-red-50 text-red-600" />
-                    <KPI title="Low Stock" value={lowCount} icon={Package} colorClass="bg-yellow-50 text-yellow-600" />
-                    <KPI title="Safe Stock" value={safeCount} icon={CheckCircle} colorClass="bg-green-50 text-green-600" />
-                    <KPI title={activeTab === 'batches' ? 'Active Batches' : 'Active Stocks'} 
-                        value={activeTab === 'batches' ? (new Set(stocks.filter(s => (s.Status || s.status) === 'Active' && (s.Batch || s.batch)).map(s => (s.Batch || s.batch))).size || 0) : stocks.length} 
-                        icon={Box} 
-                        colorClass="bg-blue-50 text-blue-600" 
-                    />
+<div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                        <KPI title="Critical Items" value={criticalCount} icon={AlertTriangle} colorClass="bg-red-50 text-red-600" />
+                        <KPI title="Low Stock" value={lowCount} icon={Package} colorClass="bg-yellow-50 text-yellow-600" />
+                        <KPI title="Safe Stock" value={safeCount} icon={CheckCircle} colorClass="bg-green-50 text-green-600" />
+                        <KPI title={activeTab === 'batches' ? 'Active Batches' : 'Active Stocks'} 
+                            value={activeTab === 'batches' ? activeBatchCount : (stocks && Array.isArray(stocks) ? stocks.length : 0)} 
+                            icon={Box} 
+                            colorClass="bg-blue-50 text-blue-600" 
+                        />
+                        <KPI title="Inactive Batches" value={inactiveBatchCount} icon={Trash2} colorClass="bg-red-50 text-red-700" />
                 </div>
 
                 {/* Notification */}
@@ -165,6 +536,7 @@ const Restock = () => {
                     </div>
                 )}
 
+
                 {/* Tabs */}
                 <div className="flex gap-4 border-b border-slate-200">
                     <button
@@ -173,17 +545,19 @@ const Restock = () => {
                     >
                         Restock Alerts
                     </button>
-                    <button
-                        onClick={() => setActiveTab('purchased')}
-                        className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'purchased' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
-                    >
-                        Purchased Products ({uniquePurchasedProducts})
-                    </button>
+
                     <button
                         onClick={() => setActiveTab('batches')}
                         className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'batches' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
                     >
-                        Stock Batches ({stocks ? new Set(stocks.map(s => s.batch || s.Batch).filter(b => b)).size : 0})
+                        Stock Batches ({stocks && Array.isArray(stocks) ? new Set(stocks.map(s => s.batch || s.Batch).filter(b => b)).size : 0})
+                    </button>
+
+                    <button
+                        onClick={() => setActiveTab('qr')}
+                        className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'qr' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
+                    >
+                        QR Codes
                     </button>
                 </div>
 
@@ -261,157 +635,7 @@ const Restock = () => {
                     </div>
                 )}
 
-                {/* Purchased Products Tab */}
-                {activeTab === 'purchased' && (
-                    <div className="space-y-4">
-                        {purchased_product_cases.length === 0 ? (
-                            <div className="bg-slate-50 rounded-xl p-8 text-center">
-                                <Package size={32} className="mx-auto text-slate-400 mb-2" />
-                                <p className="text-slate-600">No purchased products yet. Record deliveries to view them here.</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <div>
-                                    <h3 className="font-semibold text-slate-800">Purchased Products Inventory</h3>
-                                    <p className="text-xs text-slate-500 mt-1">Showing {uniquePurchasedProducts} products across {purchased_product_cases.length} cases from deliveries</p>
-                                </div>
-                                
-                                {/* Table View - Row-wise display with grouped PO and Product info */}
-                                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50 sticky top-0">
-                                                <tr>
-                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">PO ID</th>
-                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Received Date</th>
-                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product ID</th>
-                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product Name</th>
-                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Batch</th>
-                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Units Per Case</th>
-                                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Case Label</th>
-                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Available Units</th>
-                                                    <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Expiry Date</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {(() => {
-                                                    const rows = [];
-                                                    const groupedByPO = {};
-                                                    
-                                                    // Group items by PO first
-                                                    purchased_product_cases.forEach(item => {
-                                                        const poId = item.poId || 'Unknown';
-                                                        if (!groupedByPO[poId]) {
-                                                            groupedByPO[poId] = [];
-                                                        }
-                                                        groupedByPO[poId].push(item);
-                                                    });
 
-                                                    // Process each PO group
-                                                    Object.entries(groupedByPO).forEach(([poId, poItems]) => {
-                                                        const firstPoItem = poItems[0];
-                                                        const receivedDate = firstPoItem.receivedDate 
-                                                            ? new Date(firstPoItem.receivedDate).toLocaleDateString() 
-                                                            : '-';
-
-                                                        // Group items within PO by product
-                                                        const groupedByProduct = {};
-                                                        poItems.forEach(item => {
-                                                            const prodName = item.productName || item.productId || 'Unknown';
-                                                            if (!groupedByProduct[prodName]) {
-                                                                groupedByProduct[prodName] = [];
-                                                            }
-                                                            groupedByProduct[prodName].push(item);
-                                                        });
-
-                                                        // Create rows for each case item
-                                                        Object.entries(groupedByProduct).forEach(([productName, productCases]) => {
-                                                            const firstProduct = productCases[0];
-                                                            productCases.forEach((caseItem, caseIdx) => {
-                                                                const expiryValue = caseItem.expiry || caseItem.expd || caseItem.mfd;
-                                                                const expiryFormatted = formatExpiryDate(expiryValue);
-                                                                const formattedLabel = `${poId}_${firstProduct.productId}_c${caseIdx + 1}`;
-
-                                                                rows.push({
-                                                                    poId,
-                                                                    productId: firstProduct.productId || '-',
-                                                                    productName,
-                                                                    batch: firstProduct.batch || '-',
-                                                                    unitsPerCase: firstProduct.unitsPerCase || '-',
-                                                                    availableUnits: caseItem.availableUnits || 0,
-                                                                    expiry: expiryFormatted || '-',
-                                                                    receivedDate,
-                                                                    caseLabel: caseItem.caseLabel || formattedLabel,
-                                                                    isFirstInGroup: caseIdx === 0
-                                                                });
-                                                            });
-                                                        });
-                                                    });
-
-                                                    // Track previous values to show "-" for duplicates
-                                                    let prevPoId = null;
-                                                    let prevProductId = null;
-                                                    let prevProductName = null;
-                                                    let prevBatch = null;
-                                                    let prevUnitsPerCase = null;
-                                                    let prevReceivedDate = null;
-
-                                                    return rows.map((row, idx) => {
-                                                        const showPoId = row.poId !== prevPoId;
-                                                        const showProductId = row.productId !== prevProductId || row.poId !== prevPoId;
-                                                        const showProductName = row.productName !== prevProductName || row.productId !== prevProductId;
-                                                        const showBatch = row.batch !== prevBatch || row.productId !== prevProductId;
-                                                        const showUnitsPerCase = row.unitsPerCase !== prevUnitsPerCase || row.productId !== prevProductId;
-                                                        const showReceivedDate = row.receivedDate !== prevReceivedDate || row.poId !== prevPoId;
-
-                                                        // Update previous values
-                                                        prevPoId = row.poId;
-                                                        prevProductId = row.productId;
-                                                        prevProductName = row.productName;
-                                                        prevBatch = row.batch;
-                                                        prevUnitsPerCase = row.unitsPerCase;
-                                                        prevReceivedDate = row.receivedDate;
-
-                                                        return (
-                                                            <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
-                                                                <td className="px-6 py-4 font-bold text-orange-600">{showPoId ? row.poId : ''}</td>
-                                                                <td className="px-6 py-4 text-center text-slate-600 whitespace-nowrap">{showReceivedDate ? row.receivedDate : ''}</td>
-                                                                <td className="px-6 py-4 font-mono text-xs text-slate-600">{showProductId ? row.productId : ''}</td>
-                                                                <td className="px-6 py-4 font-medium text-slate-800">{showProductName ? row.productName : ''}</td>
-                                                                <td className="px-6 py-4 text-center text-slate-600">{showBatch ? row.batch : ''}</td>
-                                                                <td className="px-6 py-4 text-center text-slate-600">{showUnitsPerCase ? row.unitsPerCase : ''}</td>
-                                                                <td className="px-6 py-4 text-slate-700 font-medium">{row.caseLabel}</td>
-                                                                <td className="px-6 py-4 text-center">
-                                                                    <span className={clsx(
-                                                                        "px-2 py-1 rounded text-xs font-bold inline-block",
-                                                                        parseInt(row.availableUnits) > 0 
-                                                                            ? "bg-green-100 text-green-700" 
-                                                                            : "bg-gray-100 text-gray-600"
-                                                                    )}>
-                                                                        {row.availableUnits} units
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-6 py-4 text-center text-slate-600">{row.expiry}</td>
-                                                            </tr>
-                                                        );
-                                                    });
-                                                })()}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                {/* Summary Footer */}
-                                <div className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600">
-                                    <div className="flex justify-between items-center">
-                                        <span>Total Cases: <strong>{purchased_products.length}</strong></span>
-                                        <span>Total Units: <strong>{purchased_products.reduce((sum, p) => sum + parseInt(p.availableUnits || 0), 0)}</strong></span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 {/* Stock Batches Tab */}
                 {activeTab === 'batches' && (
@@ -448,102 +672,335 @@ const Restock = () => {
                                 <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-orange-50 to-white">
                                     <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                                         <Box size={18} className="text-orange-600" />
-                                        All Stock Batches ({stocks ? new Set(stocks.map(s => s.batch || s.Batch)).filter(b => b).size : 0} batches)
+                                        Stock Batches ({stocks && Array.isArray(stocks) ? [...new Set(stocks.map(s => s.batch || s.Batch))].filter(b => b).length : 0} batches)
                                     </h3>
-                                            </div>
+                                </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-slate-100 sticky top-0">
+                                        <thead className="bg-slate-50 sticky top-0">
                                             <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Batch</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Date</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Machine</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Stock</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Cover</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Cover Status</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product ID</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product Name</th>
-                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Units</th>
-                                                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Status</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Batch</th>
+                                                <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Date</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Machine</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Stock</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Cover</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Cover Status</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product ID</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Product Name</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Case Label</th>
+                                                <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Units</th>
+                                                <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Status</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {stocks && stocks.length > 0 ? (
-                                                stocks.map((row, idx) => {
-                                                    // Support both old format (Batch) and new format (batch)
-                                                    const batch = row.batch || row.Batch_Number;
-                                                    const date = row.assignedDate || row.Date;
-                                                    const machine = row.machineId || row.Machine;
-                                                    const stock = row.stockLabel || row.Stock;
-                                                    const cover = row.coverLabel || row.cover;
-                                                    const coverStatus = row.coverStatus || row.cover_status;
-                                                    const productId = row.productId || row.product_id;
-                                                    const productName = row.product?.productName || row.product_name;
-                                                    const units = row.units || row.Units;
-                                                    const status = row.status || row.Status;
+                                            {(() => {
+                                                const rows = [];
+                                                
+                                                if (stocks && Array.isArray(stocks) && stocks.length > 0) {
+                                                    // Group by Batch
+                                                    const groupedByBatch = {};
                                                     
+                                                    stocks.forEach(stockItem => {
+                                                        const batch = stockItem.batch || stockItem.Batch_Number || 'No Batch';
+                                                        const date = stockItem.assignedDate || stockItem.Date;
+                                                        
+                                                        if (!groupedByBatch[batch]) {
+                                                            groupedByBatch[batch] = {
+                                                                batch,
+                                                                date,
+                                                                items: []
+                                                            };
+                                                        }
+                                                        
+                                                        groupedByBatch[batch].items.push({
+                                                            id: stockItem.id,
+                                                            machine: stockItem.machineId || stockItem.Machine || 'N/A',
+                                                            stock: stockItem.stockLabel || stockItem.Stock,
+                                                            cover: stockItem.coverLabel || stockItem.cover,
+                                                            coverStatus: stockItem.coverStatus || stockItem.cover_status,
+                                                            productId: stockItem.productId || stockItem.product_id,
+                                                            productName: stockItem.product?.productName || stockItem.product_name,
+                                                            units: stockItem.units || stockItem.Units,
+                                                            status: stockItem.status || stockItem.Status,
+                                                            caseLabel: stockItem.caseLabel || stockItem.case_label
+                                                        });
+                                                    });
+                                                    
+                                                    // Process each batch and group by machine/stock/cover
+                                                    Object.values(groupedByBatch).forEach(batchGroup => {
+                                                        // Group by machine
+                                                        const groupedByMachine = {};
+                                                        batchGroup.items.forEach((item) => {
+                                                            if (!groupedByMachine[item.machine]) {
+                                                                groupedByMachine[item.machine] = [];
+                                                            }
+                                                            groupedByMachine[item.machine].push(item);
+                                                        });
+
+                                                        // Process each machine
+                                                        Object.entries(groupedByMachine).forEach(([machine, machineItems]) => {
+                                                            // Group by stock within machine
+                                                            const groupedByStock = {};
+                                                            machineItems.forEach((item) => {
+                                                                if (!groupedByStock[item.stock]) {
+                                                                    groupedByStock[item.stock] = [];
+                                                                }
+                                                                groupedByStock[item.stock].push(item);
+                                                            });
+
+                                                            // Process each stock
+                                                            Object.entries(groupedByStock).forEach(([stock, stockItems]) => {
+                                                                // Group by cover within stock
+                                                                const groupedByCover = {};
+                                                                stockItems.forEach((item) => {
+                                                                    const coverKey = item.cover;
+                                                                    if (!groupedByCover[coverKey]) {
+                                                                        groupedByCover[coverKey] = [];
+                                                                    }
+                                                                    groupedByCover[coverKey].push(item);
+                                                                });
+
+                                                                // Process each cover
+                                                                Object.entries(groupedByCover).forEach(([cover, coverItems]) => {
+                                                                    // Group by product within cover
+                                                                    const groupedByProduct = {};
+                                                                    coverItems.forEach((item) => {
+                                                                        const productKey = item.productId;
+                                                                        if (!groupedByProduct[productKey]) {
+                                                                            groupedByProduct[productKey] = [];
+                                                                        }
+                                                                        groupedByProduct[productKey].push(item);
+                                                                    });
+
+                                                                    // Create rows for each product group
+                                                                    Object.entries(groupedByProduct).forEach(([productId, productItems]) => {
+                                                                        productItems.forEach((item) => {
+                                                                            rows.push({
+                                                                                batch: batchGroup.batch,
+                                                                                date: batchGroup.date,
+                                                                                machine,
+                                                                                stock,
+                                                                                cover,
+                                                                                coverStatus: item.coverStatus,
+                                                                                productId: item.productId,
+                                                                                productName: item.productName,
+                                                                                caseLabel: item.caseLabel,
+                                                                                units: item.units,
+                                                                                status: item.status
+                                                                            });
+                                                                        });
+                                                                    });
+                                                                });
+                                                            });
+                                                        });
+                                                    });
+                                                }
+
+                                                let prevBatch = null;
+                                                let prevMachine = null;
+                                                let prevStock = null;
+                                                let prevCover = null;
+                                                let prevProductId = null;
+                                                let prevProductName = null;
+
+                                                return rows.length > 0 ? rows.map((row, idx) => {
+                                                    const showBatch = row.batch !== prevBatch;
+                                                    const showMachine = showBatch || row.machine !== prevMachine;
+                                                    const showStock = showMachine || row.stock !== prevStock;
+                                                    const showCover = showStock || row.cover !== prevCover;
+                                                    const showCoverStatus = showCover;
+                                                    const showProductId = showCover || row.productId !== prevProductId;
+                                                    const showProductName = showProductId || row.productName !== prevProductName;
+                                                    const showDate = showBatch;
+                                                    const showStatus = showBatch;
+
+                                                    prevBatch = row.batch || prevBatch;
+                                                    prevMachine = row.machine || prevMachine;
+                                                    prevStock = row.stock || prevStock;
+                                                    prevCover = row.cover || prevCover;
+                                                    prevProductId = row.productId || prevProductId;
+                                                    prevProductName = row.productName || prevProductName;
+
                                                     return (
-                                                        <tr key={`batch-${idx}`} className="hover:bg-slate-50 transition-colors">
-                                                            <td className="px-4 py-3 font-bold text-orange-600">{batch || ''}</td>
-                                                            <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                                                                {date ? (typeof date === 'string' && date.includes('T') ? new Date(date).toLocaleDateString() : date) : ''}
+                                                        <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
+                                                            <td className="px-6 py-4 font-bold text-orange-600">{showBatch ? row.batch : ''}</td>
+                                                            <td className="px-6 py-4 text-center text-slate-600 whitespace-nowrap">{showDate && row.date ? new Date(row.date).toLocaleDateString() : ''}</td>
+                                                            <td className="px-6 py-4 font-mono text-xs text-slate-600">{showMachine ? row.machine : ''}</td>
+                                                            <td className="px-6 py-4 font-medium text-slate-800">{showStock ? row.stock : ''}</td>
+                                                            <td className="px-6 py-4 text-slate-700">{showCover ? row.cover : ''}</td>
+                                                            <td className="px-6 py-4 text-slate-600">
+                                                                {showCoverStatus && row.coverStatus && (
+                                                                    <span className="inline-block px-2 py-1 bg-green-100 text-green-700 text-xs rounded">{row.coverStatus}</span>
+                                                                )}
                                                             </td>
-                                                            <td className="px-4 py-3 font-medium text-slate-700">{machine || ''}</td>
-                                                            <td className="px-4 py-3 text-slate-700 font-semibold">{stock || ''}</td>
-                                                            <td className="px-4 py-3 text-slate-700 font-medium">{cover || ''}</td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                {coverStatus ? (
-                                            <span className={clsx("px-2 py-1 rounded text-xs font-medium", 
-                                                                    coverStatus.toLowerCase() === 'covered' || coverStatus.toLowerCase() === 'active'
-                                                                        ? "bg-green-100 text-green-700" 
-                                                                        : "bg-slate-100 text-slate-600")}>
-                                                                    {coverStatus}
-                                            </span>
-                                                            ) : (
-                                                                <span className="text-slate-400">-</span>
-                                                            )}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-slate-600 font-mono text-xs">{productId || ''}</td>
-                                                            <td className="px-4 py-3 text-slate-800 font-medium max-w-[200px] truncate" title={productName}>
-                                                                {productName || ''}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-right">
+                                                            <td className="px-6 py-4 font-mono text-xs text-slate-600">{showProductId ? row.productId : ''}</td>
+                                                            <td className="px-6 py-4 font-medium text-slate-800">{showProductName ? row.productName : ''}</td>
+                                                            <td className="px-6 py-4 text-slate-700 text-xs">{row.caseLabel || '-'}</td>
+                                                            <td className="px-6 py-4 text-center">
                                                                 <span className={clsx("px-2 py-1 rounded text-sm font-bold inline-block", 
-                                                                    (units || 0) > 0 
+                                                                    (row.units || 0) > 0 
                                                                         ? "bg-blue-100 text-blue-700" 
                                                                         : "bg-gray-100 text-gray-600")}>
-                                                                    {units || 0}
+                                                                    {row.units || 0}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                {status ? (
-                                                                    <span className={clsx("px-3 py-1 rounded-full text-xs font-bold uppercase inline-block", 
-                                                                        status === 'Active' 
-                                                                            ? "bg-green-100 text-green-700" 
-                                                                            : status === 'Inactive'
-                                                                            ? "bg-slate-100 text-slate-600"
-                                                                            : "bg-blue-100 text-blue-700")}>
-                                                                        {status}
+                                                            <td className="px-6 py-4 text-center">
+                                                                {showStatus && row.status ? (
+                                                                    <span className={clsx(
+                                                                        "px-2 py-1 rounded text-xs font-bold inline-block",
+                                                                        row.status === 'Active' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                                                    )}>
+                                                                        {row.status}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-slate-400">-</span>
+                                                                    ''
                                                                 )}
                                                             </td>
                                                         </tr>
                                                     );
-                                                })
-                                            ) : (
-                                                <tr>
-                                                    <td colSpan="10" className="px-4 py-8 text-center text-slate-500">
-                                                        No batches to display
-                                                    </td>
-                                                </tr>
-                                            )}
+                                                }) : (
+                                                    <tr>
+                                                        <td colSpan="11" className="px-6 py-8 text-center text-slate-500">
+                                                            No batches to display
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })()}
                                         </tbody>
                                     </table>
-                                    </div>
+                                </div>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* QR Code Generation Tab */}
+                {activeTab === 'qr' && (
+                    <div className="space-y-6">
+                        {/* QR Code Generation Section */}
+                        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+                            <div className="flex items-center gap-3 mb-6">
+                                <QrCode size={24} className="text-blue-600" />
+                                <h3 className="text-lg font-semibold text-slate-800">Generate QR Codes</h3>
+                            </div>
+
+                            {/* Machine Selection */}
+                            <div className="mb-6">
+                                <h4 className="text-sm font-medium text-slate-700 mb-3">Select Machines</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-60 overflow-y-auto">
+                                    {machines && machines.length > 0 ? machines.map(machine => (
+                                        <label key={machine.Machine_ID} className="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedMachines.includes(machine.Machine_ID)}
+                                                onChange={() => handleMachineSelect(machine.Machine_ID)}
+                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-medium text-slate-800 truncate">{machine.Machine_ID}</div>
+                                                <div className="text-xs text-slate-500 truncate">{machine.Location}</div>
+                                            </div>
+                                        </label>
+                                    )) : (
+                                        <div className="col-span-full text-center py-8 text-slate-500">
+                                            No machines available
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Notes */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Notes (Optional)</label>
+                                <textarea
+                                    value={qrNotes}
+                                    onChange={(e) => setQrNotes(e.target.value)}
+                                    placeholder="Add notes for this QR code generation..."
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 resize-none"
+                                    rows={3}
+                                />
+                            </div>
+
+                            {/* Generate Button */}
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleGenerateQrCodes}
+                                    disabled={generatingQr || selectedMachines.length === 0}
+                                    className={clsx("px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2", 
+                                        generatingQr || selectedMachines.length === 0
+                                            ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                                            : "bg-blue-600 text-white hover:bg-blue-700")}
+                                >
+                                    {generatingQr ? 'Generating...' : 'Generate QR Codes'}
+                                    <QrCode size={16} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* QR Code History Section */}
+                        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+                            <div className="flex items-center gap-3 mb-6">
+                                <History size={24} className="text-green-600" />
+                                <h3 className="text-lg font-semibold text-slate-800">QR Code Generation History</h3>
+                            </div>
+
+                            {qrHistory.length === 0 ? (
+                                <div className="text-center py-12 text-slate-500">
+                                    <QrCode size={48} className="mx-auto mb-4 text-slate-300" />
+                                    <p className="font-medium">No QR codes generated yet</p>
+                                    <p className="text-sm mt-1">Generate your first QR codes above</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {qrHistory.map((item, idx) => (
+                                        <div key={item.qrId || idx} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="font-medium text-slate-800">QR Code Set #{item.qrId?.slice(-8)}</div>
+                                                    <div className="text-sm text-slate-500 mt-1">
+                                                        {new Date(item.createdAt).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm font-medium text-slate-700">{item.machineIds?.length || 0} machines</div>
+                                                    <div className="text-xs text-slate-500">Downloaded {item.pdfDownloadCount || 0} times</div>
+                                                </div>
+                                            </div>
+                                            
+                                            {item.notes && (
+                                                <div className="text-sm text-slate-600 mb-3 bg-slate-50 p-2 rounded">
+                                                    {item.notes}
+                                                </div>
+                                            )}
+                                            
+                                            <div className="flex flex-wrap gap-1 mb-3">
+                                                {item.machineIds?.map(machineId => (
+                                                    <span key={machineId} className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                                        {machineId}
+                                                    </span>
+                                                )) || []}
+                                            </div>
+                                            
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleDeleteQr(item.qrId)}
+                                                    className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                                                >
+                                                    Delete
+                                                </button>
+                                                <button
+                                                    onClick={() => downloadQrPngZip(item)}
+                                                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                                                >
+                                                    <Download size={14} />
+                                                    Download PNG ZIP
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

@@ -37,8 +37,12 @@ from routes_po import po_bp
 from routes_purchases import purchases_bp
 from routes_stock_ops import stock_ops_bp
 from routes_warehouse import warehouse_bp
+from routes_batch_creation import batch_creation_bp
+from routes_batch_query_normalized import batch_assignment_query_bp
 from routes_stocks_batch import stocks_batch_bp
+from routes_stock_batch_update import stock_batch_update_bp
 from routes_bills import bills_bp
+from routes_qr import qr_bp
 
 # --------------------------------------------------
 # REGISTER BLUEPRINTS

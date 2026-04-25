@@ -11,6 +11,7 @@ const Sidebar = () => {
         { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
         { name: 'Machines', icon: Monitor, path: '/machines' },
         { name: 'Restock', icon: Box, path: '/restock' },
+        { name: 'Machine Out', icon: Package, path: '/machine-out' },
         { name: 'Inventory', icon: Archive, path: '/inventory' },
         { name: 'Warehouse', icon: Warehouse, path: '/warehouse' },
         { name: 'Complaints', icon: Monitor, path: '/complaints' },
