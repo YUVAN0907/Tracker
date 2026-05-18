@@ -2,6 +2,7 @@ import os
 import json
 from dotenv import load_dotenv
 import google.auth
+from google.auth.exceptions import DefaultCredentialsError
 from google.oauth2 import service_account
 from google.auth.transport.requests import AuthorizedSession
 
@@ -15,8 +16,11 @@ SERVICE_ID = "vendbees-60d7b-service"
 # The REST endpoint for executing ad-hoc GraphQL queries against Data Connect
 DATACONNECT_ENDPOINT = f"https://firebasedataconnect.googleapis.com/v1beta/projects/{PROJECT_ID}/locations/{LOCATION}/services/{SERVICE_ID}:executeGraphql"
 
-# Make sure this points to your downloaded serviceAccountKey.json
-SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+# Prefer an explicit env override so local setup matches firebase_config.py.
+SERVICE_ACCOUNT_FILE = os.environ.get(
+    "FIREBASE_SERVICE_ACCOUNT_KEY",
+    os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+)
 
 def get_auth_session():
     """Returns an authenticated requests block to talk to the Google API"""
@@ -29,12 +33,29 @@ def get_auth_session():
         )
     else:
         print("Falling back to Google Application Default Credentials.")
-        credentials, project = google.auth.default(default_scopes=scopes)
+        try:
+            credentials, project = google.auth.default(default_scopes=scopes)
+        except DefaultCredentialsError as exc:
+            raise RuntimeError(
+                "Google credentials were not found. Set FIREBASE_SERVICE_ACCOUNT_KEY to "
+                "the path of a service account JSON file, or configure ADC with GOOGLE_APPLICATION_CREDENTIALS "
+                "before starting firebase_server.py."
+            ) from exc
 
     return AuthorizedSession(credentials)
 
-auth_session = get_auth_session()
-print(f"Data Connect Session initialized with endpoint: {DATACONNECT_ENDPOINT}")
+
+_data_connect_session = None
+
+
+def _get_data_connect_session():
+    global _data_connect_session
+
+    if _data_connect_session is None:
+        _data_connect_session = DataConnectSession(get_auth_session(), DATACONNECT_ENDPOINT)
+        print(f"Data Connect Session initialized with endpoint: {DATACONNECT_ENDPOINT}")
+
+    return _data_connect_session
 
 
 class DataConnectSession:
@@ -77,6 +98,6 @@ class DataConnectSession:
 
 def get_session():
     """Get a Data Connect session for executing GraphQL queries."""
-    return DataConnectSession(auth_session, DATACONNECT_ENDPOINT)
+    return _get_data_connect_session()
 
 

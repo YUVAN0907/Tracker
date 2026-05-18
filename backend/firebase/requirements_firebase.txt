@@ -3,3 +3,7 @@ flask-cors
 python-dotenv
 requests
 google-auth
+fpdf
+bcrypt
+qrcode[pil]
+PyJWT

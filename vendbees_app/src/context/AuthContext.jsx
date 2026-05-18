@@ -26,7 +26,7 @@ export function AuthProvider({ children }) {
 
   const verifyToken = async (tokenToVerify) => {
     try {
-      const response = await fetch('http://localhost:3002/api/auth/verify-token', {
+      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/verify-token', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${tokenToVerify}`,
@@ -58,7 +58,7 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch('http://localhost:3002/api/auth/login', {
+      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -100,7 +100,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       if (token) {
-        await fetch('http://localhost:3002/api/auth/logout', {
+        await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/logout', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,

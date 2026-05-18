@@ -1,6 +1,6 @@
 import json
 import uuid
-from dataconnect_config import auth_session, DATACONNECT_ENDPOINT
+from dataconnect_config import DATACONNECT_ENDPOINT, get_session
 
 def execute_graphql(query: str, variables: dict = None, operation_name: str = None):
     """
@@ -16,7 +16,7 @@ def execute_graphql(query: str, variables: dict = None, operation_name: str = No
         payload["operationName"] = operation_name
         
     try:
-        response = auth_session.post(DATACONNECT_ENDPOINT, json=payload)
+        response = get_session().auth_session.post(DATACONNECT_ENDPOINT, json=payload)
         response.raise_for_status() # Raise error for non-2xx codes
         
         result = response.json()
