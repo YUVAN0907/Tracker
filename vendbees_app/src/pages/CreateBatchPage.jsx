@@ -236,97 +236,126 @@ const CreateBatchPage = () => {
             setSelectedWarehouse(null);
             setSelectedCaseLabel(null);
 
-            // Fetch detailed suggestions from backend
+            // ✅ FIX: Fetch BOTH warehouse and previous batch suggestions in parallel
             try {
-                console.log(`📡 Calling API: ${API_URL}/stocks/get-suggestions-detailed`);
-                const suggestionResponse = await fetch(`${API_URL}/stocks/get-suggestions-detailed`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        stock_name: stock,
-                        cover_name: cover,
-                        product_id: productId,
-                        current_batch_number: batchNumber
-                    })
-                });
-
-                console.log(`✅ API Response status: ${suggestionResponse.status}`);
-
-                if (!suggestionResponse.ok) {
-                    throw new Error(`Server error ${suggestionResponse.status}: ${suggestionResponse.statusText}`);
-                }
-
-                const suggestionData = await suggestionResponse.json();
-                console.log('📦 API Response:', suggestionData);
-
-                if (suggestionData.error) {
-                    throw new Error(`Backend error: ${suggestionData.error}`);
-                }
-
-                const suggestions = suggestionData.suggestions;
-
-                console.log('💾 Detailed suggestions:', suggestions);
-                console.log('📊 Group Info:', groupInfo);
-
-                // Check if we have warehouse stock
-                const hasWarehouse = suggestions.warehouse_options && suggestions.warehouse_options.length > 0;
-
-                if (hasWarehouse) {
-                    // Use warehouse options directly - add original_units_available to each case
-                    // AND apply local allocations from pendingSources
-                    const warehouseOptionsWithOriginal = suggestions.warehouse_options.map(wh => ({
-                        ...wh,
-                        cases: wh.cases.map(c => {
-                            // Get original units from backend
-                            const originalUnits = c.original_units_available || c.units_available;
-                            
-                            // Calculate how many units are already reserved in pendingSources for this case
-                            const reservedUnits = pendingSources
-                                .filter(source => source.case_id === c.case_id && source.product_id === productId)
-                                .reduce((sum, source) => sum + source.units, 0);
-                            
-                            // Current available = original - reserved
-                            const currentAvailable = Math.max(0, originalUnits - reservedUnits);
-                            
-                            if (reservedUnits > 0) {
-                                console.log(`📦 Case ${c.case_label}: Original ${originalUnits} - Reserved ${reservedUnits} = Currently ${currentAvailable} units`);
-                            }
-                            
-                            return {
-                                ...c,
-                                original_units_available: originalUnits,
-                                units_available: currentAvailable // Override with current available after local reservations
-                            };
+                console.log(`📡 Calling APIs in parallel: get-suggestions-detailed + get-previous-batch-suggestions`);
+                
+                // Call both endpoints in parallel
+                const [warehouseRes, previousBatchRes] = await Promise.all([
+                    fetch(`${API_URL}/stocks/get-suggestions-detailed`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            stock_name: stock,
+                            cover_name: cover,
+                            product_id: productId,
+                            current_batch_number: batchNumber
                         })
-                    }));
+                    }),
+                    fetch(`${API_URL}/stocks/get-previous-batch-suggestions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            stock_name: stock,
+                            cover_name: cover,
+                            product_id: productId,
+                            current_batch_number: groupInfo.batchNum
+                        })
+                    })
+                ]);
 
-                    const availableSources = {
-                        warehouse_options: warehouseOptionsWithOriginal
-                    };
+                console.log(`✅ API Response statuses: warehouse=${warehouseRes.status}, previousBatch=${previousBatchRes.status}`);
 
-                    console.log('🎯 Showing suggestion dialog with warehouse sources');
-                    setDetailedSuggestions(availableSources);
-                    setSuggestionTab('warehouse'); // Default to warehouse tab
-                    // Set first warehouse as default if available
-                    if (availableSources.warehouse_options.length > 0) {
-                        setSelectedWarehouse(availableSources.warehouse_options[0].warehouse_id);
+                // Parse responses
+                let warehouseData = { warehouse_options: [] };
+                let previousBatchData = { previous_batches: [] };
+
+                if (warehouseRes.ok) {
+                    const suggestionData = await warehouseRes.json();
+                    if (suggestionData.error) {
+                        console.warn(`⚠️ Warehouse error: ${suggestionData.error}`);
+                    } else {
+                        warehouseData = suggestionData.suggestions || { warehouse_options: [] };
                     }
+                } else {
+                    console.warn(`⚠️ Warehouse API error: ${warehouseRes.status}`);
+                }
+
+                if (previousBatchRes.ok) {
+                    const batchData = await previousBatchRes.json();
+                    if (batchData.error) {
+                        console.warn(`⚠️ Previous batch error: ${batchData.error}`);
+                    } else {
+                        previousBatchData = batchData.suggestions || { previous_batches: [] };
+                    }
+                } else {
+                    console.warn(`⚠️ Previous batch API error: ${previousBatchRes.status}`);
+                }
+
+                const hasWarehouse = warehouseData.warehouse_options && warehouseData.warehouse_options.length > 0;
+                const hasPreviousBatches = previousBatchData.previous_batches && previousBatchData.previous_batches.length > 0;
+
+                console.log(`📊 Summary: hasWarehouse=${hasWarehouse}, hasPreviousBatches=${hasPreviousBatches}`);
+
+                // ✅ Process warehouse options with reservation tracking
+                const warehouseOptionsWithOriginal = (warehouseData.warehouse_options || []).map(wh => ({
+                    ...wh,
+                    cases: (wh.cases || []).map(c => {
+                        const originalUnits = c.original_units_available || c.units_available;
+                        const reservedUnits = pendingSources
+                            .filter(source => source.case_id === c.case_id && source.product_id === productId)
+                            .reduce((sum, source) => sum + source.units, 0);
+                        const currentAvailable = Math.max(0, originalUnits - reservedUnits);
+                        
+                        if (reservedUnits > 0) {
+                            console.log(`📦 Case ${c.case_label}: Original ${originalUnits} - Reserved ${reservedUnits} = Currently ${currentAvailable} units`);
+                        }
+                        
+                        return {
+                            ...c,
+                            original_units_available: originalUnits,
+                            units_available: currentAvailable
+                        };
+                    })
+                }));
+
+                // Combine suggestions
+                const combinedSuggestions = {
+                    warehouse_options: warehouseOptionsWithOriginal,
+                    previous_batches: previousBatchData.previous_batches || []
+                };
+
+                if (hasWarehouse || hasPreviousBatches) {
+                    console.log('🎯 Showing suggestion dialog with combined sources');
+                    setDetailedSuggestions(combinedSuggestions);
+                    
+                    // Default to warehouse tab if available, otherwise previous batches
+                    if (hasWarehouse) {
+                        setSuggestionTab('warehouse');
+                        if (warehouseOptionsWithOriginal.length > 0) {
+                            setSelectedWarehouse(warehouseOptionsWithOriginal[0].warehouse_id);
+                        }
+                    } else if (hasPreviousBatches) {
+                        setSuggestionTab('batches');
+                    }
+                    
                     setSelectedSourceUnits({});
                     setLoadingSuggestions(false);
                     setSuggestionError(null);
-                    return;
                 } else {
-                    // No warehouse stock available - show error
+                    // No sources available
                     setLoadingSuggestions(false);
-                    setSuggestionError(`No warehouse stock found for ${product.Product_Name}. Please add inventory to warehouse first.`);
-                    // Keep dialog open with error message for user review
+                    setSuggestionError(
+                        `❌ No sources found for ${product.Product_Name}.\\n` +
+                        `No warehouse stock and no previous batch (${stock}-${cover}) available.\\n` +
+                        `Please add inventory to warehouse or use a different stock-cover.`
+                    );
                 }
             } catch (error) {
                 console.error('❌ Error fetching suggestions:', error);
                 console.error('Error stack:', error.stack);
                 setLoadingSuggestions(false);
                 setSuggestionError(error.message || 'Failed to load suggestions. Please try again.');
-                // Keep dialog open to show error
             }
         } catch (error) {
             console.error('❌ Error in handleAddProduct:', error);
@@ -601,6 +630,75 @@ const CreateBatchPage = () => {
         console.warn('⚠️ handleUsePurchasedProduct called but purchased products are deprecated. Use warehouse instead.');
         setPendingProduct(null);
         setDetailedSuggestions(null);
+    };
+
+    // Handle using previous batch as source
+    const handleUsePreviousBatch = (batch, unitsToUse) => {
+        try {
+            if (!pendingProduct || !batch || unitsToUse <= 0 || unitsToUse > batch.units_available) {
+                alert('Invalid selection. Please enter valid units.');
+                return;
+            }
+
+            console.log(`📌 Recording previous batch source: Batch ${batch.batch_number}, ${unitsToUse} units`);
+
+            // Create a pending source for the previous batch
+            const newPendingSource = {
+                type: 'previous_batch',
+                batch_number: batch.batch_number,
+                batch_group: batch.batch_group,
+                stock_name: batch.stock_name,
+                cover_name: batch.cover_name,
+                product_id: batch.product_id,
+                product_name: batch.product_name,
+                units: unitsToUse,
+                case_label: batch.case_label,
+                units_available: batch.units_available
+            };
+
+            console.log('Adding previous batch source:', newPendingSource);
+
+            // Decrease units from this batch locally to prevent re-allocation
+            const updatedSuggestions = {
+                ...detailedSuggestions,
+                previous_batches: detailedSuggestions.previous_batches.map(b => {
+                    if (b.batch_number === batch.batch_number) {
+                        return {
+                            ...b,
+                            units_available: Math.max(0, b.units_available - unitsToUse)
+                        };
+                    }
+                    return b;
+                })
+            };
+
+            setDetailedSuggestions(updatedSuggestions);
+
+            // Add to pending sources
+            setPendingSources([...pendingSources, newPendingSource]);
+
+            // Record allocation at Stock-Cover-Product level
+            recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, pendingProduct.product.Product_ID, {
+                source_type: 'previous_batch',
+                batch_number: batch.batch_number,
+                case_label: batch.case_label,
+                units: unitsToUse
+            });
+
+            // Add the product with units
+            addProductWithUnits(unitsToUse, `Batch ${batch.batch_number} (${batch.case_label})`);
+
+            console.log('✅ Product added from previous batch');
+
+            // Clear dialog
+            setPendingProduct(null);
+            setDetailedSuggestions(null);
+            setSelectedSourceUnits({});
+
+        } catch (error) {
+            console.error('❌ Error using previous batch:', error);
+            alert('Error adding product from previous batch: ' + error.message);
+        }
     };
 
     // Helper function to add product with units after source selection
@@ -906,8 +1004,21 @@ const CreateBatchPage = () => {
             return;
         }
 
-        if (selectedMachines.some(m => !m)) {
-            alert(`All ${numMachines} machines must be selected`);
+        const usedStocks = Object.entries(stocksData).filter(([stockName, stockData]) => {
+            return Object.values(stockData.covers || {}).some(products =>
+                Array.isArray(products) && products.some(p => Number(p.units) > 0)
+            );
+        });
+
+        const missingMachineInUsedStock = usedStocks.some(([stockName, stockData]) => !stockData.machine?.trim());
+        if (missingMachineInUsedStock) {
+            alert('Please assign a machine for every stock that has products');
+            return;
+        }
+
+        const selectedMachineCount = selectedMachines.filter(m => m.trim()).length;
+        if (selectedMachineCount === 0) {
+            alert('Please select at least one machine');
             return;
         }
 
@@ -944,9 +1055,17 @@ const CreateBatchPage = () => {
             // Step 1: Create the new batch
             const batchData = {
                 batch_number: batchNumber,
-                machine_ids: selectedMachines,
+                machine_ids: selectedMachines.filter(m => m.trim()),
                 created_date: createdDate,
-                stocks: stocksData
+                stocks: Object.entries(stocksData).reduce((acc, [stockName, stockData]) => {
+                    if (stockData.machine?.trim()) {
+                        acc[stockName] = {
+                            machine: stockData.machine,
+                            covers: stockData.covers || {}
+                        };
+                    }
+                    return acc;
+                }, {})
             };
 
             const response = await fetch(`${API_URL}/stocks/create-batch-full`, {
@@ -998,6 +1117,14 @@ const CreateBatchPage = () => {
             setSaving(false);
         }
     };
+
+    const selectedMachineCount = selectedMachines.filter(m => m.trim()).length;
+    const hasInvalidStockMachineAssignment = Object.entries(stocksData).some(([stockName, stockData]) => {
+        const hasProducts = Object.values(stockData.covers || {}).some(products =>
+            Array.isArray(products) && products.some(p => Number(p.units) > 0)
+        );
+        return hasProducts && !stockData.machine?.trim();
+    });
 
     const groupInfo = getBatchGroupInfo();
 
@@ -1067,7 +1194,7 @@ const CreateBatchPage = () => {
                                     When you create the batch, units will be decreased from the selected source to maintain consistency.
                                 </div>
 
-                                {/* Tabs - Only show for available sources */}
+                                {/* ✅ Tabs - Show warehouse and/or previous batches tabs */}
                                 <div className="flex gap-2 border-b border-slate-200 mb-6">
                                     {/* Warehouse Stock Tab - Only if available */}
                                     {detailedSuggestions.warehouse_options && detailedSuggestions.warehouse_options.length > 0 && (
@@ -1084,16 +1211,29 @@ const CreateBatchPage = () => {
                                         </button>
                                     )}
 
-                                    {/* Tabs Header - Only Warehouse tab now */}
+                                    {/* ✅ NEW: Previous Batches Tab - Show if available */}
+                                    {detailedSuggestions.previous_batches && detailedSuggestions.previous_batches.length > 0 && (
+                                        <button
+                                            onClick={() => setSuggestionTab('batches')}
+                                            className={clsx(
+                                                "px-4 py-2 font-medium border-b-2 transition-colors",
+                                                suggestionTab === 'batches'
+                                                    ? "border-blue-500 text-blue-600"
+                                                    : "border-transparent text-slate-600 hover:text-slate-800"
+                                            )}
+                                        >
+                                            📦 Previous Batches ({detailedSuggestions.previous_batches.length})
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Tab Content - Warehouse only */}
                                 <div className="mb-6">
                                     {/* Warehouse Tab */}
                                     {suggestionTab === 'warehouse' && (
-                                        <div className="flex gap-4">
-                                            {/* Left side - Warehouse stock selection with units input and case breakdown */}
-                                            <div className="flex-1">
+                                        <div>
+                                            {/* Warehouse stock selection with units input and case breakdown */}
+                                            <div>
                                                 {!detailedSuggestions.warehouse_options || detailedSuggestions.warehouse_options.length === 0 ? (
                                                     <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
                                                         No warehouse stock available for this product
@@ -1281,34 +1421,92 @@ const CreateBatchPage = () => {
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
+                                    )}
 
-                                            {/* Right side - Previous batches for this Stock-Cover-Product */}
-                                            <div className="w-64 pl-4 border-l border-slate-200">
-                                                <h4 className="font-bold text-slate-800 mb-3 text-sm">📦 Previous Batches</h4>
-                                                {(() => {
-                                                    if (!detailedSuggestions.previous_batches || detailedSuggestions.previous_batches.length === 0) {
-                                                        return (
-                                                            <div className="p-3 bg-slate-100 rounded text-slate-600 text-xs text-center">
-                                                                No previous batches for {pendingProduct?.stock}-{pendingProduct?.cover}
-                                                            </div>
-                                                        );
-                                                    }
+                                    {/* ✅ NEW: Previous Batches Tab - Standalone view */}
+                                    {suggestionTab === 'batches' && (
+                                        <div>
+                                            {!detailedSuggestions.previous_batches || detailedSuggestions.previous_batches.length === 0 ? (
+                                                <div className="p-6 border-2 border-slate-200 rounded-lg bg-slate-50 text-center text-slate-600 text-sm">
+                                                    No previous batches available for {pendingProduct?.stock}-{pendingProduct?.cover}
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                                                        <strong>📌 How it works:</strong> Select units from a previous batch for the same Stock-Cover combination.
+                                                        Only batches from the same group (odd/even) that are earlier than the current batch are shown.
+                                                        When you create the batch, units will be decreased from the selected previous batch.
+                                                    </div>
 
-                                                    return (
-                                                        <div className="space-y-2 max-h-96 overflow-y-auto">
-                                                            {detailedSuggestions.previous_batches.map((batch, idx) => (
-                                                                <div key={idx} className="p-3 bg-blue-50 border border-blue-200 rounded text-xs">
-                                                                    <div className="font-semibold text-blue-900">Batch {batch.batch_number}</div>
-                                                                    <div className="text-blue-700 mt-1">
-                                                                        <div>📦 {batch.units} units</div>
-                                                                        <div>⏰ {batch.expiry_date || 'N/A'}</div>
+                                                    <div className="grid grid-cols-1 gap-4 max-h-96 overflow-y-auto">
+                                                        {detailedSuggestions.previous_batches.map((batch, idx) => (
+                                                            <div key={idx} className="p-4 border-2 border-blue-200 rounded-lg bg-blue-50">
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div>
+                                                                        <div className="font-bold text-blue-900">
+                                                                            📦 Batch {batch.batch_number}
+                                                                        </div>
+                                                                        <div className="text-xs text-blue-600">
+                                                                            {batch.stock_name}-{batch.cover_name} • {batch.batch_group}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className="font-bold text-blue-900">
+                                                                            {batch.units_available} units
+                                                                        </div>
+                                                                        <div className="text-xs text-blue-600">
+                                                                            Available
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            ))}
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </div>
+
+                                                                <div className="bg-white rounded p-2 mb-3 text-xs space-y-1">
+                                                                    <div className="text-slate-700">
+                                                                        <strong>🏷️ Case Label:</strong> {batch.case_label}
+                                                                    </div>
+                                                                    <div className="text-slate-700">
+                                                                        <strong>📦 Product:</strong> {batch.product_name}
+                                                                    </div>
+                                                                </div>
+
+                                                                {(() => {
+                                                                    const inputId = `batch-${idx}-units`;
+                                                                    return (
+                                                                        <div className="space-y-2">
+                                                                            <label className="block text-sm font-medium text-blue-900">
+                                                                                🔢 Units to use:
+                                                                            </label>
+                                                                            <input
+                                                                                id={inputId}
+                                                                                type="number"
+                                                                                min="1"
+                                                                                max={batch.units_available}
+                                                                                placeholder={`1 to ${batch.units_available}`}
+                                                                                className="w-full px-3 py-2 border-2 border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 mb-3"
+                                                                            />
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    const input = document.getElementById(inputId);
+                                                                                    const unitsToUse = parseInt(input.value) || 0;
+                                                                                    if (unitsToUse > 0 && unitsToUse <= batch.units_available) {
+                                                                                        handleUsePreviousBatch(batch, unitsToUse);
+                                                                                    } else {
+                                                                                        alert(`Please enter units between 1 and ${batch.units_available}`);
+                                                                                    }
+                                                                                }}
+                                                                                className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium text-sm transition-colors"
+                                                                            >
+                                                                                ✅ Use {batch.units_available} Units
+                                                                            </button>
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -1316,7 +1514,7 @@ const CreateBatchPage = () => {
 
                                 <div className="border-t border-slate-200 pt-4 space-y-3">
                                     <p className="text-sm text-slate-600 text-center mb-3">
-                                        Select a warehouse source above and click "Use" to add units from that source
+                                        Select a source above and click "Use" to add units. Units will be reserved when the batch is created.
                                     </p>
                                     <button
                                         onClick={() => {
@@ -1492,7 +1690,7 @@ const CreateBatchPage = () => {
                                     <p className="text-xs text-slate-600 mt-1">Batch ID</p>
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-2xl font-bold text-blue-600">{selectedMachines.filter(m => m).length}/7</p>
+                                    <p className="text-2xl font-bold text-blue-600">{selectedMachines.filter(m => m).length}/{numMachines}</p>
                                     <p className="text-xs text-slate-600 mt-1">Machines</p>
                                 </div>
                                 <div className="text-center">
@@ -1721,7 +1919,7 @@ const CreateBatchPage = () => {
                         <button
                             type="submit"
                             className="flex-1 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
-                            disabled={saving || !batchNumber.trim() || selectedMachines.some(m => !m)}
+                            disabled={saving || !batchNumber.trim() || selectedMachineCount === 0 || hasInvalidStockMachineAssignment}
                         >
                             {saving ? 'Creating Batch...' : 'Create Batch'}
                         </button>
