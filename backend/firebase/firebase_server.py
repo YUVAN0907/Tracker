@@ -55,7 +55,9 @@ app.register_blueprint(purchases_bp)
 app.register_blueprint(stock_ops_bp)
 app.register_blueprint(warehouse_bp)
 app.register_blueprint(stocks_batch_bp)
+app.register_blueprint(stock_batch_update_bp)
 app.register_blueprint(bills_bp)
+app.register_blueprint(qr_bp)
 
 # Health Check
 @app.route('/api/health')
@@ -89,6 +91,15 @@ def handle_error(e):
     traceback.print_exc(file=sys.stderr)
     print(f"\n", file=sys.stderr, flush=True)
     return jsonify({'error': str(e)}), 500
+
+
+# Ensure CORS headers are always present (safeguard for browser preflight failures)
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response
 
 # --------------------------------------------------
 # RUN SERVER
