@@ -28,9 +28,12 @@ query GetStockCoverProduct($id: UUID!) {
 # Query to get all products in a batch
 GET_ALL_PRODUCTS_IN_BATCH_QUERY = """
 query GetAllProductsInBatch($batch: Int!) {
-  stockCoverProductAssignments(where: {stockCoverAssignment: {batch: {eq: $batch}}}) {
+  stockCoverAssignments(where: {batch: {eq: $batch}}) {
     id
-    units
+    stockCoverProductAssignments {
+      id
+      units
+    }
   }
 }
 """
@@ -94,22 +97,34 @@ def check_and_update_batch_status(product_assignment_id):
             logger.error(f"Failed to get all products in batch: {all_products_result['errors']}")
             return
         
-        products_in_batch = all_products_result.get('stockCoverProductAssignments', [])
+        stock_cover_assignments = all_products_result.get('stockCoverAssignments', [])
         
-        # Determine the correct batch status based on current units
-        has_positive_units = any(product.get('units', 0) > 0 for product in products_in_batch)
-        new_status = "Active" if has_positive_units else "Inactive"
+        # Check if all products have 0 units
+        all_zero = True
+        for sca in stock_cover_assignments:
+            products = sca.get('stockCoverProductAssignments', [])
+            for product in products:
+                units = product.get('units', 0)
+                if units > 0:
+                    all_zero = False
+                    break
+            if not all_zero:
+                break
         
-        logger.info(f"[BATCH STATUS] Batch {batch_number} has_positive_units={has_positive_units}, setting status to {new_status}")
-        status_result = execute_graphql(UPDATE_BATCH_STATUS_MUTATION, {
-            "batch": batch_number,
-            "status": new_status
-        })
-        
-        if "errors" in status_result:
-            logger.error(f"Failed to update batch status: {status_result['errors']}")
+        if all_zero:
+            # Update batch status to Inactive
+            logger.info(f"[BATCH STATUS] All products in batch {batch_number} have 0 units, marking as Inactive")
+            status_result = execute_graphql(UPDATE_BATCH_STATUS_MUTATION, {
+                "batch": batch_number,
+                "status": "Inactive"
+            })
+            
+            if "errors" in status_result:
+                logger.error(f"Failed to update batch status: {status_result['errors']}")
+            else:
+                logger.info(f"[BATCH STATUS] Successfully updated batch {batch_number} to Inactive")
         else:
-            logger.info(f"[BATCH STATUS] Successfully updated batch {batch_number} to {new_status}")
+            logger.info(f"[BATCH STATUS] Batch {batch_number} still has products with units > 0")
             
     except Exception as e:
         logger.error(f"Error in check_and_update_batch_status: {str(e)}", exc_info=True)
