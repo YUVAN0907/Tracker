@@ -3,6 +3,12 @@ flask-cors
 python-dotenv
 requests
 google-auth
+google-auth-oauthlib
+firebase-admin
+google-cloud-firestore
+pandas
+numpy
+openpyxl
 fpdf
 bcrypt
 qrcode[pil]
