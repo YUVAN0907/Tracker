@@ -314,7 +314,7 @@ type BillHistory @table(key: "billId") {
 
 type QrCodeHistory @table(key: "qrId") {
   qrId: UUID! @default(expr: "uuidV4()")
-  userId: String!                # User who generated the QR codes
+  userId: String                 # User who generated the QR codes
   machineIds: [String!]!         # Array of machine IDs for which QR codes were generated
   qrData: String!                # JSON data containing QR code information (machine details, URLs, etc.)
   pdfGenerated: Boolean! @default(value: false)
@@ -328,4 +328,37 @@ type QrCodeHistory @table(key: "qrId") {
   
   # Optional relation to user (for development, user may not exist yet)
   user: User @ref(fields: "userId")
+}
+
+# ==============================
+# RECENT PRODUCTS TRACKING
+# ==============================
+type RecentProduct @table(key: "recentProductId") {
+  recentProductId: UUID! @default(expr: "uuidV4()")
+  
+  # Product Details (same as Product Master)
+  productId: String! # Unique product identifier
+  productName: String!
+  category: String
+  vendorId: String
+  
+  unitCost: Float      # PO/Landed cost
+  mrp: Float          # Market/Retail Price
+  quantity: String    # Description/quantity format
+  units: Int          # Units per case
+  gst: Float          # GST rate
+  eanNo: String       # EAN barcode
+  selfLife: Int       # Self life in months
+  
+  # Tracking Fields
+  unitsPurchased: Int! @default(value: 0)   # Auto-incremented on delivery
+  unitsSold: Int! @default(value: 0)        # Auto-incremented on batch assignment
+  rate: Float! @default(value: 0)           # Calculated: (unitsSold / unitsPurchased) * 100
+  
+  # Metadata
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+  
+  # Optional relation to vendor
+  vendor: Vendor @ref(fields: "vendorId")
 }

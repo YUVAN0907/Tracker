@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 const GenerateBillModal = ({ isOpen, onClose, onSuccess }) => {
     const { token } = useAuth();
     // Get Firebase data directly from context
-    const { purchased_product_cases: purchased_products, products } = useData();
+    const { warehouseStocks: purchased_products, products } = useData();
     const [billItems, setBillItems] = useState([]);
     const [selectedProductId, setSelectedProductId] = useState('');
     const [selectedQuantity, setSelectedQuantity] = useState('');

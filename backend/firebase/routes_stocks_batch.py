@@ -2,6 +2,9 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 from dataconnect_db import execute_graphql, format_timestamp
 import logging
+import json
+import sys
+import traceback
 
 stocks_batch_bp = Blueprint('stocks_batch', __name__)
 logger = logging.getLogger(__name__)
@@ -249,6 +252,95 @@ query GetStockCoverAssignment(
 }
 """
 
+# ✅ NEW: Increment unitsSold in RecentProducts when batch is created
+INCREMENT_RECENT_PRODUCT_UNITS_SOLD_MUTATION = """
+mutation IncrementUnitsSold(
+  $productId: String!,
+  $incrementValue: Int!
+) {
+  recentProduct_update(
+    key: {productId: $productId},
+    data: {unitsSold: {increment: $incrementValue}}
+  )
+}
+"""
+
+# ✅ NEW: Query to find RecentProduct by productId (to get recentProductId)
+GET_RECENT_PRODUCT_BY_PRODUCT_ID_QUERY = """
+query GetRecentProductByProductId($productId: String!) {
+  recentProducts(where: {productId: {eq: $productId}}, limit: 1) {
+    recentProductId
+    productId
+    unitsSold
+    unitsPurchased
+  }
+}
+"""
+
+# ✅ NEW: Update unitsSold in RecentProducts using recentProductId (correct key)
+UPDATE_RECENT_PRODUCT_UNITS_SOLD_BY_ID_MUTATION = """
+mutation UpdateUnitsSoldById(
+  $recentProductId: UUID!,
+  $unitsSold: Int!,
+  $updatedAt: Timestamp!
+) {
+  recentProduct_update(
+    key: {recentProductId: $recentProductId},
+    data: {unitsSold: $unitsSold, updatedAt: $updatedAt}
+  )
+}
+"""
+
+# ✅ NEW: Increment unitsPurchased in RecentProducts when product delivered
+INCREMENT_RECENT_PRODUCT_UNITS_PURCHASED_MUTATION = """
+mutation IncrementUnitsPurchased(
+  $productId: String!,
+  $incrementValue: Int!
+) {
+  recentProduct_update(
+    key: {productId: $productId},
+    data: {unitsPurchased: {increment: $incrementValue}}
+  )
+}
+"""
+
+# ✅ NEW: Query to get or create RecentProduct before updating
+GET_OR_CREATE_RECENT_PRODUCT_MUTATION = """
+mutation GetOrCreateRecentProduct(
+  $productId: String!,
+  $productName: String,
+  $category: String,
+  $vendorId: String,
+  $unitCost: Float,
+  $mrp: Float,
+  $quantity: String,
+  $units: Int,
+  $gst: Float,
+  $eanNo: String,
+  $selfLife: Int
+) {
+  recentProduct_upsert(
+    key: {productId: $productId},
+    data: {
+      productId: $productId,
+      productName: $productName,
+      category: $category,
+      vendorId: $vendorId,
+      unitCost: $unitCost,
+      mrp: $mrp,
+      quantity: $quantity,
+      units: $units,
+      gst: $gst,
+      eanNo: $eanNo,
+      selfLife: $selfLife,
+      unitsPurchased: {if_not_exists: 0},
+      unitsSold: {if_not_exists: 0},
+      rate: {if_not_exists: 0}
+    }
+  )
+}
+"""
+
 # Much of the existing batch creation logic involves mapping nested structures into the flat
 # MachineStockAssignment Postgres table defined in the user's Data Connect schema.
 @stocks_batch_bp.route('/api/stocks/create-batch-full', methods=['POST'])
@@ -275,6 +367,21 @@ def create_batch_full():
         created_date = data.get('created_date', datetime.now().isoformat().split('T')[0])
         stocks_dict = data.get('stocks', {})
         sources = data.get('sources', [])  # ✅ NEW: Get pending sources for warehouse deduction
+        
+        # ✅ DEBUG: Log exactly what was received
+        print(f"\n[DEBUG] create_batch_full received: batch={batch_number}, sources count={len(sources)}")
+        print(f"[DEBUG] Stocks dict keys: {list(stocks_dict.keys())}", file=sys.stderr, flush=True)
+        if stocks_dict:
+            for stock_name, stock_data in stocks_dict.items():
+                covers = stock_data.get('covers', {})
+                print(f"[DEBUG] Stock {stock_name}: covers={list(covers.keys())}", file=sys.stderr, flush=True)
+                for cover_name, products in covers.items():
+                    if isinstance(products, list):
+                        print(f"[DEBUG] Stock {stock_name} Cover {cover_name}: {len(products)} products", file=sys.stderr, flush=True)
+                        for i, p in enumerate(products):
+                            print(f"[DEBUG]   Product {i}: {json.dumps(p, default=str)}", file=sys.stderr, flush=True)
+        if sources:
+            print(f"[DEBUG] Sources data: {json.dumps(sources, indent=2, default=str)}")
         
         if not batch_number:
             return jsonify({'error': 'batch_number is required and must be > 0'}), 400
@@ -306,7 +413,6 @@ def create_batch_full():
         
         # ✅ STEP 2 & 3: Process each stock-cover-product assignment
         # Iterate over stocks (S1, S2, S3, ... S7)
-        # Each stock key in stocks_dict corresponds to a stock position
         for stock_label, stock_data in stocks_dict.items():
             if not isinstance(stock_data, dict):
                 continue
@@ -371,11 +477,15 @@ def create_batch_full():
                 # ✅ STEP 3: Create StockCoverProductAssignment for each product
                 # Iterate over products in this cover
                 for product in products:
-                    product_id = str(product.get("product_id", product.get("productId", ""))).strip()
+                    # ✅ FIX: Handle all possible product_id field name variations
+                    product_id = str(product.get("product_id") or product.get("Product_ID") or product.get("productId") or "").strip()
                     units = int(product.get("units", 0))
                     case_label = str(product.get("caseLabel", product.get("case_label", ""))).strip()
                     
+                    print(f"\n[PRODUCT-DEBUG] Processing product_id={product_id}, units={units}, case_label={case_label}", file=sys.stderr, flush=True)
+                    
                     if not product_id or units <= 0:
+                        print(f"[PRODUCT-DEBUG] Skipping - empty product_id or zero units", file=sys.stderr, flush=True)
                         continue
                     
                     # Track product usage for source tracking
@@ -393,6 +503,62 @@ def create_batch_full():
                     if 'errors' in scpa_result:
                         logger.error(f"      ❌ GraphQL error: {scpa_result['errors']}")
                         continue
+                    
+                    # ✅ AUTO-TRACK: Increment unitsSold in RecentProducts
+                    try:
+                        # Step 1: Query to find the RecentProduct by productId and get recentProductId
+                        print(f"\n[AUTO-TRACK] 🔍 Querying RecentProduct for productId: {product_id}, units to add: {units}", file=sys.stderr, flush=True)
+                        recent_product_query_result = execute_graphql(GET_RECENT_PRODUCT_BY_PRODUCT_ID_QUERY, {
+                            "productId": product_id
+                        })
+                        print(f"[AUTO-TRACK] 📊 Query result: {recent_product_query_result}", file=sys.stderr, flush=True)
+                        
+                        if 'errors' in recent_product_query_result:
+                            logger.warning(f"      ⚠️ Error querying RecentProduct for {product_id}: {recent_product_query_result['errors']}")
+                            print(f"[AUTO-TRACK] ❌ Query error: {recent_product_query_result['errors']}", file=sys.stderr, flush=True)
+                        else:
+                            # Try multiple possible data structures
+                            recent_products = None
+                            if 'data' in recent_product_query_result:
+                                recent_products = recent_product_query_result.get('data', {}).get('recentProducts', [])
+                                print(f"[AUTO-TRACK] 📋 Found in data.recentProducts: {recent_products}", file=sys.stderr, flush=True)
+                            elif 'recentProducts' in recent_product_query_result:
+                                recent_products = recent_product_query_result.get('recentProducts', [])
+                                print(f"[AUTO-TRACK] 📋 Found in direct recentProducts: {recent_products}", file=sys.stderr, flush=True)
+                            
+                            if recent_products and len(recent_products) > 0:
+                                recent_product = recent_products[0]
+                                recent_product_id = recent_product.get('recentProductId')
+                                current_units_sold = recent_product.get('unitsSold', 0)
+                                print(f"[AUTO-TRACK] ✅ Found RecentProduct: ID={recent_product_id}, unitsSold={current_units_sold}", file=sys.stderr, flush=True)
+                                
+                                if recent_product_id:
+                                    # Step 2: Calculate new unitsSold and update using the correct recentProductId as key
+                                    new_units_sold = current_units_sold + units
+                                    print(f"[AUTO-TRACK] 📝 Updating unitsSold: {current_units_sold} + {units} = {new_units_sold}", file=sys.stderr, flush=True)
+                                    units_sold_result = execute_graphql(UPDATE_RECENT_PRODUCT_UNITS_SOLD_BY_ID_MUTATION, {
+                                        "recentProductId": recent_product_id,
+                                        "unitsSold": new_units_sold,
+                                        "updatedAt": format_timestamp(datetime.now())
+                                    })
+                                    print(f"[AUTO-TRACK] 📊 Update result: {units_sold_result}", file=sys.stderr, flush=True)
+                                    if 'errors' not in units_sold_result:
+                                        logger.info(f"      ✅ Updated RecentProduct unitsSold +{units} for {product_id} (ID: {recent_product_id}): {current_units_sold} → {new_units_sold}")
+                                        print(f"[AUTO-TRACK] ✅ SUCCESS: Updated unitsSold for {product_id}", file=sys.stderr, flush=True)
+                                    else:
+                                        logger.warning(f"      ⚠️ Could not update RecentProduct unitsSold: {units_sold_result['errors']}")
+                                        print(f"[AUTO-TRACK] ❌ Update error: {units_sold_result['errors']}", file=sys.stderr, flush=True)
+                                else:
+                                    logger.warning(f"      ⚠️ RecentProduct found but no recentProductId for {product_id}")
+                                    print(f"[AUTO-TRACK] ⚠️ No recentProductId in result", file=sys.stderr, flush=True)
+                            else:
+                                logger.debug(f"      ℹ️ No RecentProduct found for {product_id} - skipping auto-track")
+                                print(f"[AUTO-TRACK] ℹ️ No RecentProduct found", file=sys.stderr, flush=True)
+                    except Exception as e:
+                        logger.warning(f"      ⚠️ Error updating RecentProduct unitsSold: {str(e)}")
+                        print(f"[AUTO-TRACK] ❌ Exception: {str(e)}", file=sys.stderr, flush=True)
+                        traceback.print_exc(file=sys.stderr)
+
                     
                     # ✅ ONLY normalized tables - no legacy MachineStockAssignment
                     created_records.append({
@@ -573,8 +739,10 @@ def apply_warehouse_sources(sources):
                 case_label = source.get('case_label') or source.get('caseLabel')
                 units_to_decrease = int(source.get('units', 0))
 
+                print(f"[DEBUG] Warehouse source params: case_id={case_id}, case_label={case_label}, product_id={product_id}, units={units_to_decrease}")
+
                 if not product_id or units_to_decrease <= 0:
-                    raise ValueError(f"Missing required fields for warehouse source")
+                    raise ValueError(f"Missing required fields for warehouse source: product_id={product_id}, units={units_to_decrease}")
 
                 warehouse = None
                 target_case_id = case_id
@@ -592,11 +760,14 @@ def apply_warehouse_sources(sources):
                       }
                     }
                     """
+                    print(f"[DEBUG] Executing query with caseId={case_id}")
                     case_res = execute_graphql(case_query, {'caseId': case_id})
+                    print(f"[DEBUG] Query result: {json.dumps(case_res, indent=2, default=str)}")
                     warehouse = case_res.get('warehouseStock')
 
                     if not warehouse:
                         logger.warning(f"⚠️ Warehouse case {case_id} not found")
+                        print(f"[DEBUG] Warehouse case {case_id} NOT FOUND in GraphQL response")
                         if not case_label:
                             raise ValueError(f"Warehouse case {case_id} not found and no case_label provided")
                         target_case_id = None
@@ -612,7 +783,14 @@ def apply_warehouse_sources(sources):
                           warehouseStock_update(key: { stockId: $caseId }, data: { availableUnits: $newUnits })
                         }
                         """
-                        execute_graphql(update_warehouse_query, {'caseId': case_id, 'newUnits': new_units})
+                        print(f"[DEBUG] Executing update mutation with caseId={case_id}, newUnits={new_units}")
+                        update_result = execute_graphql(update_warehouse_query, {'caseId': case_id, 'newUnits': new_units})
+                        print(f"[DEBUG] Update result: {json.dumps(update_result, indent=2, default=str)}")
+                        
+                        if 'errors' in update_result:
+                            print(f"[ERROR] Update failed: {update_result['errors']}")
+                            raise ValueError(f"Failed to update warehouse stock: {update_result['errors']}")
+                        
                         logger.info(f"✅ Updated WarehouseStock {case_id}: {current_units} → {new_units} units")
 
                         results['processed'].append({
@@ -1561,4 +1739,107 @@ def get_previous_batch_suggestions():
         logger.error(f"Error in get_previous_batch_suggestions: {str(e)}", exc_info=True)
         return jsonify({'error': str(e), 'EXCEPTION_OCCURRED': True}), 500
 
+
+# =============== DELETE BATCH ENDPOINT ===============
+
+@stocks_batch_bp.route('/api/stocks/delete-batch/<int:batch_number>', methods=['DELETE'])
+def delete_batch(batch_number):
+    """
+    Delete a batch and all its associated records:
+    1. Delete all StockCoverProductAssignments for this batch
+    2. Delete all StockCoverAssignments for this batch
+    3. Delete the BatchAssignment for this batch
+    """
+    print(f"\n[ENDPOINT CALLED] delete_batch - batch_number={batch_number}")
+    try:
+        if batch_number <= 0:
+            return jsonify({'error': 'batch_number must be > 0'}), 400
+        
+        # ✅ STEP 1: Get all StockCoverAssignments for this batch
+        get_sca_query = """
+        query GetAllStockCoversForBatch($batch: Int!) {
+          stockCoverAssignments(where: {batch: {eq: $batch}}) {
+            id
+          }
+        }
+        """
+        
+        print(f"[DEBUG] Fetching StockCoverAssignments for batch {batch_number}")
+        sca_res = execute_graphql(get_sca_query, {'batch': batch_number})
+        stock_covers = sca_res.get('stockCoverAssignments', [])
+        print(f"[DEBUG] Found {len(stock_covers)} stock-cover assignments")
+        
+        # ✅ STEP 2: Delete all StockCoverProductAssignments for each stock-cover
+        deleted_products = 0
+        for sca in stock_covers:
+            sca_id = sca.get('id')
+            
+            # Get all products in this stock-cover
+            get_products_query = """
+            query GetProducts($scaId: UUID!) {
+              stockCoverProductAssignments(where: {stockCoverAssignmentId: {eq: $scaId}}) {
+                id
+              }
+            }
+            """
+            
+            print(f"[DEBUG] Fetching products for SCA {sca_id}")
+            product_res = execute_graphql(get_products_query, {'scaId': sca_id})
+            products = product_res.get('stockCoverProductAssignments', [])
+            print(f"[DEBUG] Found {len(products)} products in this stock-cover")
+            
+            # Delete each product assignment
+            for product in products:
+                product_id = product.get('id')
+                delete_product_query = """
+                mutation DeleteProduct($id: UUID!) {
+                  stockCoverProductAssignment_delete(key: {id: $id})
+                }
+                """
+                
+                print(f"[DEBUG] Deleting StockCoverProductAssignment {product_id}")
+                execute_graphql(delete_product_query, {'id': product_id})
+                deleted_products += 1
+            
+            # Delete the StockCoverAssignment itself
+            delete_sca_query = """
+            mutation DeleteStockCover($id: UUID!) {
+              stockCoverAssignment_delete(key: {id: $id})
+            }
+            """
+            
+            print(f"[DEBUG] Deleting StockCoverAssignment {sca_id}")
+            execute_graphql(delete_sca_query, {'id': sca_id})
+        
+        # ✅ STEP 3: Delete the BatchAssignment
+        delete_batch_query = """
+        mutation DeleteBatch($batch: Int!) {
+          batchAssignment_delete(key: {batch: $batch})
+        }
+        """
+        
+        print(f"[DEBUG] Deleting BatchAssignment for batch {batch_number}")
+        execute_graphql(delete_batch_query, {'batch': batch_number})
+        
+        response = {
+            'success': True,
+            'message': f'Batch {batch_number} deleted successfully',
+            'batch_number': batch_number,
+            'deleted': {
+                'stock_cover_assignments': len(stock_covers),
+                'stock_cover_product_assignments': deleted_products
+            }
+        }
+        
+        logger.info(f"✅ Batch {batch_number} deleted successfully")
+        print(f"[SUCCESS] Batch {batch_number} deleted with {len(stock_covers)} stock-covers and {deleted_products} products")
+        
+        return jsonify(response), 200
+        
+    except Exception as e:
+        print(f"[ERROR] Exception in delete_batch: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        logger.error(f"Error in delete_batch: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 

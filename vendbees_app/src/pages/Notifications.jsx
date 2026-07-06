@@ -5,7 +5,7 @@ import { AlertTriangle, Clock, CheckCircle, Package } from 'lucide-react';
 import clsx from 'clsx';
 
 const Notifications = () => {
-    const { ourPOs, purchased_product_cases, loading } = useData();
+    const { ourPOs, warehouseStocks, stocks, loading } = useData();
 
     // Calculate overdue POs (more than 5 days old and not delivered)
     const notifications = useMemo(() => {
@@ -64,10 +64,32 @@ const Notifications = () => {
             }
         });
 
-        // Add expiry alerts for products expiring within 10 days
-        if (purchased_product_cases && purchased_product_cases.length > 0) {
-            purchased_product_cases.forEach(caseItem => {
-                const expiryDate = caseItem.expd || caseItem.expiry;
+        // Create a map of caseLabel to expiry dates from warehouseStocks for quick lookup
+        const expiryMap = {};
+        if (warehouseStocks && warehouseStocks.length > 0) {
+            warehouseStocks.forEach(item => {
+                const caseLabel = item.caseLabel || item.Case_Label;
+                if (caseLabel) {
+                    expiryMap[caseLabel] = {
+                        expd: item.EXPD || item.expd || item.Expiry || item.expiry,
+                        mfd: item.MFD || item.mfd,
+                        warehouseStockId: item.id || item.stockId,
+                        availableUnits: item.availableUnits || item.Available_Units || 0
+                    };
+                }
+            });
+        }
+
+        // Add expiry alerts from warehouseStocks directly
+        if (warehouseStocks && warehouseStocks.length > 0) {
+            const processedCaseLabels = new Set();
+            
+            warehouseStocks.forEach(caseItem => {
+                const caseLabel = caseItem.caseLabel || caseItem.Case_Label;
+                if (!caseLabel || processedCaseLabels.has(caseLabel)) return; // Skip if already processed
+                processedCaseLabels.add(caseLabel);
+                
+                const expiryDate = caseItem.EXPD || caseItem.expd || caseItem.Expiry || caseItem.expiry;
                 if (!expiryDate) return;
 
                 const expDate = new Date(expiryDate);
@@ -78,17 +100,59 @@ const Notifications = () => {
 
                 if (daysUntilExpiry <= 10 && daysUntilExpiry >= 0) {
                     alerts.push({
-                        id: `exp-${caseItem.id}`,
+                        id: `exp-${caseLabel}-warehouse`,
                         type: 'expiry',
                         severity: daysUntilExpiry <= 3 ? 'critical' : 'warning',
-                        title: `Product expiring soon`,
-                        message: `${caseItem.productName || 'Unknown Product'} - Case ${caseItem.caseLabel || 'N/A'} (${caseItem.availableUnits || 0} units) expires in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}.`,
-                        poId: caseItem.poId,
-                        productName: caseItem.productName,
-                        caseLabel: caseItem.caseLabel,
-                        availableUnits: caseItem.availableUnits,
+                        title: `Product expiring soon (Warehouse)`,
+                        message: `${caseItem.productName || caseItem.Product_Name || 'Unknown Product'} - Case ${caseLabel} (${caseItem.availableUnits || caseItem.Available_Units || 0} units) expires in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}.`,
+                        poId: caseItem.poId || caseItem.PO_ID,
+                        productName: caseItem.productName || caseItem.Product_Name,
+                        caseLabel: caseLabel,
+                        availableUnits: caseItem.availableUnits || caseItem.Available_Units || 0,
                         expiryDate: expiryDate,
-                        daysUntilExpiry: daysUntilExpiry
+                        daysUntilExpiry: daysUntilExpiry,
+                        source: 'warehouse'
+                    });
+                }
+            });
+        }
+
+        // Add expiry alerts from stock batches (through caseLabel tracking)
+        if (stocks && stocks.length > 0 && expiryMap) {
+            const processedStockCases = new Set();
+            
+            stocks.forEach(stockItem => {
+                const caseLabel = stockItem.caseLabel || stockItem.Case_Label;
+                if (!caseLabel || processedStockCases.has(caseLabel)) return;
+                processedStockCases.add(caseLabel);
+                
+                // Lookup expiry date from warehouse stocks via caseLabel
+                const expiryInfo = expiryMap[caseLabel];
+                if (!expiryInfo || !expiryInfo.expd) return;
+
+                const expiryDate = expiryInfo.expd;
+                const expDate = new Date(expiryDate);
+                if (isNaN(expDate.getTime())) return;
+
+                expDate.setHours(0, 0, 0, 0);
+                const daysUntilExpiry = Math.floor((expDate - today) / (1000 * 60 * 60 * 24));
+
+                if (daysUntilExpiry <= 10 && daysUntilExpiry >= 0) {
+                    alerts.push({
+                        id: `exp-${caseLabel}-batch`,
+                        type: 'expiry',
+                        severity: daysUntilExpiry <= 3 ? 'critical' : 'warning',
+                        title: `Product expiring soon (Batch)`,
+                        message: `${stockItem.product_name || 'Unknown Product'} - Case ${caseLabel} assigned to ${stockItem.Machine || 'Unknown'} (${expiryInfo.availableUnits || 0} units) expires in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}.`,
+                        poId: stockItem.poId,
+                        productName: stockItem.product_name,
+                        caseLabel: caseLabel,
+                        availableUnits: expiryInfo.availableUnits || 0,
+                        expiryDate: expiryDate,
+                        daysUntilExpiry: daysUntilExpiry,
+                        batch: stockItem.Batch,
+                        machine: stockItem.Machine,
+                        source: 'batch'
                     });
                 }
             });
@@ -102,7 +166,7 @@ const Notifications = () => {
             if (b.type === 'expiry' && a.type === 'overdue') return 1;
             return (b.daysUntilExpiry || b.totalDays) - (a.daysUntilExpiry || a.totalDays);
         });
-    }, [ourPOs, purchased_product_cases]);
+    }, [ourPOs, warehouseStocks, stocks]);
 
     if (loading) {
         return (
@@ -237,6 +301,16 @@ const Notifications = () => {
                                                         {notification.status}
                                                     </span>
                                                 )}
+                                                {notification.type === 'expiry' && notification.source && (
+                                                    <span className={clsx(
+                                                        "px-2 py-0.5 rounded text-xs font-medium",
+                                                        notification.source === 'warehouse'
+                                                            ? "bg-purple-100 text-purple-700"
+                                                            : "bg-cyan-100 text-cyan-700"
+                                                    )}>
+                                                        {notification.source === 'warehouse' ? '📦 Warehouse' : '🎯 Batch'}
+                                                    </span>
+                                                )}
                                             </div>
                                             
                                             <p className="text-sm text-slate-600 mb-3">{notification.message}</p>
@@ -269,6 +343,16 @@ const Notifications = () => {
                                                             <Clock size={14} />
                                                             Expires: {new Date(notification.expiryDate).toLocaleDateString()}
                                                         </span>
+                                                        {notification.batch && (
+                                                            <span className="flex items-center gap-1">
+                                                                🎯 Batch: {notification.batch}
+                                                            </span>
+                                                        )}
+                                                        {notification.machine && (
+                                                            <span className="flex items-center gap-1">
+                                                                🔧 Machine: {notification.machine}
+                                                            </span>
+                                                        )}
                                                         <span className={clsx(
                                                             "font-medium",
                                                             notification.severity === 'critical' ? "text-red-600" : "text-yellow-600"

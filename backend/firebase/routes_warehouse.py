@@ -130,6 +130,19 @@ mutation DeleteWarehouseStock($stockId: String!) {
 }
 """
 
+# ✅ NEW: Increment unitsPurchased in RecentProducts when product delivered
+INCREMENT_RECENT_PRODUCT_UNITS_PURCHASED_MUTATION = """
+mutation IncrementUnitsPurchased(
+  $productId: String!,
+  $incrementValue: Int!
+) {
+  recentProduct_update(
+    key: {productId: $productId},
+    data: {unitsPurchased: {increment: $incrementValue}}
+  )
+}
+"""
+
 # ==========================================
 # HELPER FUNCTIONS
 # ==========================================
@@ -439,6 +452,22 @@ def add_to_warehouse_from_purchase():
                 insert_result = execute_graphql(INSERT_WAREHOUSE_ENTRY_MUTATION, entry_vars)
                 log(f"Warehouse entry insert result: {insert_result}")
                 print(f"[warehouse] Created WarehouseEntry: {allocation['case_label']} with {allocation['units_allocated']} units", file=sys.stderr, flush=True)
+                
+                # ✅ AUTO-TRACK: Increment unitsPurchased in RecentProducts
+                try:
+                    units_purchased_result = execute_graphql(INCREMENT_RECENT_PRODUCT_UNITS_PURCHASED_MUTATION, {
+                        "productId": product_id,
+                        "incrementValue": allocation['units_allocated']
+                    })
+                    if 'errors' not in units_purchased_result:
+                        log(f"Updated RecentProduct unitsPurchased +{allocation['units_allocated']} for {product_id}")
+                        print(f"[warehouse] Updated RecentProduct unitsPurchased +{allocation['units_allocated']} for {product_id}", file=sys.stderr, flush=True)
+                    else:
+                        log(f"WARNING: Could not update RecentProduct unitsPurchased: {units_purchased_result['errors']}")
+                        print(f"[warehouse] WARNING: Could not update RecentProduct unitsPurchased: {units_purchased_result['errors']}", file=sys.stderr, flush=True)
+                except Exception as e:
+                    log(f"WARNING: Error updating RecentProduct unitsPurchased: {str(e)}")
+                    print(f"[warehouse] WARNING: Error updating RecentProduct unitsPurchased: {str(e)}", file=sys.stderr, flush=True)
                 
                 warehouse_entries_created.append(entry_vars)
             except Exception as allocation_error:

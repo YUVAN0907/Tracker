@@ -43,6 +43,7 @@ from routes_stocks_batch import stocks_batch_bp
 from routes_stock_batch_update import stock_batch_update_bp
 from routes_bills import bills_bp
 from routes_qr import qr_bp
+from routes_vendors import vendors_bp
 
 # --------------------------------------------------
 # REGISTER BLUEPRINTS
@@ -58,6 +59,7 @@ app.register_blueprint(stocks_batch_bp)
 app.register_blueprint(stock_batch_update_bp)
 app.register_blueprint(bills_bp)
 app.register_blueprint(qr_bp)
+app.register_blueprint(vendors_bp)
 
 # Health Check
 @app.route('/api/health')
@@ -105,5 +107,5 @@ def add_cors_headers(response):
 # RUN SERVER
 # --------------------------------------------------
 if __name__ == "__main__":
-    print(f"🚀 Firebase Data Connect backend starting on port {PORT}")
+    print(f"[STARTUP] Firebase Data Connect backend starting on port {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False)

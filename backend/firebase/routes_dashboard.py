@@ -16,13 +16,16 @@ SALES_QUERY = """query GetSales { sales(limit: 1000) { saleId machineId productI
 
 REFILL_LOGS_QUERY = """query GetRefillLogs { refillLogs(limit: 1000) { refillId date refillerId machineId productId coverCount quantity } }"""
 
-VENDORS_QUERY = """query GetVendors { vendors(limit: 1000) { vendorId vendorName mobileNumber email } }"""
+VENDORS_QUERY = """query GetVendors { vendors(limit: 1000) { vendorId vendorName mobileNumber email gstNo address secondaryNumber } }"""
 
 WAREHOUSE_INVENTORIES_QUERY = """query GetWarehouseInventories { warehouseStocks(limit: 1000) { stockId warehouseId poId productId batch unitsPerCase caseLabel availableUnits mfd expd receivedDate notes warehouse { warehouseId name location } product { productName } } }"""
 
 WAREHOUSES_QUERY = """query GetWarehouses { warehouses(limit: 1000) { warehouseId name location address notes createdAt updatedAt } }"""
 
 WAREHOUSE_STOCKS_QUERY = """query GetWarehouseStocks { warehouseStocks(limit: 10000) { stockId warehouseId poId productId batch unitsPerCase caseLabel availableUnits mfd expd receivedDate notes warehouse { warehouseId name location } product { productName } } }"""
+
+# ✅ NEW: Query for Recent Products
+RECENT_PRODUCTS_QUERY = """query GetRecentProducts { recentProducts(limit: 1000) { recentProductId productId productName category vendorId unitCost mrp quantity units gst eanNo selfLife unitsPurchased unitsSold rate createdAt updatedAt vendor { vendorId vendorName } } }"""
 
 # Query to fetch batch-level status from BatchAssignment table
 BATCH_ASSIGNMENTS_QUERY = """query GetBatchAssignments { batchAssignments(limit: 1000) { batch assignedDate status } }"""
@@ -99,7 +102,6 @@ def convert_to_days(value):
 
 @dashboard_bp.route('/api/dashboard', methods=['GET'])
 def dashboard():
-    print("DASHBOARD FUNCTION CALLED", file=sys.stderr)
     try:
         # Execute individual queries since Firebase Data Connect doesn't support multi-root queries
         data = {}
@@ -118,6 +120,7 @@ def dashboard():
             ("purchaseOrderHeaders", PURCHASE_ORDER_HEADERS_QUERY),
             ("purchaseOrderLines", PURCHASE_ORDER_LINES_QUERY),
             ("batchAssignments", BATCH_ASSIGNMENTS_QUERY),
+            ("recentProducts", RECENT_PRODUCTS_QUERY),  # ✅ NEW: Recent Products
         ]
         
         for query_name, query_string in queries:
@@ -141,17 +144,27 @@ def dashboard():
             print(f"[DASHBOARD] Error getting normalized batch assignments: {str(msa_error)}", file=sys.stderr)
             data['machineStockAssignments'] = []
         
+        # DEBUG: Log purchasedProductCases data
+        print(f"[DEBUG] purchasedProductCases count: {len(data.get('purchasedProductCases', []))}", file=sys.stderr)
+        if data.get('purchasedProductCases'):
+            print(f"[DEBUG] First purchasedProductCase: {data['purchasedProductCases'][0]}", file=sys.stderr)
+        
         # We need to reshape the GraphQL response to match the exact JSON keys 
         # the frontend `DataContext.jsx` expects to avoid breaking the UI.
         
         # 1. Map Products
         products_out = []
         for p in data.get("products", []):
-            # Get selfLife from database, convert from months to days if needed
-            raw_selflife = p.get("selfLife") or 0
-            self_life = convert_to_days(raw_selflife)
+            # Get selfLife from database - store in MONTHS, do NOT convert to days
+            # Frontend can convert for display if needed
+            self_life = p.get("selfLife") or 0
             
-            # If still 0, use intelligent default
+            # IMPORTANT: Database may have corrupted values (stored in days instead of months)
+            # If selfLife > 50, assume it's corrupted (stored as days) and convert back to months
+            if self_life > 50:
+                self_life = round(self_life / 30)
+            
+            # If still 0, use intelligent default (in months)
             if self_life == 0:
                 self_life = get_default_self_life(
                     p.get("productId"),
@@ -165,11 +178,11 @@ def dashboard():
                 "CATEGORY": p.get("category"),
                 "VENDOR ID": p.get("vendorId"),
                 "MRP": p.get("mrp"),
-                "QUANTITY": p.get("units") or p.get("quantity"),  # Handle both
+                "Quantity": p.get("quantity") or '',  # Actual quantity field (e.g., "23g", "250ML")
                 "GST": p.get("gst", 0),
-                "PO": p.get("unitCost", 0), # Mapped to unit_cost in frontend
-                "UNITS": p.get("units", 1),
-                "selfLife": self_life  # Shelf life in days
+                "unitCost": p.get("unitCost", 0),  # Use camelCase to match DataContext expectations
+                "Units_Per_Case": p.get("units", 1),  # unitsPerCase field
+                "selfLife": self_life  # Shelf life in MONTHS (raw from database)
             })
             
         # 2. Map Machines
@@ -245,12 +258,50 @@ def dashboard():
                 "Qty": r.get("quantity", 0)
             })
             
-        # 7. Map Vendors
+        # 7. Map Vendors - Include all detail fields
         vendors_out = []
         for v in data.get("vendors", []):
             vendors_out.append({
-                "VENDOR_ID": v.get("vendorId"),
-                "VENDOR": v.get("vendorName")
+                "vendorId": v.get("vendorId"),
+                "vendorName": v.get("vendorName"),
+                "mobileNumber": v.get("mobileNumber") or "-",
+                "email": v.get("email") or "-",
+                "gstNo": v.get("gstNo") or "-",
+                "address": v.get("address") or "-",
+                "secondaryNumber": v.get("secondaryNumber") or "-"
+            })
+
+        # 7.5. ✅ NEW: Map Recent Products
+        recent_products_out = []
+        for rp in data.get("recentProducts", []):
+            rate = 0
+            if rp.get("unitsPurchased", 0) > 0:
+                rate = (rp.get("unitsSold", 0) / rp.get("unitsPurchased", 0)) * 100
+            
+            # Handle corrupted selfLife values (days stored as months)
+            self_life = rp.get("selfLife") or 0
+            if self_life > 50:
+                self_life = round(self_life / 30)
+            
+            recent_products_out.append({
+                "recentProductId": rp.get("recentProductId"),
+                "productId": rp.get("productId"),
+                "productName": rp.get("productName"),
+                "category": rp.get("category"),
+                "vendorId": rp.get("vendorId"),
+                "vendorName": rp.get("vendor", {}).get("vendorName", ""),
+                "unitCost": rp.get("unitCost"),
+                "mrp": rp.get("mrp"),
+                "quantity": rp.get("quantity"),
+                "units": rp.get("units"),
+                "gst": rp.get("gst"),
+                "eanNo": rp.get("eanNo"),
+                "selfLife": self_life,
+                "unitsPurchased": rp.get("unitsPurchased", 0),
+                "unitsSold": rp.get("unitsSold", 0),
+                "rate": round(rate, 2),
+                "createdAt": rp.get("createdAt"),
+                "updatedAt": rp.get("updatedAt")
             })
 
         # 8. Map Warehouses and Warehouse Stocks
@@ -434,9 +485,10 @@ def dashboard():
             'machines': machines_out,
             'stock': stock_out,
             'sales': sales_out,
-            'purchased_products': purchases_out,
+            'purchases': purchases_out,
             'refills': refills_out,
             'vendors': vendors_out,
+            'recentProducts': recent_products_out,  # ✅ NEW: Recent Products
             'warehouse': warehouse_out,
             'warehouses': warehouses_out,
             'warehouseEntries': warehouse_entries_out,

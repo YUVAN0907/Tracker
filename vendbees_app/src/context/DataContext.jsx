@@ -13,6 +13,7 @@ export const DataProvider = ({ children }) => {
         sales: [],
         refills: [],
         vendors: [],
+        recentProducts: [],  // ✅ NEW: Recent Products
         warehouse: [],
         warehouses: [],
         warehouseStocks: [],
@@ -66,8 +67,10 @@ export const DataProvider = ({ children }) => {
                 const category = p.category || p.CATEGORY || p.Category || 'Others';
                 const unit_cost = parseFloat(p.unitCost || p.PO || p.Unit_Cost || 0) || 0;
                 const vendorId = p.vendorId || p['VENDOR ID'] || p.VENDOR_ID || p.Vendor_ID || null;
+                // Keep quantity as string (e.g., "23g", "250ML", "10 cases")
+                const quantity_str = String(p.Quantity || p.quantity || p.QUANTITY || '');
                 const quantity = parseFloat(p.quantity || p.QUANTITY || 0) || 0;
-                const units = parseInt(p.units || p.UNITS || 1) || 1;
+                const units = parseInt(p.units || p.Units_Per_Case || p.UNITS || 1) || 1;
                 const selfLifeValue = parseInt(p.selfLife || p.Self_Life || p.SELF_LIFE || p.Self_Life_Months || 0) || 0;
 
                 const rawGst = String(p.gst || p.GST || '0').replace(/[^0-9.]/g, '');
@@ -85,7 +88,7 @@ export const DataProvider = ({ children }) => {
                     Landed_Cost: landed_cost,
                     GST: gstRate,
                     MRP: parseFloat(p.mrp || p.MRP || 0) || 0,
-                    Quantity: quantity,
+                    Quantity: quantity_str,  // Keep as string display value
                     Vendor_ID: vendorId,
                     Units_Per_Case: units,
                     selfLife: selfLifeValue  // Add selfLife field for delivery form
@@ -153,12 +156,50 @@ export const DataProvider = ({ children }) => {
             // 7. Vendors Mapping
             const vendors = (json.vendors || []).map(v => {
                 return {
-                    Vendor_ID: v.VENDOR_ID || v['VENDOR ID'] || v['Unnamed: 1'],
-                    Name: v.VENDOR || v['VENDOR '] || v['Unnamed: 2'] || 'Unknown',
+                    // Old format for compatibility
+                    Vendor_ID: v.vendorId || v.VENDOR_ID || v['VENDOR ID'] || v['Unnamed: 1'],
+                    Name: v.vendorName || v.VENDOR || v['VENDOR '] || v['Unnamed: 2'] || 'Unknown',
                     Product_ID: v.Product_ID || v['Product ID '] || v['Unnamed: 3'],
-                    Product_Name: v.PRODUCT_NAME || v['PRODUCT NAME '] || v['Unnamed: 4']
+                    Product_Name: v.PRODUCT_NAME || v['PRODUCT NAME '] || v['Unnamed: 4'],
+                    // New format fields
+                    vendorId: v.vendorId,
+                    vendorName: v.vendorName,
+                    mobileNumber: v.mobileNumber || v.phone || '-',
+                    email: v.email || '-',
+                    gstNo: v.gstNo || '-',
+                    address: v.address || '-',
+                    secondaryNumber: v.secondaryNumber || '-'
                 };
-            }).filter(v => v.Vendor_ID && v.Vendor_ID !== 'VENDOR ID');
+            }).filter(v => (v.vendorId || v.Vendor_ID) && (v.vendorId || v.Vendor_ID) !== 'VENDOR ID');
+
+            // 7.5. ✅ NEW: Recent Products Mapping
+            const recentProducts = (json.recentProducts || []).map(rp => {
+                const unitsPurchased = parseInt(rp.unitsPurchased || 0) || 0;
+                const unitsSold = parseInt(rp.unitsSold || 0) || 0;
+                // Calculate sale rate: (unitsSold / unitsPurchased) * 100, or 0 if no units purchased
+                const calculatedRate = unitsPurchased > 0 ? Math.round((unitsSold / unitsPurchased) * 100) : 0;
+                
+                return {
+                    recentProductId: rp.recentProductId,
+                    productId: rp.productId,
+                    productName: rp.productName,
+                    category: rp.category,
+                    vendorId: rp.vendorId,
+                    vendorName: rp.vendorName,
+                    unitCost: parseFloat(rp.unitCost || 0) || 0,
+                    mrp: parseFloat(rp.mrp || 0) || 0,
+                    quantity: parseFloat(rp.quantity || 0) || 0,
+                    units: parseInt(rp.units || 1) || 1,
+                    gst: parseFloat(String(rp.gst || '0').replace(/[^0-9.]/g, '')) || 0,
+                    eanNo: rp.eanNo,
+                    selfLife: parseInt(rp.selfLife || 0) || 0,
+                    unitsPurchased: unitsPurchased,
+                    unitsSold: unitsSold,
+                    rate: calculatedRate,  // ✅ Dynamically calculated from unitsSold/unitsPurchased
+                    createdAt: rp.createdAt,
+                    updatedAt: rp.updatedAt
+                };
+            });
 
             // 8. Warehouse Mapping
             const rawWarehouseStocks = json.warehouseStocks || [];
@@ -423,6 +464,7 @@ export const DataProvider = ({ children }) => {
                 sales,
                 refills,
                 vendors,
+                recentProducts,  // ✅ NEW: Recent Products
                 warehouse,
                 warehouses,
                 warehouseStocks,

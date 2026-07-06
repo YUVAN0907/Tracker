@@ -85,55 +85,24 @@ mutation InsertVendorPurchaseItem(
 }
 """
 
-# Insert into PurchasedProductBatch (Level 1: PO + Product)
-INSERT_PURCHASED_PRODUCT_BATCH_MUTATION = """
-mutation InsertPurchasedProductBatch(
-  $poId: String!,
-  $productId: String!,
-  $batch: Int!,
-  $unitsPerCase: Int!,
-  $receivedDate: Timestamp,
-  $notes: String,
-  $status: String
-) {
-  purchasedProductBatch_insert(data: {
-    poId: $poId,
-    productId: $productId,
-    batch: $batch,
-    unitsPerCase: $unitsPerCase,
-    receivedDate: $receivedDate,
-    notes: $notes,
-    status: $status,
-    createdAt: $receivedDate,
-    updatedAt: $receivedDate
-  })
-}
-"""
-
-# Insert into PurchasedProductCase (Level 2: Individual Cases)
-INSERT_PURCHASED_PRODUCT_CASE_MUTATION = """
-mutation InsertPurchasedProductCase(
-  $batchId: UUID!,
-  $caseLabel: String!,
-  $mfd: Timestamp!,
-  $expd: Timestamp!,
-  $availableUnits: Int!
-) {
-  purchasedProductCase_insert(data: {
-    purchasedProductBatchId: $batchId,
-    caseLabel: $caseLabel,
-    mfd: $mfd,
-    expd: $expd,
-    availableUnits: $availableUnits,
-    lastUpdated: $mfd
-  })
-}
-"""
-
 GET_WAREHOUSE_QUERY = """
 query GetWarehouseById($warehouseId: String!) {
   warehouses(where: { warehouseId: { eq: $warehouseId } }) {
     warehouseId
+  }
+}
+"""
+
+GET_WAREHOUSE_STOCK_BY_CASELABEL_QUERY = """
+query GetWarehouseStockByCaseLabel($caseLabel: String!) {
+  warehouseStocks(where: { caseLabel: { eq: $caseLabel } }, limit: 1) {
+    stockId
+    warehouseId
+    poId
+    productId
+    batch
+    caseLabel
+    availableUnits
   }
 }
 """
@@ -171,34 +140,6 @@ mutation InsertWarehouseStock(
 }
 """
 
-# Insert batch - Data Connect auto-generates UUID when id is not provided
-GET_OR_CREATE_BATCH_MUTATION = """
-mutation InsertPurchasedProductBatch(
-  $id: UUID!,
-  $poId: String!,
-  $productId: String!,
-  $batch: Int!,
-  $unitsPerCase: Int!,
-  $totalUnitsReceived: Int!,
-  $receivedDate: Timestamp,
-  $notes: String
-) {
-  purchasedProductBatch_insert(data: {
-    id: $id,
-    poId: $poId,
-    productId: $productId,
-    batch: $batch,
-    unitsPerCase: $unitsPerCase,
-    totalUnitsReceived: $totalUnitsReceived,
-    receivedDate: $receivedDate,
-    notes: $notes,
-    status: "active",
-    createdAt: $receivedDate,
-    updatedAt: $receivedDate
-  })
-}
-"""
-
 # Query to get products with selfLife
 GET_PRODUCTS_QUERY = """
 query GetProducts($productIds: [String!]) {
@@ -225,30 +166,31 @@ mutation UpdatePOStatus($poId: String!, $status: String!) {
 }
 """
 
-# NEW MUTATIONS FOR NORMALIZED PURCHASED PRODUCTS TABLES
+# ✅ NEW: Get Recent Product by product ID
+GET_RECENT_PRODUCT_QUERY = """
+query GetRecentProduct($productId: String!) {
+  recentProducts(where: { productId: { eq: $productId } }, limit: 1) {
+    recentProductId
+    productId
+    unitsPurchased
+  }
+}
+"""
 
-# Insert into PurchasedProductBatch (Level 1: PO + Product)
-INSERT_PURCHASED_PRODUCT_BATCH_MUTATION = """
-mutation InsertPurchasedProductBatch(
-  $poId: String!,
-  $productId: String!,
-  $batch: Int!,
-  $unitsPerCase: Int!,
-  $receivedDate: Timestamp,
-  $notes: String,
-  $status: String
+# ✅ NEW: Update unitsPurchased in RecentProduct
+UPDATE_RECENT_PRODUCT_UNITS_MUTATION = """
+mutation UpdateRecentProductUnits(
+  $recentProductId: UUID!,
+  $unitsPurchased: Int!,
+  $updatedAt: Timestamp!
 ) {
-  purchasedProductBatch_insert(data: {
-    poId: $poId,
-    productId: $productId,
-    batch: $batch,
-    unitsPerCase: $unitsPerCase,
-    receivedDate: $receivedDate,
-    notes: $notes,
-    status: $status,
-    createdAt: $receivedDate,
-    updatedAt: $receivedDate
-  })
+  recentProduct_update(
+    key: { recentProductId: $recentProductId },
+    data: {
+      unitsPurchased: $unitsPurchased,
+      updatedAt: $updatedAt
+    }
+  )
 }
 """
 
@@ -336,7 +278,7 @@ def record_delivery_normalized():
 
 @purchases_bp.route('/api/record-delivery', methods=['POST'])
 def record_delivery():
-    """Record delivery using normalized table structure (PurchasedProductBatch + PurchasedProductCase)"""
+    """Record delivery using warehouse stock directly (no PurchasedProductBatch)."""
     import sys
     import traceback
     
@@ -471,7 +413,7 @@ def record_delivery():
                 print(f"[record_delivery] Removed {len(cases) - len(unique_cases)} duplicate case(s) for product {product_id}", file=sys.stderr, flush=True)
             cases = unique_cases
             
-            is_custom = 'Custom_' in product_id or product_id not in [b.get('poId') for b in purchased_product_batches_out] if 'purchased_product_batches_out' in locals() else False
+            is_custom = 'Custom_' in product_id
             item_type = 'CUSTOM' if is_custom else 'PO'
             
             print(f"[record_delivery] [{item_type}] Processing item {item_idx + 1}/{len(items)}: product {product_id}, cases_count={len(cases)}", file=sys.stderr, flush=True)
@@ -497,70 +439,64 @@ def record_delivery():
             
             print(f"[record_delivery] Units per case: {units_per_case}, total received: {total_units_received}", file=sys.stderr, flush=True)
             
-            # Step 2: Get or create PurchasedProductBatch (Level 1: PO + Product)
-            batch_id = None
+            # Step 2: Insert VendorPurchaseItem for this product (product-level payment record)
             try:
-                # Generate batch UUID on backend
-                batch_id = str(uuid4())
-                
-                batch_vars = {
-                    "id": batch_id,
-                    "poId": po_id,
+                item_mrp_raw = item.get('mrp', item.get('MRP', None))
+                if item_mrp_raw is None or item_mrp_raw == '':
+                    # fallback to PO item price or batch one as available
+                    item_mrp_raw = item.get('po_price', item.get('PO_Price', 0))
+                item_mrp = float(item_mrp_raw or 0)
+
+                item_po_price = float(item.get('po_price', item.get('PO_Price', 0) or 0))
+                item_case_count = len(cases)
+                item_total_units = total_units_received
+
+                vendor_item_vars = {
+                    "itemId": str(uuid4()),
+                    "purchaseOrderId": vendor_purchase_order_id,
                     "productId": product_id,
                     "batch": batch,
                     "unitsPerCase": units_per_case,
-                    "totalUnitsReceived": total_units_received,
-                    "receivedDate": received_date,
-                    "notes": product_notes
+                    "caseCount": item_case_count,
+                    "totalUnits": item_total_units,
+                    "mrp": item_mrp,
+                    "poPrice": item_po_price
                 }
-                print(f"[record_delivery] Batch mutation vars: {batch_vars}", file=sys.stderr, flush=True)
+                print(f"[record_delivery] VendorPurchaseItem mutation vars: {vendor_item_vars}", file=sys.stderr, flush=True)
+                execute_graphql(INSERT_VENDOR_PURCHASE_ITEM_MUTATION, vendor_item_vars)
+                print(f"[record_delivery] ✓ VendorPurchaseItem inserted for product {product_id}", file=sys.stderr, flush=True)
                 
-                batch_result = execute_graphql(GET_OR_CREATE_BATCH_MUTATION, batch_vars)
-                print(f"[record_delivery] Batch insert result: {batch_result}", file=sys.stderr, flush=True)
-                
-                print(f"[record_delivery] ✓ Successfully created batch {batch_id}: PO {po_id}, Product {product_id}", file=sys.stderr, flush=True)
-
-                # Insert VendorPurchaseItem for this product (product-level payment record)
+                # ✅ NEW: Track unitsPurchased for Recent Products
                 try:
-                    item_mrp_raw = item.get('mrp', item.get('MRP', None))
-                    if item_mrp_raw is None or item_mrp_raw == '':
-                        # fallback to PO item price or batch one as available
-                        item_mrp_raw = item.get('po_price', item.get('PO_Price', 0))
-                    item_mrp = float(item_mrp_raw or 0)
-
-                    item_po_price = float(item.get('po_price', item.get('PO_Price', 0) or 0))
-                    item_case_count = len(cases)
-                    item_total_units = total_units_received
-
-                    vendor_item_vars = {
-                        "itemId": str(uuid4()),
-                        "purchaseOrderId": vendor_purchase_order_id,
-                        "productId": product_id,
-                        "batch": batch,
-                        "unitsPerCase": units_per_case,
-                        "caseCount": item_case_count,
-                        "totalUnits": item_total_units,
-                        "mrp": item_mrp,
-                        "poPrice": item_po_price
-                    }
-                    print(f"[record_delivery] VendorPurchaseItem mutation vars: {vendor_item_vars}", file=sys.stderr, flush=True)
-                    execute_graphql(INSERT_VENDOR_PURCHASE_ITEM_MUTATION, vendor_item_vars)
-                    print(f"[record_delivery] ✓ VendorPurchaseItem inserted for product {product_id}", file=sys.stderr, flush=True)
-                except Exception as vendor_item_err:
-                    error_detail = str(vendor_item_err)
-                    print(f"[record_delivery] ✗ ERROR creating VendorPurchaseItem for product {product_id}: {error_detail}", file=sys.stderr, flush=True)
-                    traceback.print_exc(file=sys.stderr)
-                    return jsonify({'error': f'Error creating vendor purchase item for product {product_id}: {error_detail}'}), 400
-
-            except Exception as batch_err:
-                error_detail = str(batch_err)
-                print(f"[record_delivery] ✗ ERROR creating batch: {error_detail}", file=sys.stderr, flush=True)
+                    print(f"[record_delivery] Checking if product {product_id} exists in RecentProduct table...", file=sys.stderr, flush=True)
+                    recent_product_res = execute_graphql(GET_RECENT_PRODUCT_QUERY, {"productId": product_id})
+                    
+                    if recent_product_res and recent_product_res.get('recentProducts') and len(recent_product_res['recentProducts']) > 0:
+                        recent_product = recent_product_res['recentProducts'][0]
+                        recent_product_id = recent_product.get('recentProductId')
+                        current_units = recent_product.get('unitsPurchased', 0)
+                        new_units = current_units + item_total_units
+                        
+                        print(f"[record_delivery] ✓ Found RecentProduct for {product_id}: recentProductId={recent_product_id}, current unitsPurchased={current_units}, adding {item_total_units} units", file=sys.stderr, flush=True)
+                        
+                        update_vars = {
+                            "recentProductId": recent_product_id,
+                            "unitsPurchased": new_units,
+                            "updatedAt": format_timestamp(datetime.now())
+                        }
+                        execute_graphql(UPDATE_RECENT_PRODUCT_UNITS_MUTATION, update_vars)
+                        print(f"[record_delivery] ✓ Updated RecentProduct unitsPurchased for {product_id}: {current_units} → {new_units}", file=sys.stderr, flush=True)
+                    else:
+                        print(f"[record_delivery] ℹ️  Product {product_id} not in RecentProduct table (regular product only)", file=sys.stderr, flush=True)
+                except Exception as recent_product_err:
+                    print(f"[record_delivery] ⚠️  Warning updating RecentProduct tracking for {product_id}: {str(recent_product_err)}", file=sys.stderr, flush=True)
+                    # Don't fail the whole operation if recent product tracking fails
+            except Exception as vendor_item_err:
+                error_detail = str(vendor_item_err)
+                print(f"[record_delivery] ✗ ERROR creating VendorPurchaseItem for product {product_id}: {error_detail}", file=sys.stderr, flush=True)
                 traceback.print_exc(file=sys.stderr)
-                return jsonify({'error': f'Error creating batch for product {product_id}: {error_detail}'}), 400
-            
-            if not batch_id:
-                return jsonify({'error': f'Failed to create batch for product {product_id}'}), 400
-            
+                return jsonify({'error': f'Error creating vendor purchase item for product {product_id}: {error_detail}'}), 400
+
             # Step 3: Process each case
             for case_idx, case_data in enumerate(cases, start=1):
                 try:
@@ -620,21 +556,7 @@ def record_delivery():
                     # Auto-generate case label: poId_productId_c{n}
                     case_label = case_data.get('case_label', case_data.get('caseLabel', f"{po_id}_{product_id}_c{case_idx}"))
                     
-                    # Step 2a: Insert into PurchasedProductCase (Level 2: Individual Cases)
-                    case_vars = {
-                        "batchId": batch_id,
-                        "caseLabel": case_label,
-                        "mfd": format_timestamp(mfd_dt),
-                        "expd": format_timestamp(expd_dt),
-                        "availableUnits": units_received
-                    }
-                    print(f"[record_delivery]   Case mutation vars: {case_vars}", file=sys.stderr, flush=True)
-                    
-                    case_result = execute_graphql(INSERT_PURCHASED_PRODUCT_CASE_MUTATION, case_vars)
-                    insertion_count += 1
-                    print(f"[record_delivery] ✓ Case {case_label} inserted successfully", file=sys.stderr, flush=True)
-
-                    # Insert corresponding warehouse stock record for this delivered case
+                    # Step 2a: Insert corresponding warehouse stock record for this delivered case
                     try:
                         warehouse_stock_vars = {
                             "warehouseId": warehouse_id,
@@ -649,8 +571,14 @@ def record_delivery():
                             "receivedDate": received_date,
                             "notes": product_notes or f"Delivered via PO {po_id}"
                         }
-                        execute_graphql(INSERT_WAREHOUSE_STOCK_MUTATION, warehouse_stock_vars)
-                        print(f"[record_delivery] ✓ WarehouseStock record inserted for case {case_label}", file=sys.stderr, flush=True)
+                        existing_stock = execute_graphql(GET_WAREHOUSE_STOCK_BY_CASELABEL_QUERY, {"caseLabel": case_label})
+                        if existing_stock and existing_stock.get('warehouseStocks'):
+                            existing = existing_stock['warehouseStocks'][0]
+                            print(f"[record_delivery] ⚠️ Existing WarehouseStock found for case label {case_label}; skipping duplicate insertion. Existing stockId={existing.get('stockId')}, warehouseId={existing.get('warehouseId')}, poId={existing.get('poId')}, productId={existing.get('productId')}", file=sys.stderr, flush=True)
+                        else:
+                            execute_graphql(INSERT_WAREHOUSE_STOCK_MUTATION, warehouse_stock_vars)
+                            insertion_count += 1
+                            print(f"[record_delivery] ✓ WarehouseStock record inserted for case {case_label}", file=sys.stderr, flush=True)
                     except Exception as warehouse_stock_err:
                         print(f"[record_delivery] ✗ ERROR inserting WarehouseStock for case {case_label}: {warehouse_stock_err}", file=sys.stderr, flush=True)
                         traceback.print_exc(file=sys.stderr)

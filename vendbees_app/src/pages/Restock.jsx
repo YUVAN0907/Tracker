@@ -27,6 +27,11 @@ const Restock = () => {
     const [generatingQr, setGeneratingQr] = useState(false);
     const [qrNotes, setQrNotes] = useState('');
     
+    // ✅ NEW: Filter state for Stock Batches tab
+    const [batchFilter, setBatchFilter] = useState('');
+    const [dateFilter, setDateFilter] = useState('');
+    const [productFilter, setProductFilter] = useState('');
+    
     // Build batch status summary for Restock counts
     const batchStatusMap = stocks.reduce((map, s) => {
         const batchKey = (s.batch || s.Batch || '').toString().trim();
@@ -311,6 +316,43 @@ const Restock = () => {
         } catch (error) {
             console.error('Error deleting QR history:', error);
             setNotification({ type: 'error', message: 'Failed to delete QR history' });
+        }
+    };
+
+    // ✅ NEW: Delete batch handler
+    const handleDeleteBatch = async (batchNumber) => {
+        if (!batchNumber) {
+            setNotification({ type: 'error', message: 'Batch number is required' });
+            return;
+        }
+
+        // Confirm deletion
+        if (!window.confirm(`Are you sure you want to delete batch ${batchNumber}? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/stocks/delete-batch/${batchNumber}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                setNotification({ 
+                    type: 'success', 
+                    message: `Batch ${batchNumber} deleted successfully. Removed ${result.deleted.stock_cover_assignments} stock-covers and ${result.deleted.stock_cover_product_assignments} products.` 
+                });
+                // Refresh data to reflect deletion
+                refreshData();
+            } else {
+                const error = await response.json();
+                console.error('Failed to delete batch:', error);
+                setNotification({ type: 'error', message: `Failed to delete batch: ${error.error || error.message || 'Unknown error'}` });
+            }
+        } catch (error) {
+            console.error('Error deleting batch:', error);
+            setNotification({ type: 'error', message: `Error deleting batch: ${error.message}` });
         }
     };
 
@@ -661,6 +703,55 @@ const Restock = () => {
                             </div>
                         </div>
 
+                        {/* ✅ NEW: Filters for Stock Batches */}
+                        <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
+                            <h4 className="text-sm font-semibold text-slate-700">🔍 Filter Stock Batches</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch Number</label>
+                                    <input
+                                        type="text"
+                                        value={batchFilter}
+                                        onChange={(e) => setBatchFilter(e.target.value)}
+                                        placeholder="Enter batch number..."
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Date (YYYY-MM-DD)</label>
+                                    <input
+                                        type="text"
+                                        value={dateFilter}
+                                        onChange={(e) => setDateFilter(e.target.value)}
+                                        placeholder="YYYY-MM-DD"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Product Name/ID</label>
+                                    <input
+                                        type="text"
+                                        value={productFilter}
+                                        onChange={(e) => setProductFilter(e.target.value)}
+                                        placeholder="Search product..."
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                                    />
+                                </div>
+                            </div>
+                            {(batchFilter || dateFilter || productFilter) && (
+                                <button
+                                    onClick={() => {
+                                        setBatchFilter('');
+                                        setDateFilter('');
+                                        setProductFilter('');
+                                    }}
+                                    className="text-xs text-slate-600 hover:text-slate-800 font-medium underline"
+                                >
+                                    Clear Filters
+                                </button>
+                            )}
+                        </div>
+
                         {stocks && stocks.length === 0 ? (
                             <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-12 text-center">
                                 <Package size={40} className="mx-auto text-slate-300 mb-3" />
@@ -690,6 +781,7 @@ const Restock = () => {
                                                 <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Case Label</th>
                                                 <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Units</th>
                                                 <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Status</th>
+                                                <th className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase whitespace-nowrap">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -726,8 +818,37 @@ const Restock = () => {
                                                         });
                                                     });
                                                     
-                                                    // Process each batch and group by machine/stock/cover
-                                                    Object.values(groupedByBatch).forEach(batchGroup => {
+                                                    // ✅ Apply filters to batches
+                                                    const filteredBatches = Object.values(groupedByBatch).filter(batchGroup => {
+                                                        // Filter by batch number
+                                                        if (batchFilter && !batchGroup.batch.toString().toLowerCase().includes(batchFilter.toLowerCase())) {
+                                                            return false;
+                                                        }
+                                                        
+                                                        // Filter by date
+                                                        if (dateFilter && batchGroup.date) {
+                                                            const batchDate = new Date(batchGroup.date).toISOString().split('T')[0];
+                                                            if (batchDate !== dateFilter) {
+                                                                return false;
+                                                            }
+                                                        }
+                                                        
+                                                        // Filter by product name/id
+                                                        if (productFilter) {
+                                                            const hasProduct = batchGroup.items.some(item =>
+                                                                (item.productName && item.productName.toLowerCase().includes(productFilter.toLowerCase())) ||
+                                                                (item.productId && item.productId.toString().toLowerCase().includes(productFilter.toLowerCase()))
+                                                            );
+                                                            if (!hasProduct) {
+                                                                return false;
+                                                            }
+                                                        }
+                                                        
+                                                        return true;
+                                                    });
+                                                    
+                                                    // Process each filtered batch and group by machine/stock/cover
+                                                    filteredBatches.forEach(batchGroup => {
                                                         // Group by machine
                                                         const groupedByMachine = {};
                                                         batchGroup.items.forEach((item) => {
@@ -856,11 +977,24 @@ const Restock = () => {
                                                                     ''
                                                                 )}
                                                             </td>
+                                                            {/* ✅ NEW: Delete action button */}
+                                                            <td className="px-6 py-4 text-center">
+                                                                {showBatch && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteBatch(row.batch)}
+                                                                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium transition-colors flex items-center gap-1 mx-auto"
+                                                                        title={`Delete batch ${row.batch}`}
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                        Delete
+                                                                    </button>
+                                                                )}
+                                                            </td>
                                                         </tr>
                                                     );
                                                 }) : (
                                                     <tr>
-                                                        <td colSpan="11" className="px-6 py-8 text-center text-slate-500">
+                                                        <td colSpan="12" className="px-6 py-8 text-center text-slate-500">
                                                             No batches to display
                                                         </td>
                                                     </tr>
