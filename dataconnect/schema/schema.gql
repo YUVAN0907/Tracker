@@ -35,6 +35,8 @@ type Machine @table(key: "machineId") {
   machineId: String!
   location: String
   status: String
+  latitude: Float
+  longitude: Float
 }
 
 # ==============================
@@ -314,7 +316,7 @@ type BillHistory @table(key: "billId") {
 
 type QrCodeHistory @table(key: "qrId") {
   qrId: UUID! @default(expr: "uuidV4()")
-  userId: String!                # User who generated the QR codes
+  userId: String                # User who generated the QR codes
   machineIds: [String!]!         # Array of machine IDs for which QR codes were generated
   qrData: String!                # JSON data containing QR code information (machine details, URLs, etc.)
   pdfGenerated: Boolean! @default(value: false)
