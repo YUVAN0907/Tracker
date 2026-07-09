@@ -25,6 +25,11 @@ const MachineOut = () => {
     const [changedData, setChangedData] = useState({}); // Track changed values
     const [saving, setSaving] = useState(false);
     
+    // ✅ NEW: Filter state for Machine Out table
+    const [batchFilterMO, setBatchFilterMO] = useState('');
+    const [dateFilterMO, setDateFilterMO] = useState('');
+    const [productFilterMO, setProductFilterMO] = useState('');
+    
     // Use same API URL logic as DataContext for consistency
     const isLocalhost = typeof window !== 'undefined' && (
         window.location.hostname === 'localhost' || 
@@ -144,6 +149,57 @@ const MachineOut = () => {
                     </div>
                 )}
 
+                {/* ✅ NEW: Filters for Machine Out */}
+                {stocks && stocks.length > 0 && (
+                    <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
+                        <h4 className="text-sm font-semibold text-slate-700">🔍 Filter Stock Batches</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Batch Number</label>
+                                <input
+                                    type="text"
+                                    value={batchFilterMO}
+                                    onChange={(e) => setBatchFilterMO(e.target.value)}
+                                    placeholder="Enter batch number..."
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Date (YYYY-MM-DD)</label>
+                                <input
+                                    type="text"
+                                    value={dateFilterMO}
+                                    onChange={(e) => setDateFilterMO(e.target.value)}
+                                    placeholder="YYYY-MM-DD"
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Product Name/ID</label>
+                                <input
+                                    type="text"
+                                    value={productFilterMO}
+                                    onChange={(e) => setProductFilterMO(e.target.value)}
+                                    placeholder="Search product..."
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
+                        </div>
+                        {(batchFilterMO || dateFilterMO || productFilterMO) && (
+                            <button
+                                onClick={() => {
+                                    setBatchFilterMO('');
+                                    setDateFilterMO('');
+                                    setProductFilterMO('');
+                                }}
+                                className="text-xs text-slate-600 hover:text-slate-800 font-medium underline"
+                            >
+                                Clear Filters
+                            </button>
+                        )}
+                    </div>
+                )}
+
                 {/* Stock Batches with Editable Units */}
                 {stocks && stocks.length === 0 ? (
                     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-12 text-center">
@@ -210,8 +266,37 @@ const MachineOut = () => {
                                                 });
                                             });
                                             
-                                            // Process each batch and group by machine/stock/cover
-                                            Object.values(groupedByBatch).forEach(batchGroup => {
+                                            // ✅ Apply filters to batches
+                                            const filteredBatchesMO = Object.values(groupedByBatch).filter(batchGroup => {
+                                                // Filter by batch number
+                                                if (batchFilterMO && !batchGroup.batch.toString().toLowerCase().includes(batchFilterMO.toLowerCase())) {
+                                                    return false;
+                                                }
+                                                
+                                                // Filter by date
+                                                if (dateFilterMO && batchGroup.date) {
+                                                    const batchDate = new Date(batchGroup.date).toISOString().split('T')[0];
+                                                    if (batchDate !== dateFilterMO) {
+                                                        return false;
+                                                    }
+                                                }
+                                                
+                                                // Filter by product name/id
+                                                if (productFilterMO) {
+                                                    const hasProduct = batchGroup.items.some(item =>
+                                                        (item.productName && item.productName.toLowerCase().includes(productFilterMO.toLowerCase())) ||
+                                                        (item.productId && item.productId.toString().toLowerCase().includes(productFilterMO.toLowerCase()))
+                                                    );
+                                                    if (!hasProduct) {
+                                                        return false;
+                                                    }
+                                                }
+                                                
+                                                return true;
+                                            });
+                                            
+                                            // Process each filtered batch and group by machine/stock/cover
+                                            filteredBatchesMO.forEach(batchGroup => {
                                                 // Group by machine
                                                 const groupedByMachine = {};
                                                 batchGroup.items.forEach((item) => {

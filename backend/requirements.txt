@@ -6,3 +6,11 @@ numpy
 openpyxl
 gunicorn
 python-dotenv
+google-auth
+google-auth-oauthlib
+firebase-admin
+google-cloud-firestore
+PyJWT
+bcrypt
+fpdf
+qrcode[pil]

@@ -45,6 +45,10 @@ const CreateBatchPage = () => {
     // Prevents ambiguity: S1-C-P1 gets exactly 30 from L001 and 20 from L002
     const [stockSourceAllocation, setStockSourceAllocation] = useState({});
     
+    // ✅ NEW: Clone template feature
+    const [showCloneModal, setShowCloneModal] = useState(false);
+    const [cloneSourceStock, setCloneSourceStock] = useState(null);
+    
     // Initialize stocks dynamically (S1-S7 or more based on machine count)
     const [stocksData, setStocksData] = useState(() => {
         const stocks = {};
@@ -162,6 +166,16 @@ const CreateBatchPage = () => {
         setSelectedMachines(newMachines);
     };
 
+    // Get available machines for a specific stock dropdown
+    // Filters out machines already assigned to other stocks
+    const getAvailableMachinesForStock = (currentIndex) => {
+        const selectedMachineIds = selectedMachines
+            .map((m, idx) => idx !== currentIndex && m ? m : null)
+            .filter(m => m !== null);
+        
+        return machines.filter(m => !selectedMachineIds.includes(m.Machine_ID));
+    };
+
     const getNextCoverName = (stock) => {
         try {
             if (!stocksData[stock]) return 'C';
@@ -225,13 +239,35 @@ const CreateBatchPage = () => {
                 return;
             }
 
-            const productId = product.Product_ID;
+            const productId = product.Product_ID || product.product_id;
+            
+            // ✅ DEBUG: Log entire pendingSources state at entry point
+            console.log('═══════════════════════════════════════════════════════════════');
+            console.log(`🚀 handleAddProduct called for ${stock}-${cover}`);
+            console.log(`   Product ID: ${productId}`);
+            console.log(`   Current pendingSources state (length: ${pendingSources.length}):`, 
+                JSON.stringify(pendingSources, null, 2)
+            );
+            console.log('═══════════════════════════════════════════════════════════════');
+
+            const normalizedProduct = {
+                ...product,
+                product_id: productId,
+                Product_ID: productId
+            };
             console.log(`🔍 Fetching detailed suggestions for ${stock}-${cover}-${productId}`);
+            console.log('📋 Current pendingSources state:', pendingSources.map(s => ({
+                type: s.type,
+                warehouse_id: s.warehouse_id,
+                case_label: s.case_label,
+                product_id: s.product_id,
+                units: s.units
+            })));
 
             // Show loading state
             setLoadingSuggestions(true);
             setSuggestionError(null);
-            setPendingProduct({ stock, cover, product });
+            setPendingProduct({ stock, cover, product: normalizedProduct });
             setDetailedSuggestions({ warehouse_options: [], previous_batches: [] });
             setSelectedWarehouse(null);
             setSelectedCaseLabel(null);
@@ -302,13 +338,48 @@ const CreateBatchPage = () => {
                     ...wh,
                     cases: (wh.cases || []).map(c => {
                         const originalUnits = c.original_units_available || c.units_available;
-                        const reservedUnits = pendingSources
-                            .filter(source => source.case_id === c.case_id && source.product_id === productId)
+                        // ✅ FIX: Filter by warehouse_id, case_label, AND product_id for accurate matching
+                        const matchingReservations = pendingSources
+                            .filter(source => source.type === 'warehouse')
+                            .filter(source => source.product_id === productId);
+                        
+                        const caseLevelReservations = matchingReservations
+                            .filter(source => 
+                                source.warehouse_id === wh.warehouse_id && 
+                                source.case_label === c.case_label
+                            );
+                        
+                        const reservedUnits = caseLevelReservations
                             .reduce((sum, source) => sum + source.units, 0);
+                        
                         const currentAvailable = Math.max(0, originalUnits - reservedUnits);
                         
-                        if (reservedUnits > 0) {
-                            console.log(`📦 Case ${c.case_label}: Original ${originalUnits} - Reserved ${reservedUnits} = Currently ${currentAvailable} units`);
+                        // ✅ DEBUG: Detailed logging for case-level calculation
+                        if (c.case_label) {
+                            console.log(`
+🔍 Calculating available units for case: ${c.case_label}
+   Warehouse: ${wh.warehouse_id} (${wh.warehouse_name})
+   Product ID: ${productId}
+   
+   Step 1 - All warehouse sources in pendingSources:
+   ${JSON.stringify(pendingSources.filter(s => s.type === 'warehouse'), null, 2)}
+   
+   Step 2 - Filtered by product_id (${productId}):
+   ${JSON.stringify(matchingReservations.map(s => ({
+        warehouse_id: s.warehouse_id, 
+        case_label: s.case_label, 
+        units: s.units
+   })), null, 2)}
+   
+   Step 3 - Filtered by warehouse (${wh.warehouse_id}) + case (${c.case_label}):
+   ${JSON.stringify(caseLevelReservations.map(s => ({
+        warehouse_id: s.warehouse_id, 
+        case_label: s.case_label, 
+        units: s.units
+   })), null, 2)}
+   
+   Result: ${originalUnits} - ${reservedUnits} = ${currentAvailable} units
+`);
                         }
                         
                         return {
@@ -324,6 +395,16 @@ const CreateBatchPage = () => {
                     warehouse_options: warehouseOptionsWithOriginal,
                     previous_batches: previousBatchData.previous_batches || []
                 };
+
+                // ✅ DEBUG: Log pending sources for this product
+                console.log(`🔍 Pending sources for ${stock}-${cover}-${productId}:`, 
+                    pendingSources.filter(s => s.product_id === productId).map(s => ({
+                        warehouse: s.warehouse_id,
+                        case: s.case_label,
+                        units: s.units,
+                        product: s.product_id
+                    }))
+                );
 
                 if (hasWarehouse || hasPreviousBatches) {
                     console.log('🎯 Showing suggestion dialog with combined sources');
@@ -367,18 +448,24 @@ const CreateBatchPage = () => {
     const addProductDirectly = (stock, cover, product) => {
         try {
             const updatedStocks = { ...stocksData };
-            const existingProduct = updatedStocks[stock].covers[cover].find(p => p.product_id === product.Product_ID);
+            
+            // Normalize product name - handle multiple possible field names
+            const productName = product.Product_Name || product.product_name || product.Name || 'Unknown Product';
+            const productId = product.Product_ID || product.product_id;
+            
+            const existingProduct = updatedStocks[stock].covers[cover].find(p => p.product_id === productId);
 
             if (existingProduct) {
                 // Product already exists
-                console.log(`Product ${product.Product_ID} already exists in ${stock}-${cover}`);
-                alert(`ℹ️ "${product.Product_Name}" is already in ${stock}-${cover}. To add more units, open that product row and edit the units field directly.`);
+                console.log(`Product ${productId} already exists in ${stock}-${cover}`);
+                alert(`ℹ️ "${productName}" is already in ${stock}-${cover}. To add more units, open that product row and edit the units field directly.`);
             } else {
                 // Add new product with units = 0
                 updatedStocks[stock].covers[cover].push({
-                    product_id: product.Product_ID,
-                    product_name: product.Product_Name,
-                    units: 0
+                    product_id: productId,
+                    product_name: productName,
+                    units: 0,
+                    isFromAddProduct: true  // ✅ NEW: Mark as from "Add Product" dropdown
                 });
                 setStocksData(updatedStocks);
             }
@@ -407,19 +494,23 @@ const CreateBatchPage = () => {
 
             console.log(`📌 Recording source: Previous Batch ${batch.batch_number} (${batch.stock_name}-${batch.cover_name}) - ${unitsNum} units`);
 
+            // ✅ FIX: Normalize productId for consistency
+            const normalizedProdId = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
             const newPendingSource = {
                 type: 'previous_batch',
                 batch_number: batch.batch_number,
                 stock_name: batch.stock_name,
                 cover_name: batch.cover_name,
-                product_id: pendingProduct.product.Product_ID,
+                product_id: normalizedProdId,
                 units: unitsNum
             };
 
             setPendingSources([...pendingSources, newPendingSource]);
 
             // ✅ NEW: Record allocation at Stock-Cover-Product level
-            recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, pendingProduct.product.Product_ID, {
+            // ✅ FIX: Normalize productId to handle both product_id and Product_ID field names
+            const normalizedProductId1 = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
+            recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, normalizedProductId1, {
                 source_type: 'previous_batch',
                 batch_number: batch.batch_number,
                 source_stock: batch.stock_name,
@@ -477,20 +568,24 @@ const CreateBatchPage = () => {
 
             console.log(`📌 Recording source: Warehouse ${warehouse.warehouse_name} - Case ${selectedCase.case_label} (${selectedCase.expiry_date}) - ${unitsNum} units`);
 
+            // ✅ FIX: Normalize productId for consistency
+            const normalizedProdId2 = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
             const newPendingSource = {
                 type: 'warehouse',
                 warehouse_id: warehouse.warehouse_id,
                 warehouse_name: warehouse.warehouse_name,
                 case_id: selectedCase.case_id,
                 case_label: selectedCase.case_label,
-                product_id: pendingProduct.product.Product_ID,
+                product_id: normalizedProdId2,
                 units: unitsNum
             };
 
             setPendingSources([...pendingSources, newPendingSource]);
 
             // ✅ NEW: Record allocation at Stock-Cover-Product level
-            recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, pendingProduct.product.Product_ID, {
+            // ✅ FIX: Normalize productId to handle both product_id and Product_ID field names
+            const normalizedProductId = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
+            recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, normalizedProductId, {
                 source_type: 'warehouse',
                 warehouse_id: warehouse.warehouse_id,
                 warehouse_name: warehouse.warehouse_name,
@@ -535,6 +630,9 @@ const CreateBatchPage = () => {
 
             console.log(`📌 Recording warehouse sources with case splitting: ${totalUnitsRequested} units across ${casesUsed.length} cases`);
 
+            // ✅ FIX: Normalize productId for consistency
+            const normalizedProdIdForPending = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
+            
             // Create a pending source for EACH case being used
             const newPendingSources = casesUsed
                 .filter(caseUsed => caseUsed.units_to_use > 0)  // ✅ Only include cases with units > 0
@@ -542,9 +640,9 @@ const CreateBatchPage = () => {
                 type: 'warehouse',
                 warehouse_id: warehouse.warehouse_id,
                 warehouse_name: warehouse.warehouse_name,
-                case_id: caseUsed.case_id,
+                case_id: caseUsed.case_id,  // ✅ FIX: Include case_id (stockId) so backend can find the record
                 case_label: caseUsed.case_label,
-                product_id: pendingProduct.product.Product_ID,
+                product_id: normalizedProdIdForPending,
                 units: caseUsed.units_to_use,
                 expiry_date: caseUsed.expiry_date
             }));
@@ -587,6 +685,20 @@ const CreateBatchPage = () => {
             setDetailedSuggestions(updatedSuggestions);
 
             // Add to pending sources (will be applied when batch is created)
+            console.log('═══════════════════════════════════════════════════════════════');
+            console.log('🔹 Adding to pendingSources from handleUseWarehouseProductWithSplit:');
+            console.log('   New entries being added:');
+            console.log(JSON.stringify(newPendingSources.map(s => ({
+                type: s.type,
+                warehouse_id: s.warehouse_id,
+                warehouse_name: s.warehouse_name,
+                case_label: s.case_label,
+                product_id: s.product_id,
+                units: s.units
+            })), null, 2));
+            console.log('   Old pendingSources length:', pendingSources.length);
+            console.log('   New pendingSources will have length:', pendingSources.length + newPendingSources.length);
+            console.log('═══════════════════════════════════════════════════════════════');
             setPendingSources([...pendingSources, ...newPendingSources]);
 
             // Add EACH case as a separate product entry (maintaining case label for expiry tracking)
@@ -594,7 +706,9 @@ const CreateBatchPage = () => {
                 // ✅ ONLY add if units_to_use > 0 (skip empty allocations)
                 if (caseUsed.units_to_use > 0) {
                     // ✅ NEW: Record allocation at Stock-Cover-Product level
-                    recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, pendingProduct.product.Product_ID, {
+                    // ✅ FIX: Normalize productId to handle both product_id and Product_ID field names
+                    const normalizedProductId2 = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
+                    recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, normalizedProductId2, {
                         source_type: 'warehouse',
                         warehouse_id: warehouse.warehouse_id,
                         warehouse_name: warehouse.warehouse_name,
@@ -678,7 +792,9 @@ const CreateBatchPage = () => {
             setPendingSources([...pendingSources, newPendingSource]);
 
             // Record allocation at Stock-Cover-Product level
-            recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, pendingProduct.product.Product_ID, {
+            // ✅ FIX: Normalize productId to handle both product_id and Product_ID field names
+            const normalizedProductId3 = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
+            recordSourceAllocation(pendingProduct.stock, pendingProduct.cover, normalizedProductId3, {
                 source_type: 'previous_batch',
                 batch_number: batch.batch_number,
                 case_label: batch.case_label,
@@ -703,10 +819,16 @@ const CreateBatchPage = () => {
 
     // Helper function to add product with units after source selection
     // ✅ FIX: Store multiple case labels in array instead of overwriting single value
+    // ✅ NEW: Mark product as from "Add Product" dropdown for proper UI display
     const addProductWithUnits = (units, caseLabel = null) => {
         const updatedStocks = { ...stocksData };
+        
+        // Normalize product name and ID
+        const productName = pendingProduct.product.product_name || pendingProduct.product.Product_Name || pendingProduct.product.Name || 'Unknown Product';
+        const productId = pendingProduct.product.product_id || pendingProduct.product.Product_ID;
+        
         const existingProduct = updatedStocks[pendingProduct.stock].covers[pendingProduct.cover].find(
-            p => p.product_id === pendingProduct.product.Product_ID
+            p => p.product_id === productId
         );
 
         if (existingProduct) {
@@ -723,13 +845,16 @@ const CreateBatchPage = () => {
                 // Keep backward compatibility
                 existingProduct.caseLabel = caseLabel;
             }
+            // ✅ NEW: Mark as coming from Add Product dropdown
+            existingProduct.isFromAddProduct = true;
         } else {
             updatedStocks[pendingProduct.stock].covers[pendingProduct.cover].push({
-                product_id: pendingProduct.product.Product_ID,
-                product_name: pendingProduct.product.Product_Name,
+                product_id: productId,
+                product_name: productName,
                 units: units,
                 caseLabel: caseLabel || null,
-                caseLabels: caseLabel ? [caseLabel] : []  // ✅ FIX: Array for multiple cases
+                caseLabels: caseLabel ? [caseLabel] : [],  // ✅ FIX: Array for multiple cases
+                isFromAddProduct: true  // ✅ NEW: Mark as from "Add Product" dropdown
             });
         }
 
@@ -774,20 +899,25 @@ const CreateBatchPage = () => {
     const addProductDirectlyWithoutSource = (stock, cover, product) => {
         try {
             const updatedStocks = { ...stocksData };
+            
+            // Normalize product name and ID - handle multiple possible field names
+            const productName = product.Product_Name || product.product_name || product.Name || 'Unknown Product';
+            const productId = product.Product_ID || product.product_id;
+            
             const existingProduct = updatedStocks[stock].covers[cover].find(
-                p => p.product_id === product.Product_ID
+                p => p.product_id === productId
             );
 
             if (existingProduct) {
-                alert(`ℹ️ "${product.Product_Name}" is already in ${stock}-${cover}. To add more units, open that product row and edit the units field directly.`);
+                alert(`ℹ️ "${productName}" is already in ${stock}-${cover}. To add more units, open that product row and edit the units field directly.`);
             } else {
                 updatedStocks[stock].covers[cover].push({
-                    product_id: product.Product_ID,
-                    product_name: product.Product_Name,
+                    product_id: productId,
+                    product_name: productName,
                     units: 0
                 });
                 setStocksData(updatedStocks);
-                alert(`✅ Added "${product.Product_Name}" to ${stock}-${cover} without any source.`);
+                alert(`✅ Added "${productName}" to ${stock}-${cover} without any source.`);
             }
 
             setShowProductDropdown(null);
@@ -838,6 +968,83 @@ const CreateBatchPage = () => {
         const updatedStocks = { ...stocksData };
         delete updatedStocks[stock].covers[cover];
         setStocksData(updatedStocks);
+    };
+
+    // ✅ NEW: Helper to get stocks available for cloning (stocks with products)
+    const getAvailableStocksToClone = () => {
+        const available = [];
+        for (let i = 1; i <= numMachines; i++) {
+            const stock = `S${i}`;
+            if (stock === activeStock) continue; // Don't clone to itself
+            
+            const hasProducts = Object.values(stocksData[stock]?.covers || {}).some(products =>
+                Array.isArray(products) && products.length > 0
+            );
+            
+            if (hasProducts) {
+                available.push(stock);
+            }
+        }
+        return available;
+    };
+
+    // ✅ NEW: Clone template from source stock to active stock
+    const handleCloneStock = (sourceStock) => {
+        try {
+            if (!sourceStock || sourceStock === activeStock) {
+                alert('Invalid source stock selected');
+                return;
+            }
+
+            const sourceStockData = stocksData[sourceStock];
+            if (!sourceStockData || !sourceStockData.covers) {
+                alert('Source stock has no covers to clone');
+                return;
+            }
+
+            const updatedStocks = { ...stocksData };
+            let coversCloned = 0;
+            let productsCloned = 0;
+
+            // Clone each cover and its products
+            Object.entries(sourceStockData.covers).forEach(([coverName, products]) => {
+                if (!updatedStocks[activeStock].covers[coverName]) {
+                    updatedStocks[activeStock].covers[coverName] = [];
+                    coversCloned++;
+                }
+
+                // Clone each product to the cover (clone template structure only, not allocations)
+                if (Array.isArray(products)) {
+                    products.forEach(product => {
+                        // Check if product already exists in target cover
+                        const existingProduct = updatedStocks[activeStock].covers[coverName].find(
+                            p => p.product_id === product.product_id
+                        );
+
+                        if (!existingProduct) {
+                            // Clone product with units = 0 (fresh template for manual entry)
+                            // Do NOT clone allocations - user must re-allocate from source manually
+                            updatedStocks[activeStock].covers[coverName].push({
+                                product_id: product.product_id,
+                                product_name: product.product_name,
+                                units: 0, // ✅ Always reset to 0 for manual entry
+                                isFromAddProduct: false  // ✅ NEW: Mark as cloned (NOT from Add Product)
+                            });
+                            productsCloned++;
+                        }
+                    });
+                }
+            });
+
+            setStocksData(updatedStocks);
+            setShowCloneModal(false);
+            setCloneSourceStock(null);
+
+            alert(`✅ Template cloned!\n\n📋 Details:\n• Covers: ${coversCloned}\n• Products: ${productsCloned}\n\n⚠️ Remember: Units and sources must be filled manually for each product.`);
+        } catch (error) {
+            console.error('Error cloning stock:', error);
+            alert(`Error cloning template: ${error.message}`);
+        }
     };
 
     // Get available products from warehouse (only products with current stock)
@@ -1052,7 +1259,7 @@ const CreateBatchPage = () => {
 
         setSaving(true);
         try {
-            // Step 1: Create the new batch
+            // ✅ ATOMIC: Include sources in batch creation request for atomic warehouse decrease
             const batchData = {
                 batch_number: batchNumber,
                 machine_ids: selectedMachines.filter(m => m.trim()),
@@ -1065,8 +1272,15 @@ const CreateBatchPage = () => {
                         };
                     }
                     return acc;
-                }, {})
+                }, {}),
+                sources: pendingSources  // ✅ NEW: Include sources for automatic warehouse decrease
             };
+
+            console.log('📌 Submitting batch with sources:', {
+                batchNumber,
+                sources: pendingSources,
+                totalSources: pendingSources.length
+            });
 
             const response = await fetch(`${API_URL}/stocks/create-batch-full`, {
                 method: 'POST',
@@ -1081,33 +1295,23 @@ const CreateBatchPage = () => {
             }
 
             if (response.ok) {
-                // Step 2: APPLY all pending sources using unified endpoint
-                console.log('📌 Applying pending sources:', pendingSources);
-
-                if (pendingSources.length > 0) {
-                    const decreaseResponse = await fetch(`${API_URL}/stocks/decrease-from-sources`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            sources: pendingSources
-                        })
-                    });
-
-                    const decreaseResult = await decreaseResponse.json();
-                    if (!decreaseResponse.ok) {
-                        console.error('Warning: Some sources failed to decrease:', decreaseResult);
-                        if (decreaseResult.results?.failed.length > 0) {
-                            alert(`⚠️ Batch created but some sources failed: ${decreaseResult.message}`);
-                        }
+                // ✅ UPDATED: Check warehouse decrease results from batch creation response
+                if (result.source_decreases) {
+                    const { processed, failed } = result.source_decreases;
+                    console.log(`✅ Warehouse stock decrease results: ${processed.length} processed, ${failed.length} failed`);
+                    
+                    if (failed && failed.length > 0) {
+                        console.warn('⚠️ Some sources failed to decrease:', failed);
+                        alert(`⚠️ Batch created but some sources failed: ${failed.length} sources\nPlease check warehouse inventory.`);
                     } else {
-                        console.log('✅ All sources decreased successfully:', decreaseResult.results);
+                        console.log('✅ All warehouse sources decreased successfully!');
                     }
                 }
 
                 await refreshData();
                 setPendingSources([]); // Clear pending sources after batch creation
-                setStockSourceAllocation({}); // ✅ NEW: Clear source allocations
-                alert('✅ Batch created successfully!');
+                setStockSourceAllocation({}); // ✅ Clear source allocations
+                alert('✅ Batch created successfully with warehouse stock updated!');
                 navigate('/restock');
             }
         } catch (error) {
@@ -1255,11 +1459,16 @@ const CreateBatchPage = () => {
                                                                     className="w-full px-3 py-2 border-2 border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
                                                                 >
                                                                     <option value="">-- Select Warehouse --</option>
-                                                                    {detailedSuggestions.warehouse_options.map((wh) => (
-                                                                        <option key={wh.warehouse_id} value={wh.warehouse_id}>
-                                                                            {wh.warehouse_name} ({wh.warehouse_location})
-                                                                        </option>
-                                                                    ))}
+                                                                    {detailedSuggestions.warehouse_options.map((wh) => {
+                                                                        // ✅ FIX: Show availability info in dropdown
+                                                                        const totalAvailable = wh.cases.reduce((sum, c) => sum + c.units_available, 0);
+                                                                        const availLabel = totalAvailable > 0 ? `(${totalAvailable}u)` : '(RESERVED)';
+                                                                        return (
+                                                                            <option key={wh.warehouse_id} value={wh.warehouse_id}>
+                                                                                {wh.warehouse_name} ({wh.warehouse_location}) {availLabel}
+                                                                            </option>
+                                                                        );
+                                                                    })}
                                                                 </select>
                                                             </div>
                                                         )}
@@ -1267,7 +1476,27 @@ const CreateBatchPage = () => {
                                                         {/* If only 1 warehouse, auto-select it */}
                                                         {detailedSuggestions.warehouse_options.length === 1 && !selectedWarehouse && (
                                                             (() => {
-                                                                setSelectedWarehouse(detailedSuggestions.warehouse_options[0].warehouse_id);
+                                                                // ✅ FIX: Only auto-select if warehouse has available units
+                                                                const warehouse = detailedSuggestions.warehouse_options[0];
+                                                                const totalAvailable = warehouse.cases.reduce((sum, c) => sum + c.units_available, 0);
+                                                                if (totalAvailable > 0) {
+                                                                    setSelectedWarehouse(warehouse.warehouse_id);
+                                                                }
+                                                                return null;
+                                                            })()
+                                                        )}
+
+                                                        {/* If multiple warehouses, find first one with available units */}
+                                                        {detailedSuggestions.warehouse_options.length > 1 && !selectedWarehouse && (
+                                                            (() => {
+                                                                // ✅ FIX: Auto-select first warehouse with available units (skip fully reserved)
+                                                                const warehouseWithStock = detailedSuggestions.warehouse_options.find(wh => {
+                                                                    const totalAvailable = wh.cases.reduce((sum, c) => sum + c.units_available, 0);
+                                                                    return totalAvailable > 0;
+                                                                });
+                                                                if (warehouseWithStock) {
+                                                                    setSelectedWarehouse(warehouseWithStock.warehouse_id);
+                                                                }
                                                                 return null;
                                                             })()
                                                         )}
@@ -1281,21 +1510,45 @@ const CreateBatchPage = () => {
 
                                                                     const totalAvailable = warehouse.cases.reduce((sum, c) => sum + c.units_available, 0);
                                                                     const totalOriginal = warehouse.cases.reduce((sum, c) => sum + (c.original_units_available || c.units_available), 0);
+                                                                    const hasReservations = totalOriginal > totalAvailable;
+                                                                    
+                                                                    // ✅ FIX: If selected warehouse is fully reserved, suggest another warehouse
+                                                                    if (totalAvailable === 0 && totalOriginal > 0) {
+                                                                        const nextWarehouse = detailedSuggestions.warehouse_options.find(wh => {
+                                                                            const wh_total = wh.cases.reduce((sum, c) => sum + c.units_available, 0);
+                                                                            return wh_total > 0 && wh.warehouse_id !== selectedWarehouse;
+                                                                        });
+                                                                        
+                                                                        return (
+                                                                            <div className="p-3 bg-red-50 border-2 border-red-300 rounded text-red-700 text-sm">
+                                                                                <p className="font-semibold mb-2">❌ This warehouse is fully reserved!</p>
+                                                                                <p className="text-xs mb-3">All cases in {warehouse.warehouse_name} have been reserved from other stock-cover combinations.</p>
+                                                                                {nextWarehouse ? (
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setSelectedWarehouse(nextWarehouse.warehouse_id);
+                                                                                            setWarehouseUnitsInput('');
+                                                                                        }}
+                                                                                        className="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs font-medium transition-colors"
+                                                                                    >
+                                                                                        → Try {nextWarehouse.warehouse_name}
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <p className="text-xs text-red-600">No other warehouses have available units.</p>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    }
 
                                                                     return (
                                                                         <div>
                                                                             <div className="mb-3">
                                                                                 <h4 className="font-bold text-green-900 mb-1">{warehouse.warehouse_name}</h4>
                                                                                 <p className="text-xs text-green-600">📍 {warehouse.warehouse_location}</p>
-                                                                                {totalOriginal !== totalAvailable && (
-                                                                                    <div className="mt-2 space-y-1 text-xs">
-                                                                                        <p className="text-blue-800"><strong>📊 Originally in database:</strong> {totalOriginal} units</p>
-                                                                                        <p className="text-green-700"><strong>✅ Currently available:</strong> {totalAvailable} units <span className="text-green-600">(after your selections)</span></p>
-                                                                                    </div>
-                                                                                )}
-                                                                                {totalOriginal === totalAvailable && (
-                                                                                    <p className="text-xs text-green-700 mt-1"><strong>📊 Available:</strong> {totalAvailable} units</p>
-                                                                                )}
+                                                                                <div className="mt-2 space-y-1 text-xs">
+                                                                                    <p className="text-blue-800"><strong>📊 Originally in database:</strong> {totalOriginal} units</p>
+                                                                                    <p className={hasReservations ? "text-green-700" : "text-green-600"}><strong>✅ Available now:</strong> {totalAvailable} units {hasReservations && <span className="text-orange-600">(after your reservations)</span>}</p>
+                                                                                </div>
                                                                             </div>
                                                                             <label className="block text-sm font-semibold text-slate-700 mb-2">
                                                                                 🔢 How many units do you need?
@@ -1340,6 +1593,9 @@ const CreateBatchPage = () => {
 
                                                                     for (const caseItem of sortedCases) {
                                                                         if (remainingUnits <= 0) break;
+
+                                                                        // ✅ FIX: Skip cases with 0 available units (fully reserved)
+                                                                        if (caseItem.units_available <= 0) continue;
 
                                                                         const unitsFromThisCase = Math.min(remainingUnits, caseItem.units_available);
                                                                         casesUsed.push({
@@ -1643,7 +1899,7 @@ const CreateBatchPage = () => {
                                             )}
                                         >
                                             <option value="">Select Machine...</option>
-                                            {machines.map(m => (
+                                            {getAvailableMachinesForStock(idx).map(m => (
                                                 <option key={m.Machine_ID} value={m.Machine_ID}>
                                                     {m.Machine_ID} - {m.Location}
                                                 </option>
@@ -1717,23 +1973,26 @@ const CreateBatchPage = () => {
                     <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
                         <h2 className="text-lg font-semibold text-slate-800 mb-4">Manage Stocks & Covers</h2>
 
-                        {/* Stock Tabs */}
-                        <div className="flex gap-2 border-b border-slate-200 mb-6 overflow-x-auto">
-                            {Array.from({ length: numMachines }, (_, idx) => `S${idx + 1}`).map(stock => (
-                                <button
-                                    key={stock}
-                                    type="button"
-                                    onClick={() => setActiveStock(stock)}
-                                    className={clsx(
-                                        "px-4 py-2 font-medium border-b-2 transition-colors",
-                                        activeStock === stock
-                                            ? "border-orange-500 text-orange-600"
-                                            : "border-transparent text-slate-600 hover:text-slate-800"
-                                    )}
-                                >
-                                    {stock} {stocksData[stock].machine && `(${stocksData[stock].machine})`}
-                                </button>
-                            ))}
+                        {/* Stock Tabs with Clone Option */}
+                        <div className="flex gap-2 border-b border-slate-200 mb-6 overflow-x-auto items-center">
+                            {/* Stock Tabs */}
+                            <div className="flex gap-2 flex-1 overflow-x-auto">
+                                {Array.from({ length: numMachines }, (_, idx) => `S${idx + 1}`).map(stock => (
+                                    <button
+                                        key={stock}
+                                        type="button"
+                                        onClick={() => setActiveStock(stock)}
+                                        className={clsx(
+                                            "px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap",
+                                            activeStock === stock
+                                                ? "border-orange-500 text-orange-600"
+                                                : "border-transparent text-slate-600 hover:text-slate-800"
+                                        )}
+                                    >
+                                        {stock} {stocksData[stock].machine && `(${stocksData[stock].machine})`}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Active Stock Content */}
@@ -1744,6 +2003,30 @@ const CreateBatchPage = () => {
                                     Machine: <span className="font-bold text-slate-800">{stocksData[activeStock].machine || 'Not Selected'}</span>
                                 </p>
                             </div>
+
+                            {/* Clone Dropdown - Below Machine Info */}
+                            {getAvailableStocksToClone().length > 0 && (
+                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                    <label className="block text-xs font-semibold text-blue-700 mb-2">📋 Clone Template from Another Stock</label>
+                                    <select
+                                        onChange={(e) => {
+                                            if (e.target.value) {
+                                                setCloneSourceStock(e.target.value);
+                                                setShowCloneModal(true);
+                                                e.target.value = ''; // Reset dropdown
+                                            }
+                                        }}
+                                        className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+                                    >
+                                        <option value="">-- Select a stock to clone from --</option>
+                                        {getAvailableStocksToClone().map((stock) => (
+                                            <option key={stock} value={stock}>
+                                                {stock}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             {/* Add Cover Section */}
                             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
@@ -1794,6 +2077,13 @@ const CreateBatchPage = () => {
                                                 <div className="space-y-2 mb-3">
                                                     {products.map(product => {
                                                         const allocations = getSourceAllocations(activeStock, cover, product.product_id);
+                                                        const totalAllocated = getTotalAllocatedUnits(activeStock, cover, product.product_id);
+                                                        // ✅ NEW: Distinguish between Add Product (auto-sourced) and Cloned (manual source)
+                                                        // Show "Add from source" button ONLY for cloned products (isFromAddProduct === false)
+                                                        const isClonedProduct = product.isFromAddProduct === false;
+                                                        // ✅ FIX: Show button for cloned products with NO allocations (don't require units > 0, they start at 0)
+                                                        const canAllocateFromSource = allocations.length === 0 && isClonedProduct;
+                                                        
                                                         return (
                                                             <div key={product.product_id} className="bg-white p-3 rounded border border-slate-200">
                                                                 <div className="flex items-center gap-2 mb-2">
@@ -1801,14 +2091,128 @@ const CreateBatchPage = () => {
                                                                         <p className="text-sm font-medium text-slate-800">{product.product_name}</p>
                                                                         <p className="text-xs text-slate-500">{product.product_id}</p>
                                                                     </div>
-                                                                    <input
-                                                                        type="number"
-                                                                        min="0"
-                                                                        value={product.units}
-                                                                        onChange={e => handleUnitsChange(activeStock, cover, product.product_id, e.target.value)}
-                                                                        className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                                                        placeholder="Units"
-                                                                    />
+                                                                    
+                                                                    {allocations.length > 0 ? (
+                                                                        // Show allocations total for both Add Product and Cloned products
+                                                                        <div className="text-sm font-semibold text-blue-600">{totalAllocated}u</div>
+                                                                    ) : isClonedProduct ? (
+                                                                        // For cloned products without allocations: Only show "Add from source" button (NO textbox)
+                                                                        <>
+                                                                            {canAllocateFromSource && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={async () => {
+                                                                                        // Trigger suggestion dialog for this product
+                                                                                        const groupInfo = getBatchGroupInfo();
+                                                                                        if (!groupInfo) {
+                                                                                            alert('⚠️ Enter a Batch Number first to add units from source.');
+                                                                                            return;
+                                                                                        }
+
+                                                                                        const productId = product.product_id;
+                                                                                        setLoadingSuggestions(true);
+                                                                                        setSuggestionError(null);
+                                                                                        setPendingProduct({ stock: activeStock, cover, product });
+                                                                                        setDetailedSuggestions({ warehouse_options: [], previous_batches: [] });
+                                                                                        setSelectedWarehouse(null);
+                                                                                        setSelectedCaseLabel(null);
+
+                                                                                        try {
+                                                                                            const [warehouseRes, previousBatchRes] = await Promise.all([
+                                                                                                fetch(`${API_URL}/stocks/get-suggestions-detailed`, {
+                                                                                                    method: 'POST',
+                                                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                                                    body: JSON.stringify({
+                                                                                                        stock_name: activeStock,
+                                                                                                        cover_name: cover,
+                                                                                                        product_id: productId,
+                                                                                                        current_batch_number: batchNumber
+                                                                                                    })
+                                                                                                }),
+                                                                                                fetch(`${API_URL}/stocks/get-previous-batch-suggestions`, {
+                                                                                                    method: 'POST',
+                                                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                                                    body: JSON.stringify({
+                                                                                                        stock_name: activeStock,
+                                                                                                        cover_name: cover,
+                                                                                                        product_id: productId,
+                                                                                                        current_batch_number: groupInfo.batchNum
+                                                                                                    })
+                                                                                                })
+                                                                                            ]);
+
+                                                                                            let warehouseData = { warehouse_options: [] };
+                                                                                            let previousBatchData = { previous_batches: [] };
+
+                                                                                            if (warehouseRes.ok) {
+                                                                                                const suggestionData = await warehouseRes.json();
+                                                                                                warehouseData = suggestionData.suggestions || { warehouse_options: [] };
+                                                                                            }
+
+                                                                                            if (previousBatchRes.ok) {
+                                                                                                const batchData = await previousBatchRes.json();
+                                                                                                previousBatchData = batchData.suggestions || { previous_batches: [] };
+                                                                                            }
+
+                                                                                            const hasWarehouse = warehouseData.warehouse_options && warehouseData.warehouse_options.length > 0;
+                                                                                            const hasPreviousBatches = previousBatchData.previous_batches && previousBatchData.previous_batches.length > 0;
+
+                                                                                            if (!hasWarehouse && !hasPreviousBatches) {
+                                                                                setSuggestionError(`❌ No warehouse stock or previous batches available for this product.\n\nYou can still manually enter units.`);
+                                                                                setLoadingSuggestions(false);
+                                                                                            }
+
+                                                                                            // ✅ FIX: Apply the SAME reservation tracking logic as handleAddProduct
+                                                                                            const warehouseOptionsWithOriginal = (warehouseData.warehouse_options || []).map(wh => ({
+                                                                                                ...wh,
+                                                                                                cases: (wh.cases || []).map(c => {
+                                                                                                    const originalUnits = c.original_units_available || c.units_available;
+                                                                                                    const matchingReservations = pendingSources
+                                                                                                        .filter(source => source.type === 'warehouse')
+                                                                                                        .filter(source => source.product_id === productId);
+                                                                                                    
+                                                                                                    const caseLevelReservations = matchingReservations
+                                                                                                        .filter(source => 
+                                                                                                            source.warehouse_id === wh.warehouse_id && 
+                                                                                                            source.case_label === c.case_label
+                                                                                                        );
+                                                                                                    
+                                                                                                    const reservedUnits = caseLevelReservations
+                                                                                                        .reduce((sum, source) => sum + source.units, 0);
+                                                                                                    
+                                                                                                    const currentAvailable = Math.max(0, originalUnits - reservedUnits);
+                                                                                                    
+                                                                                                    return {
+                                                                                                        ...c,
+                                                                                                        original_units_available: originalUnits,
+                                                                                                        units_available: currentAvailable
+                                                                                                    };
+                                                                                                })
+                                                                                            }));
+
+                                                                                            setDetailedSuggestions({
+                                                                                                warehouse_options: warehouseOptionsWithOriginal,
+                                                                                                previous_batches: previousBatchData.previous_batches || []
+                                                                                            });
+                                                                                            setSuggestionTab('warehouse');
+                                                                                            setLoadingSuggestions(false);
+                                                                                        } catch (error) {
+                                                                                            console.error('Error fetching suggestions:', error);
+                                                                                            setSuggestionError(`Error: ${error.message}`);
+                                                                                            setLoadingSuggestions(false);
+                                                                                        }
+                                                                                    }}
+                                                                                    title="Add units from warehouse or previous batch"
+                                                                                    className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium transition-colors whitespace-nowrap"
+                                                                                >
+                                                                                    + Add from source
+                                                                                </button>
+                                                                            )}
+                                                                                        </>
+                                                                    ) : (
+                                                                        // For Add Product products without allocations: Don't show anything (sources selected through dialog)
+                                                                        <></>
+                                                                    )}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleRemoveProduct(activeStock, cover, product.product_id)}
@@ -1905,6 +2309,98 @@ const CreateBatchPage = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* ✅ NEW: Clone Template Confirmation Modal */}
+                    {showCloneModal && cloneSourceStock && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+                                {/* Modal Header */}
+                                <div className="sticky top-0 bg-gradient-to-r from-blue-500 to-blue-600 p-6 border-b-4 border-blue-700">
+                                    <h3 className="text-xl font-bold text-white mb-1">
+                                        📋 Clone Template from {cloneSourceStock}
+                                    </h3>
+                                    <p className="text-blue-100 text-sm">
+                                        The structure will be copied to {activeStock}. Units and sources must be filled manually.
+                                    </p>
+                                </div>
+
+                                {/* Modal Content */}
+                                <div className="p-6 space-y-4">
+                                    {/* Summary */}
+                                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-blue-900 mb-3">📊 What will be cloned:</h4>
+                                        
+                                        <div className="space-y-3">
+                                            {Object.entries(stocksData[cloneSourceStock]?.covers || {}).map(([coverName, products]) => (
+                                                <div key={coverName} className="bg-white rounded-lg p-3 border border-blue-100">
+                                                    <div className="font-medium text-slate-800 mb-2">
+                                                        📁 Cover: <span className="text-blue-600">{coverName}</span>
+                                                    </div>
+                                                    <div className="ml-4 space-y-1">
+                                                        {Array.isArray(products) && products.length > 0 ? (
+                                                            products.map((product, idx) => (
+                                                                <div key={idx} className="text-sm text-slate-600 flex items-center gap-2">
+                                                                    <span className="text-blue-500">▪</span>
+                                                                    <span>{product.product_name}</span>
+                                                                    <span className="text-xs text-slate-400">({product.product_id})</span>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <p className="text-sm text-slate-500 italic">No products</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Important Notes */}
+                                    <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-amber-900 mb-2">⚠️ Important Notes:</h4>
+                                        <ul className="space-y-1 text-sm text-amber-900">
+                                            <li className="flex gap-2">
+                                                <span>•</span>
+                                                <span><strong>Units will be set to 0</strong> - Use 'Add units from source' button on each product</span>
+                                            </li>
+                                            <li className="flex gap-2">
+                                                <span>•</span>
+                                                <span><strong>Allocate from warehouse or previous batches</strong> - Same dialog as adding products</span>
+                                            </li>
+                                            <li className="flex gap-2">
+                                                <span>•</span>
+                                                <span>See warehouse stock + previous batch availability in the source selection dialog</span>
+                                            </li>
+                                            <li className="flex gap-2">
+                                                <span>•</span>
+                                                <span>You can still add extra covers and products after cloning</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                {/* Modal Footer */}
+                                <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 p-6 flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowCloneModal(false);
+                                            setCloneSourceStock(null);
+                                        }}
+                                        className="flex-1 px-4 py-2 border-2 border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-100 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCloneStock(cloneSourceStock)}
+                                        className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
+                                    >
+                                        ✅ Clone Template
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Form Actions */}
                     <div className="flex gap-3 sticky bottom-0 bg-gradient-to-t from-white to-white/80 p-4 rounded-lg border border-slate-200">
