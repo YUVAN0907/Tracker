@@ -1,0 +1,183 @@
+/* WhatsApp Chat & Conversation Center Custom Styles */
+
+/* Scrollbar customization */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.2);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.4);
+}
+
+/* Slide in animation for full screen layout */
+.wa-fullscreen-overlay {
+  animation: wa-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.wa-fullscreen-container {
+  animation: wa-scale-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes wa-fade-in {
+  from {
+    background-color: rgba(15, 23, 42, 0);
+    backdrop-filter: blur(0px);
+  }
+  to {
+    background-color: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes wa-scale-up {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Message styling and slide-in */
+.wa-message-enter {
+  animation: wa-message-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes wa-message-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Search Highlights */
+.wa-search-highlight {
+  background-color: rgba(253, 224, 71, 0.6); /* Yellow-300 with transparency */
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  border-bottom: 2px solid rgb(234, 179, 8);
+  font-weight: 700;
+  color: rgb(15, 23, 42);
+}
+
+/* Lightbox Styling */
+.wa-lightbox {
+  background-color: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(12px);
+  z-index: 70;
+  animation: lightbox-fade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes lightbox-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Audio Player */
+.wa-audio-player {
+  background: rgba(241, 245, 249, 0.05);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 250px;
+}
+
+/* Typing indicator dots */
+.wa-typing-dot {
+  width: 6px;
+  height: 6px;
+  background-color: currentColor;
+  border-radius: 50%;
+  animation: wa-bounce 1.4s infinite ease-in-out both;
+}
+
+.wa-typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.wa-typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes wa-bounce {
+  0%, 80%, 100% { 
+    transform: scale(0);
+  } 40% { 
+    transform: scale(1);
+  }
+}
+
+/* Date separators */
+.wa-date-separator {
+  position: relative;
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.wa-date-separator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 1px;
+  background-color: rgba(226, 232, 240, 0.8);
+  z-index: 1;
+}
+
+.wa-date-label {
+  position: relative;
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  background-color: #f8fafc;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  z-index: 2;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+/* Upload progress */
+@keyframes progress-stripe {
+  from { background-position: 1rem 0; }
+  to { background-position: 0 0; }
+}
+
+.progress-striped {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  animation: progress-stripe 1s linear infinite;
+}

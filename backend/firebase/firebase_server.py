@@ -45,6 +45,7 @@ from routes_bills import bills_bp
 from routes_qr import qr_bp
 from routes_update_machine_location import machine_location_bp
 from routes_vendors import vendors_bp
+from routes_whatsapp import whatsapp_bp
 
 # --------------------------------------------------
 # REGISTER BLUEPRINTS
@@ -62,6 +63,7 @@ app.register_blueprint(bills_bp)
 app.register_blueprint(qr_bp)
 app.register_blueprint(machine_location_bp)
 app.register_blueprint(vendors_bp)
+app.register_blueprint(whatsapp_bp)
 
 # Health Check
 @app.route('/api/health')
