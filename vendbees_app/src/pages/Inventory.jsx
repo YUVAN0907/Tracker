@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Header from '../components/Header';
+import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Package, Truck, IndianRupee, Filter, Plus, Pencil, Trash2, Eye, X, Search, Warehouse, AlertCircle, Info, ChevronDown, ChevronRight, CheckCircle, Download } from 'lucide-react';
 import clsx from 'clsx';
@@ -2309,6 +2310,7 @@ const NewVendorPurchaseForm = ({ products, vendors, onSave, onCancel, saving }) 
 };
 
 const Inventory = () => {
+    const { user, token } = useAuth();
     const { products, purchases, vendors, recentProducts, warehouse, warehouses, ourPOs, vendorDeliveries, vendorPurchasesList, loading, refreshData, addToWarehouse, createMultiPO, recordDelivery, fetchVendorPurchases } = useData();
     const [activeTab, setActiveTab] = useState('Product Master');
     const [poSubTab, setPoSubTab] = useState('Your PO'); // Sub-tab for Purchase Orders
@@ -2337,6 +2339,10 @@ const Inventory = () => {
     const [deleteRecentProduct, setDeleteRecentProduct] = useState(null);  // Delete Recent Product
     const [productToMove, setProductToMove] = useState(null);  // Product to move to master
     const [saving, setSaving] = useState(false);
+    const [approvingPOId, setApprovingPOId] = useState(null);
+    const [rejectingPOId, setRejectingPOId] = useState(null);
+    const [deletingPOId, setDeletingPOId] = useState(null);
+    const [rejectReason, setRejectReason] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
     const [poDataForDelivery, setPoDataForDelivery] = useState(null);
     const [loadingPOItems, setLoadingPOItems] = useState(false);
@@ -2392,6 +2398,119 @@ const Inventory = () => {
             alert(`Error fetching PO items: ${err?.message || err}`);
         } finally {
             setLoadingPOItems(false);
+        }
+    };
+
+    const handleApprovePO = async (poId) => {
+        if (!token) {
+            alert('You must be logged in to approve POs.');
+            return;
+        }
+
+        setApprovingPOId(poId);
+        try {
+            const response = await fetch(`${API_URL}/approve-po/${encodeURIComponent(poId)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const resultText = await response.text();
+            let result = {};
+            try { result = resultText ? JSON.parse(resultText) : {}; } catch (parseErr) { }
+
+            if (!response.ok) {
+                const message = result.error || result.message || resultText || `${response.status} ${response.statusText}`;
+                alert(`Approval failed: ${message}`);
+            } else {
+                alert(result.message || `PO ${poId} approved successfully.`);
+                if (refreshData) refreshData();
+            }
+        } catch (err) {
+            console.error('Error approving PO:', err);
+            alert(`Error approving PO: ${err?.message || err}`);
+        } finally {
+            setApprovingPOId(null);
+        }
+    };
+
+    const handleRejectPO = async (poId, reason) => {
+        if (!token) {
+            alert('You must be logged in to reject POs.');
+            return;
+        }
+
+        if (!reason || !reason.trim()) {
+            alert('Please provide a reason for rejection.');
+            return;
+        }
+
+        setRejectingPOId(poId);
+        try {
+            const response = await fetch(`${API_URL}/reject-po/${encodeURIComponent(poId)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ reason })
+            });
+            const resultText = await response.text();
+            let result = {};
+            try { result = resultText ? JSON.parse(resultText) : {}; } catch (parseErr) { }
+
+            if (!response.ok) {
+                const message = result.error || result.message || resultText || `${response.status} ${response.statusText}`;
+                alert(`Rejection failed: ${message}`);
+            } else {
+                alert(result.message || `PO ${poId} rejected successfully.`);
+                setRejectReason('');
+                if (refreshData) refreshData();
+            }
+        } catch (err) {
+            console.error('Error rejecting PO:', err);
+            alert(`Error rejecting PO: ${err?.message || err}`);
+        } finally {
+            setRejectingPOId(null);
+        }
+    };
+
+    const handleDeletePO = async (poId) => {
+        if (!token) {
+            alert('You must be logged in to delete POs.');
+            return;
+        }
+
+        if (!window.confirm(`Delete rejected PO ${poId}? This action cannot be undone.`)) {
+            return;
+        }
+
+        setDeletingPOId(poId);
+        try {
+            const response = await fetch(`${API_URL}/delete-po/${encodeURIComponent(poId)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            const resultText = await response.text();
+            let result = {};
+            try { result = resultText ? JSON.parse(resultText) : {}; } catch (parseErr) { }
+
+            if (!response.ok) {
+                const message = result.error || result.message || resultText || `${response.status} ${response.statusText}`;
+                alert(`Delete failed: ${message}`);
+            } else {
+                alert(result.message || `PO ${poId} deleted successfully.`);
+                if (refreshData) refreshData();
+            }
+        } catch (err) {
+            console.error('Error deleting PO:', err);
+            alert(`Error deleting PO: ${err?.message || err}`);
+        } finally {
+            setDeletingPOId(null);
         }
     };
 
@@ -2674,7 +2793,10 @@ const Inventory = () => {
             // Create the PO entry in Vendor_Purchase sheet
             const res = await fetch(`${API_URL}/create-po`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
                 body: JSON.stringify({
                     po_id: generatedPoId,
                     product_id: poData.product_id,
@@ -3002,8 +3124,10 @@ const Inventory = () => {
                                     className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
                                 >
                                     <option value="All">All Status</option>
-                                    <option value="Pending">Pending</option>
-
+                                    <option value="Waiting for Approval">Waiting for Approval</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Rejected">Rejected</option>
+                                    <option value="Completed">Completed</option>
                                     <option value="Delivered">Delivered</option>
                                 </select>
                             </div>
@@ -3035,7 +3159,7 @@ const Inventory = () => {
                 {activeTab === 'Purchase Orders' && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <KPI title="Total POs Created" value={filteredOurPOs.filter(p => p._isFirstRow).length} subtext="In Your PO" />
-                        <KPI title="Pending POs" value={filteredOurPOs.filter(p => p._isFirstRow && p.Status === 'Pending').length} subtext="Awaiting delivery" />
+                        <KPI title="Awaiting Approval" value={filteredOurPOs.filter(p => p._isFirstRow && p.Status === 'Waiting for Approval').length} subtext="Requires manager review" />
                         <KPI title="Vendor Purchases" value={filteredVendorPurchases.length} subtext="Actual deliveries" />
                     </div>
                 )}
@@ -3163,11 +3287,21 @@ const Inventory = () => {
                                                     <td className="px-3 py-3 text-right font-semibold text-slate-700">{row.Line_Total || ''}</td>
                                                     <td className="px-3 py-3 text-center">
                                                         {row.Status && (
-                                                            <span className={clsx("px-2 py-1 rounded text-xs font-medium",
-                                                                row.Status === 'Completed' ? "bg-green-100 text-green-700" :
-                                                                    "bg-orange-100 text-orange-700")}>
-                                                                {row.Status}
-                                                            </span>
+                                                            <div>
+                                                                <span className={clsx("px-2 py-1 rounded text-xs font-medium",
+                                                                    row.Status === 'Completed' ? "bg-green-100 text-green-700" :
+                                                                    row.Status === 'Approved' ? "bg-blue-100 text-blue-700" :
+                                                                    row.Status === 'Waiting for Approval' ? "bg-yellow-100 text-yellow-700" :
+                                                                    row.Status === 'Rejected' ? "bg-red-100 text-red-700" :
+                                                                        "bg-orange-100 text-orange-700")}>
+                                                                    {row.Status}
+                                                                </span>
+                                                                {row.Status === 'Rejected' && row.Rejection_Reason && (
+                                                                    <div className="text-xs text-red-600 mt-1 max-w-[180px] truncate" title={row.Rejection_Reason}>
+                                                                        {row.Rejection_Reason}
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         )}
                                                     </td>
                                                     <td className="px-3 py-3 text-center">
@@ -3177,6 +3311,16 @@ const Inventory = () => {
                                                                     <CheckCircle size={14} />
                                                                     Delivered
                                                                 </span>
+                                                            ) : row.Status === 'Waiting for Approval' ? (
+                                                                <span className="text-sm text-slate-500">Awaiting manager review</span>
+                                                            ) : row.Status === 'Rejected' ? (
+                                                                <button
+                                                                    onClick={() => handleDeletePO(row._poId)}
+                                                                    disabled={deletingPOId === row._poId}
+                                                                    className="text-red-600 hover:text-red-800 font-medium text-xs px-2 py-1 bg-red-50 rounded hover:bg-red-100 disabled:opacity-50"
+                                                                >
+                                                                    {deletingPOId === row._poId ? 'Deleting...' : 'Delete PO'}
+                                                                </button>
                                                             ) : (
                                                                 <button
                                                                     onClick={() => fetchPOItems(row._poId)}

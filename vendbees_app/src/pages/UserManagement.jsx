@@ -76,7 +76,8 @@ export default function UserManagement() {
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
-          fullName: formData.fullName
+          fullName: formData.fullName,
+          role: formData.role
         })
       });
 
@@ -208,6 +209,17 @@ export default function UserManagement() {
                 required
               />
             </div>
+            <div className="form-group">
+              <label>Role</label>
+              <select
+                value={formData.role}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              >
+                <option value="user">User</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
             <button type="submit" className="btn-submit">Add User</button>
           </form>
         </div>
@@ -247,6 +259,7 @@ export default function UserManagement() {
                       onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                     >
                       <option value="user">User</option>
+                      <option value="manager">Manager</option>
                       <option value="admin">Admin</option>
                     </select>
                   ) : (

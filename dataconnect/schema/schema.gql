@@ -47,6 +47,8 @@ type PurchaseOrderHeader @table(key: "poId") {
   createdDate: Timestamp
   totalAmount: Float
   status: String
+  rejectionReason: String
+  createdBy: String
 
   vendor: Vendor! @ref(fields: "vendorId")
 }

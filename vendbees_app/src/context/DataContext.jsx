@@ -372,19 +372,24 @@ export const DataProvider = ({ children }) => {
                 const poListRes = await fetch(`${API_URL}/po-list`);
                 if (poListRes.ok) {
                     const poListData = await poListRes.json();
-                    ourPOs = (poListData.data || []).map(po => ({
-                        PO_ID: po.PO_ID || '',
-                        Vendor_ID: po.Vendor_ID || '',
-                        Product_ID: po.Product_ID || '',
-                        Product_Name: po.Product_Name || '',
-                        No_of_Cases: parseInt(po.No_of_Cases || 0) || 0,
-                        Units_Per_Case: parseInt(po.Units_Per_Case || 1) || 1,
-                        PO_Price: parseFloat(po.PO_Price || 0) || 0,  // Price per unit
-                        Line_Total: parseFloat(po.Line_Total || 0) || 0,  // Total for this line
-                        Total_Amount: parseFloat(po.Total_Amount || 0) || 0,  // Total for entire PO
-                        Created_Date: po.Created_Date || '',
-                        Status: po.Status || 'Pending'
-                    })).filter(po => po.Product_ID);  // Keep all rows with Product_ID
+                    ourPOs = (poListData.data || []).map(po => {
+                        const rawStatus = (po.Status || po.status || 'Pending').toString();
+                        return {
+                            PO_ID: po.PO_ID || '',
+                            Vendor_ID: po.Vendor_ID || '',
+                            Product_ID: po.Product_ID || '',
+                            Product_Name: po.Product_Name || '',
+                            No_of_Cases: parseInt(po.No_of_Cases || 0) || 0,
+                            Units_Per_Case: parseInt(po.Units_Per_Case || 1) || 1,
+                            PO_Price: parseFloat(po.PO_Price || 0) || 0,
+                            Line_Total: parseFloat(po.Line_Total || 0) || 0,
+                            Total_Amount: parseFloat(po.Total_Amount || 0) || 0,
+                            Created_Date: po.Created_Date || '',
+                            Status: rawStatus === 'Pending Approval' ? 'Waiting for Approval' : rawStatus,
+                            Rejection_Reason: po.Rejection_Reason || po.rejectionReason || '',
+                            Created_By: po.Created_By || po.createdBy || ''
+                        };
+                    }).filter(po => po.Product_ID);  // Keep all rows with Product_ID
                     console.log('✔ Loaded POs from API /po-list:', ourPOs.length, 'rows');
                 } else {
                     throw new Error('API not available, falling back to Excel');
@@ -392,19 +397,24 @@ export const DataProvider = ({ children }) => {
             } catch (apiErr) {
                 // Fallback to Excel data
                 console.warn('PO API not available, using Excel data:', apiErr.message);
-                ourPOs = (json.our_pos || []).map(po => ({
-                    PO_ID: po.PO_ID || '',
-                    Vendor_ID: po.Vendor_ID || '',
-                    Product_ID: po.Product_ID || '',
-                    Product_Name: po.Product_Name || '',
-                    No_of_Cases: parseInt(po.No_of_Cases || 0) || 0,
-                    Units_Per_Case: parseInt(po.Units_Per_Case || 1) || 1,
-                    PO_Price: parseFloat(po.PO_Price || 0) || 0,
-                    Line_Total: parseFloat(po.Line_Total || 0) || 0,
-                    Total_Amount: parseFloat(po.Total_Amount || 0) || 0,
-                    Created_Date: po.Created_Date || '',
-                    Status: po.Status || 'Pending'
-                })).filter(po => po.Product_ID);
+                ourPOs = (json.our_pos || []).map(po => {
+                    const rawStatus = (po.Status || po.status || 'Pending').toString();
+                    return {
+                        PO_ID: po.PO_ID || '',
+                        Vendor_ID: po.Vendor_ID || '',
+                        Product_ID: po.Product_ID || '',
+                        Product_Name: po.Product_Name || '',
+                        No_of_Cases: parseInt(po.No_of_Cases || 0) || 0,
+                        Units_Per_Case: parseInt(po.Units_Per_Case || 1) || 1,
+                        PO_Price: parseFloat(po.PO_Price || 0) || 0,
+                        Line_Total: parseFloat(po.Line_Total || 0) || 0,
+                        Total_Amount: parseFloat(po.Total_Amount || 0) || 0,
+                        Created_Date: po.Created_Date || '',
+                        Status: rawStatus === 'Pending Approval' ? 'Waiting for Approval' : rawStatus,
+                        Rejection_Reason: po.Rejection_Reason || po.rejectionReason || '',
+                        Created_By: po.Created_By || po.createdBy || ''
+                    };
+                }).filter(po => po.Product_ID);
             }
 
             // 10. Vendor Purchase (Actual Deliveries) Mapping
@@ -655,13 +665,17 @@ export const DataProvider = ({ children }) => {
     // Multi-Product PO Creation
     const createMultiPO = async (items) => {
         try {
+            const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
             const res = await fetch(`${API_URL}/create-multi-po`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': authToken ? `Bearer ${authToken}` : ''
+                },
                 body: JSON.stringify({ items })
             });
             const result = await res.json();
-            if (!res.ok) throw new Error(result.error);
+            if (!res.ok) throw new Error(result.error || `Server returned ${res.status}`);
             setRefreshTrigger(prev => prev + 1);
             return { success: true, ...result };
         } catch (e) {

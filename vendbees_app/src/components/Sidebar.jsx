@@ -18,6 +18,9 @@ const Sidebar = () => {
         { name: 'Generate Bill', icon: FileText, path: '/generate-bill' },
         { name: 'Notifications', icon: Bell, path: '/notifications' },
     ];
+    const managerItems = [
+        { name: 'PO Verification', icon: Package, path: '/po-approval' }
+    ];
 
     const adminItems = user?.role === 'admin' ? [
         { name: 'User Management', icon: Users, path: '/users' },
@@ -54,6 +57,30 @@ const Sidebar = () => {
                         {item.name}
                     </NavLink>
                 ))}
+
+                {/* Manager Section */}
+                {user?.role === 'manager' && managerItems.length > 0 && (
+                    <>
+                        <div className="my-4 pt-4 border-t border-slate-200">
+                            <p className="text-xs font-semibold text-slate-400 uppercase px-3 mb-2">Manager</p>
+                            {managerItems.map((item) => (
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    className={({ isActive }) =>
+                                        `flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${isActive
+                                            ? 'bg-orange-50 text-orange-600 font-medium'
+                                            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                                        }`
+                                    }
+                                >
+                                    <item.icon size={20} className="stroke-[1.5]" />
+                                    {item.name}
+                                </NavLink>
+                            ))}
+                        </div>
+                    </>
+                )}
 
                 {/* Admin Section */}
                 {adminItems.length > 0 && (

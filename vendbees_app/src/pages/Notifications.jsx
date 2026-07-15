@@ -1,13 +1,15 @@
 import React, { useMemo } from 'react';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { AlertTriangle, Clock, CheckCircle, Package } from 'lucide-react';
 import clsx from 'clsx';
 
 const Notifications = () => {
     const { ourPOs, warehouseStocks, stocks, loading } = useData();
+    const { user } = useAuth();
 
-    // Calculate overdue POs (more than 5 days old and not delivered)
+    // Calculate overdue POs (more than 5 days old and not delivered), plus approval and rejection alerts
     const notifications = useMemo(() => {
         if (!ourPOs || ourPOs.length === 0) return [];
 
@@ -38,31 +40,66 @@ const Notifications = () => {
         const alerts = [];
         
         Object.values(groupedPOs).forEach(po => {
-            // Skip completed POs
-            if (po.Status === 'Completed') return;
-            
-            const createdDate = new Date(po.Created_Date);
-            if (isNaN(createdDate.getTime())) return;
-            
-            createdDate.setHours(0, 0, 0, 0);
-            const daysDiff = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
-            
-            if (daysDiff > 5) {
-                alerts.push({
-                    id: po.PO_ID,
-                    type: 'overdue',
-                    severity: daysDiff > 10 ? 'critical' : 'warning',
-                    title: `PO ${po.PO_ID} is overdue`,
-                    message: `This purchase order from ${po.Vendor_ID} was created ${daysDiff} days ago and has not been delivered yet.`,
-                    vendor: po.Vendor_ID,
-                    daysOverdue: daysDiff - 5,
-                    totalDays: daysDiff,
-                    status: po.Status,
-                    itemCount: po.Items.length,
-                    createdDate: po.Created_Date
-                });
+            // Skip completed POs for overdue alerts
+            if (po.Status !== 'Completed') {
+                const createdDate = new Date(po.Created_Date);
+                if (!isNaN(createdDate.getTime())) {
+                    createdDate.setHours(0, 0, 0, 0);
+                    const daysDiff = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
+                    if (daysDiff > 5) {
+                        alerts.push({
+                            id: `overdue-${po.PO_ID}`,
+                            type: 'overdue',
+                            severity: daysDiff > 10 ? 'critical' : 'warning',
+                            title: `PO ${po.PO_ID} is overdue`,
+                            message: `This purchase order from ${po.Vendor_ID} was created ${daysDiff} days ago and has not been delivered yet.`,
+                            vendor: po.Vendor_ID,
+                            daysOverdue: daysDiff - 5,
+                            totalDays: daysDiff,
+                            status: po.Status,
+                            itemCount: po.Items.length,
+                            createdDate: po.Created_Date
+                        });
+                    }
+                }
             }
         });
+
+        // Add waiting approval and rejection alerts for managers/admins
+        if (user?.role === 'manager' || user?.role === 'admin') {
+            Object.values(groupedPOs).forEach(po => {
+                if (po.Status === 'Waiting for Approval') {
+                    alerts.push({
+                        id: `awaiting-${po.PO_ID}`,
+                        type: 'approval',
+                        severity: 'warning',
+                        title: `PO ${po.PO_ID} waiting for approval`,
+                        message: `Purchase order ${po.PO_ID} from ${po.Vendor_ID} is awaiting verification by a manager.`,
+                        poId: po.PO_ID,
+                        vendor: po.Vendor_ID,
+                        status: po.Status,
+                        itemCount: po.Items.length,
+                        createdDate: po.Created_Date
+                    });
+                }
+                if (po.Status === 'Rejected') {
+                    const reason = po.Items[0]?.Rejection_Reason || po.Rejection_Reason || '';
+                    alerts.push({
+                        id: `rejected-${po.PO_ID}`,
+                        type: 'rejected',
+                        severity: 'critical',
+                        title: `PO ${po.PO_ID} rejected`,
+                        message: `PO ${po.PO_ID} has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
+                        poId: po.PO_ID,
+                        vendor: po.Vendor_ID,
+                        status: po.Status,
+                        itemCount: po.Items.length,
+                        createdDate: po.Created_Date,
+                        reason
+                    });
+                }
+            });
+        }
 
         // Create a map of caseLabel to expiry dates from warehouseStocks for quick lookup
         const expiryMap = {};
@@ -153,6 +190,42 @@ const Notifications = () => {
                         batch: stockItem.Batch,
                         machine: stockItem.Machine,
                         source: 'batch'
+                    });
+                }
+            });
+        }
+
+        // Add waiting approval alerts for managers/admins
+        if (user?.role === 'manager' || user?.role === 'admin') {
+            Object.values(groupedPOs).forEach(po => {
+                if (po.Status === 'Waiting for Approval') {
+                    alerts.push({
+                        id: `awaiting-${po.PO_ID}`,
+                        type: 'approval',
+                        severity: 'warning',
+                        title: `PO ${po.PO_ID} waiting for approval`,
+                        message: `Purchase order ${po.PO_ID} from ${po.Vendor_ID} is awaiting verification by a manager.`,
+                        poId: po.PO_ID,
+                        vendor: po.Vendor_ID,
+                        status: po.Status,
+                        itemCount: po.Items.length,
+                        createdDate: po.Created_Date
+                    });
+                }
+                if (po.Status === 'Rejected') {
+                    const reason = po.Items[0]?.Rejection_Reason || po.Rejection_Reason || '';
+                    alerts.push({
+                        id: `rejected-${po.PO_ID}`,
+                        type: 'rejected',
+                        severity: 'critical',
+                        title: `PO ${po.PO_ID} rejected`,
+                        message: `PO ${po.PO_ID} has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
+                        poId: po.PO_ID,
+                        vendor: po.Vendor_ID,
+                        status: po.Status,
+                        itemCount: po.Items.length,
+                        createdDate: po.Created_Date,
+                        reason
                     });
                 }
             });

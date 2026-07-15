@@ -175,10 +175,17 @@ class AuthService:
             }
 
     @staticmethod
-    def register(email: str, password: str, full_name: str, created_by: str) -> dict:
+    def register(email: str, password: str, full_name: str, created_by: str, role: str = 'user') -> dict:
         """Register a new user (admin only)"""
         try:
             email_lower = email.lower()
+            if role not in ['admin', 'manager', 'user']:
+                return {
+                    'success': False,
+                    'message': 'Invalid role',
+                    'status': 400
+                }
+
             session = dataconnect_config.get_session()
             
             # Check if user already exists
@@ -241,7 +248,7 @@ class AuthService:
                 "email": email_lower,
                 "fullName": full_name,
                 "passwordHash": password_hash,
-                "role": "user",
+                "role": role,
                 "status": "active",
                 "createdAt": now,
                 "createdBy": created_by,
@@ -256,7 +263,7 @@ class AuthService:
                 action='CREATE_USER',
                 resource_type='user',
                 resource_id=user_id,
-                details={"email": email, "fullName": full_name}
+                details={"email": email, "fullName": full_name, "role": role}
             )
             
             return {

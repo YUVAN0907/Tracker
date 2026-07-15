@@ -9,6 +9,7 @@ import MachineOut from "./pages/MachineOut";
 import Inventory from "./pages/Inventory";
 import Warehouse from "./pages/Warehouse";
 import Notifications from "./pages/Notifications";
+import POApproval from "./pages/POApproval";
 import LoginPage from "./pages/LoginPage";
 import UserManagement from "./pages/UserManagement";
 import Complaints from "./pages/Complaints";
@@ -39,16 +40,14 @@ function App() {
                 <Route path="complaints" element={<Complaints />} />
                 <Route path="generate-bill" element={<GenerateBill />} />
                 <Route path="notifications" element={<Notifications />} />
+                <Route element={<ProtectedRoute allowedRoles={["manager"]} />}>
+                  <Route path="po-approval" element={<POApproval />} />
+                </Route>
+                <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+                  <Route path="users" element={<UserManagement />} />
+                </Route>
               </Route>
             </Route>
-
-            {/* Admin Only Routes */}
-            <Route element={<ProtectedRoute requiredRole="admin" />}>
-              <Route path="/users" element={<UserManagement />} />
-            </Route>
-
-            {/* Catch all - redirect to login */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </Router>
       </DataProvider>

@@ -79,7 +79,7 @@ def logout():
 def register():
     """
     Register a new user (ADMIN ONLY)
-    Body: {email, password, fullName}
+    Body: {email, password, fullName, role}
     Returns: {userId}
     """
     try:
@@ -91,12 +91,16 @@ def register():
         email = data.get('email', '').strip()
         password = data.get('password', '')
         full_name = data.get('fullName', '').strip()
+        role = data.get('role', 'user').strip()
         
         if not email or not password or not full_name:
             return jsonify({'message': 'Email, password, and fullName are required'}), 400
         
+        if role not in ['admin', 'manager', 'user']:
+            return jsonify({'message': 'Invalid role'}), 400
+        
         # Register user
-        result = AuthService.register(email, password, full_name, request.user_id)
+        result = AuthService.register(email, password, full_name, request.user_id, role)
         
         return jsonify(result), result.get('status', 500)
     
@@ -227,7 +231,7 @@ def update_user(user_id):
             update_data['fullName'] = data['fullName']
         
         if 'role' in data:
-            if data['role'] not in ['admin', 'user']:
+            if data['role'] not in ['admin', 'manager', 'user']:
                 return jsonify({'message': 'Invalid role'}), 400
             update_data['role'] = data['role']
         

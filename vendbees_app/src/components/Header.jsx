@@ -6,12 +6,24 @@ import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
 
 const Header = ({ title, subtitle }) => {
-    const { ourPOs } = useData();
+    const { ourPOs, warehouseStocks, stocks } = useData();
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
     const menuRef = useRef(null);
+    const [toasts, setToasts] = useState([]);
+    const toastIdRef = useRef(0);
+    const addToast = (toast) => {
+        const id = ++toastIdRef.current;
+        const newToast = { id, ...toast };
+        setToasts(prev => [newToast, ...prev]);
+        // auto-remove
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, toast.duration || 6000);
+    };
+    const removeToast = (id) => setToasts(prev => prev.filter(t => t.id !== id));
 
     const notificationCount = useMemo(() => {
         if (!ourPOs || ourPOs.length === 0) return 0;
@@ -19,25 +31,116 @@ const Header = ({ title, subtitle }) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
-        // Get unique PO IDs that are overdue
         const overduePOIds = new Set();
+        const approvalPOIds = new Set();
         
         ourPOs.forEach(po => {
             if (po.Status === 'Completed') return;
             
             const createdDate = new Date(po.Created_Date);
-            if (isNaN(createdDate.getTime())) return;
-            
-            createdDate.setHours(0, 0, 0, 0);
-            const daysDiff = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
-            
-            if (daysDiff > 5) {
-                overduePOIds.add(po.PO_ID);
+            if (!isNaN(createdDate.getTime())) {
+                createdDate.setHours(0, 0, 0, 0);
+                const daysDiff = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
+                if (daysDiff > 5) {
+                    overduePOIds.add(po.PO_ID);
+                }
+            }
+
+            if ((user?.role === 'manager' || user?.role === 'admin') && po.Status === 'Waiting for Approval') {
+                approvalPOIds.add(po.PO_ID);
             }
         });
 
-        return overduePOIds.size;
-    }, [ourPOs]);
+        return overduePOIds.size + approvalPOIds.size;
+    }, [ourPOs, user]);
+
+    // Show login-time popup for critical alerts and approvals (once per session)
+    const prevUserRef = useRef(null);
+    useEffect(() => {
+        // Only trigger when user transitions from null -> authenticated
+        if (!user || prevUserRef.current) {
+            prevUserRef.current = user;
+            return;
+        }
+
+        prevUserRef.current = user;
+
+        // Compute critical alerts: overdue >10 days, expiry within 3 days, rejected POs
+        let criticalCount = 0;
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        if (ourPOs && ourPOs.length > 0) {
+            const criticalPOs = new Set();
+            ourPOs.forEach(po => {
+                if (po.Status === 'Rejected') {
+                    criticalPOs.add(po.PO_ID);
+                    return;
+                }
+                const cd = new Date(po.Created_Date);
+                if (!isNaN(cd.getTime())) {
+                    cd.setHours(0,0,0,0);
+                    const daysDiff = Math.floor((today - cd)/(1000*60*60*24));
+                    if (daysDiff > 10) criticalPOs.add(po.PO_ID);
+                }
+            });
+            criticalCount += criticalPOs.size;
+        }
+
+        if (warehouseStocks && warehouseStocks.length > 0) {
+            const criticalExp = new Set();
+            warehouseStocks.forEach(item => {
+                const exp = item.EXPD || item.expd || item.Expiry || item.expiry;
+                if (!exp) return;
+                const ed = new Date(exp);
+                if (isNaN(ed.getTime())) return;
+                ed.setHours(0,0,0,0);
+                const daysUntil = Math.floor((ed - today)/(1000*60*60*24));
+                if (daysUntil <= 3 && daysUntil >= 0) criticalExp.add(item.caseLabel || item.Case_Label || item.case_label || item.CaseLabel || item.id);
+            });
+            criticalCount += criticalExp.size;
+        }
+
+        // Approval reminders for managers/admins
+        let approvalCount = 0;
+        if ((user?.role === 'manager' || user?.role === 'admin') && ourPOs && ourPOs.length > 0) {
+            const awaiting = new Set();
+            ourPOs.forEach(po => {
+                if (po.Status === 'Waiting for Approval') awaiting.add(po.PO_ID);
+            });
+            approvalCount = awaiting.size;
+        }
+
+        // Show toasts for important reminders
+        const toastEntries = [];
+        if (criticalCount > 0) {
+            toastEntries.push({
+                title: 'Critical Alerts',
+                message: `${criticalCount} critical alert${criticalCount>1?'s':''}`,
+                // go to notifications
+                route: '/notifications',
+                severity: 'critical'
+            });
+        }
+        if (approvalCount > 0) {
+            toastEntries.push({
+                title: 'Approvals Pending',
+                message: `${approvalCount} purchase order${approvalCount>1?'s':''} awaiting approval`,
+                route: '/po-approval',
+                severity: 'warning'
+            });
+        }
+
+        toastEntries.forEach(t => addToast(t));
+    }, [user, ourPOs, warehouseStocks, stocks]);
+
+    // Toast click handler navigates to route if provided
+    const handleToastClick = (toast) => {
+        if (toast.route) {
+            navigate(toast.route);
+        }
+        removeToast(toast.id);
+    };
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -141,6 +244,18 @@ const Header = ({ title, subtitle }) => {
             {showChangePasswordModal && (
                 <ChangePasswordModal onClose={() => setShowChangePasswordModal(false)} />
             )}
+                {/* Toast stack */}
+                <div className="fixed top-6 right-6 z-50 flex flex-col gap-3">
+                    {toasts.map(t => (
+                        <div key={t.id} onClick={() => handleToastClick(t)} className={`cursor-pointer w-80 max-w-full p-3 rounded-lg shadow-lg border flex items-start gap-3 ${t.severity==='critical' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                            <div className="flex-1">
+                                <div className="text-sm font-semibold text-slate-800">{t.title}</div>
+                                <div className="text-xs text-slate-600 mt-1">{t.message}</div>
+                            </div>
+                            <div className="text-xs text-slate-400">Open</div>
+                        </div>
+                    ))}
+                </div>
         </header>
     );
 };
