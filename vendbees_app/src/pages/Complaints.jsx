@@ -5,12 +5,16 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase
 import { 
     MessageSquare, Clock, CheckCircle2, AlertCircle, Search, Filter, 
     Download, ExternalLink, User, Phone, Hash, Calendar, ChevronRight, X, 
-    Image as ImageIcon, ZoomIn, FileSpreadsheet, MessageCircle, Lightbulb
+    Image as ImageIcon, ZoomIn, FileSpreadsheet, MessageCircle, Lightbulb, Lock,
+    ArrowDownToLine
 } from 'lucide-react';
 import clsx from 'clsx';
 import * as XLSX from 'xlsx';
 import html2pdf from 'html2pdf.js';
-import { normalizeTicket, normalizeFeedback, toSafeDate, buildExportData, generateCSV, generatePDFHtml } from '../utils/complaintHelpers';
+import { normalizeTicket, normalizeFeedback, toSafeDate, buildExportData, generateCSV, generatePDFHtml, filterByDateRange } from '../utils/complaintHelpers';
+import WhatsAppChatDrawer from '../components/WhatsAppChatDrawer';
+import { sendStatusNotification } from '../utils/whatsappApi';
+
 
 const STATUS_COLORS = {
     'Submitted': 'bg-orange-50 text-orange-600 border-orange-200',
@@ -47,6 +51,7 @@ const TYPE_ICON_COLORS = {
     'Suggestion': 'bg-emerald-100 text-emerald-600',
     'Feedback': 'bg-emerald-100 text-emerald-600',
 };
+
 
 // --- COMPLAINT CARD ---
 const ComplaintCard = React.memo(({ complaint, onClick }) => {
@@ -197,12 +202,77 @@ const Timeline = ({ complaint }) => {
         { label: complaint.status === 'Refunded' ? 'Refund Processed' : 'Issue Resolved', time: isResolved ? 'Completed' : 'Awaiting resolution', active: isResolved, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' }
     ];
 
+    const [whatsappSteps, setWhatsappSteps] = useState([]);
+
+    useEffect(() => {
+        if (!complaint?.id || complaint?.type === 'Suggestion') return;
+        const q = query(
+            collection(db, "tickets", complaint.id, "chats"),
+            orderBy("timestamp", "asc")
+        );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const stepsList = [];
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                let label = '';
+                const msgType = data.messageType || 'text';
+                const senderType = data.senderType || '';
+                const text = data.message || '';
+
+                if (senderType === 'student') {
+                    label = msgType === 'image' ? 'Student sent image'
+                          : msgType === 'audio' ? 'Student sent voice note'
+                          : msgType === 'document' ? 'Student sent document'
+                          : 'Student replied';
+                } else if (senderType === 'internal') {
+                    label = 'Internal note added';
+                } else {
+                    // Auto-notification detection by message content keywords (legacy compat)
+                    if (text.includes('submitted successfully') || text.includes('has been received')) {
+                        label = 'Automatic Submission Notification Sent';
+                    } else if (text.includes('IN REVIEW') || text.includes('is now being reviewed') || text.includes('is now IN REVIEW')) {
+                        label = 'Automatic Review Notification Sent';
+                    } else if (text.includes('pending additional') || text.includes('pending further')) {
+                        label = 'Automatic Pending Notification Sent';
+                    } else if (text.includes('RESOLVED') || text.includes('been repaired') || text.includes('been marked as RESOLVED')) {
+                        label = 'Automatic Resolution Notification Sent';
+                    } else if (text.includes('refund') && (text.includes('processed') || text.includes('approved'))) {
+                        label = 'Automatic Refund Notification Sent';
+                    } else if (msgType === 'image') {
+                        label = 'Admin sent image';
+                    } else if (msgType === 'document') {
+                        label = 'Admin sent document';
+                    } else {
+                        label = 'Admin sent WhatsApp message';
+                    }
+                }
+
+                const timeStr = toSafeDate(data.timestamp || data.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+                stepsList.push({
+                    label,
+                    time: timeStr,
+                    active: true,
+                    icon: MessageSquare,
+                    color: senderType === 'student' ? 'text-blue-600' : senderType === 'internal' ? 'text-amber-600' : 'text-green-600',
+                    bg: senderType === 'student' ? 'bg-blue-50' : senderType === 'internal' ? 'bg-amber-50' : 'bg-green-50',
+                });
+            });
+            setWhatsappSteps(stepsList);
+        }, (err) => {
+            console.error("Timeline WhatsApp listener error:", err);
+        });
+        return () => unsubscribe();
+    }, [complaint?.id, complaint?.type]);
+
+
+    const allSteps = [...steps, ...whatsappSteps];
+
     return (
         <div className="space-y-6">
-            {steps.map((step, i) => (
+            {allSteps.map((step, i) => (
                 <div key={i} className="flex gap-4 relative">
-                    {i !== steps.length - 1 && (
-                        <div className={clsx("absolute left-5 top-10 bottom-[-1.5rem] w-0.5 -ml-px rounded-full", step.active && steps[i+1]?.active ? "bg-slate-300" : "bg-slate-100 border-dashed border-l-2")}></div>
+                    {i !== allSteps.length - 1 && (
+                        <div className={clsx("absolute left-5 top-10 bottom-[-1.5rem] w-0.5 -ml-px rounded-full", step.active && allSteps[i+1]?.active ? "bg-slate-300" : "bg-slate-100 border-dashed border-l-2")}></div>
                     )}
                     <div className={clsx("w-10 h-10 rounded-xl flex items-center justify-center relative z-10 shrink-0 shadow-sm border border-white", step.active ? step.bg + ' ' + step.color : 'bg-slate-50 text-slate-300 border-slate-200')}>
                         <step.icon size={20} />
@@ -223,8 +293,15 @@ const Complaints = () => {
     const [feedbacks, setFeedbacks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedComplaint, setSelectedComplaint] = useState(null);
+    const [showWhatsAppChat, setShowWhatsAppChat] = useState(false);
     const [previewImage, setPreviewImage] = useState(null);
     const [exporting, setExporting] = useState(false);
+
+    useEffect(() => {
+        if (!selectedComplaint) {
+            setShowWhatsAppChat(false);
+        }
+    }, [selectedComplaint]);
     
     // Filters
     const [filterStatus, setFilterStatus] = useState('Unsolved');
@@ -234,6 +311,12 @@ const Complaints = () => {
     const [customDateStart, setCustomDateStart] = useState('');
     const [customDateEnd, setCustomDateEnd] = useState('');
     const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportDateRange, setExportDateRange] = useState('All');
+    const [exportDateStart, setExportDateStart] = useState('');
+    const [exportDateEnd, setExportDateEnd] = useState('');
+    const [exportIncludeProofs, setExportIncludeProofs] = useState(false);
+    const [confirmationModal, setConfirmationModal] = useState({ show: false, status: '', title: '', message: '', ticketId: '' });
     const exportMenuRef = useRef(null);
 
     useEffect(() => {
@@ -376,12 +459,51 @@ const Complaints = () => {
 
     const handleStatusUpdate = async (ticketId, newStatus) => {
         if (!ticketId || selectedComplaint?.type === 'Suggestion') return;
+        // Block if complaint is permanently locked
+        if (selectedComplaint?.statusLocked) return;
+
+        // Show confirmation modal for terminal statuses
+        if (newStatus === 'Resolved' || newStatus === 'Refunded') {
+            setConfirmationModal({
+                show: true,
+                status: newStatus,
+                title: newStatus === 'Resolved' ? 'Confirm Resolution' : 'Confirm Refund',
+                message: `Are you sure you want to mark this complaint as ${newStatus.toUpperCase()}?\n\nThis action cannot be changed later.`,
+                ticketId: ticketId,
+            });
+            return;
+        }
+
         try {
             const ticketRef = doc(db, "tickets", ticketId);
             await updateDoc(ticketRef, { status: newStatus });
+            // Send automatic WhatsApp status notification
+            sendStatusNotification(ticketId, newStatus, selectedComplaint).catch(err => {
+                console.error("Failed to send status notification:", err);
+            });
         } catch (error) {
             console.error("Error updating status:", error);
             alert("Failed to update status. Please try again.");
+        }
+    };
+
+    const handleConfirmStatusUpdate = async () => {
+        if (!confirmationModal.ticketId) return;
+        try {
+            const ticketRef = doc(db, "tickets", confirmationModal.ticketId);
+            await updateDoc(ticketRef, { 
+                status: confirmationModal.status,
+                statusLocked: true 
+            });
+            // Send automatic WhatsApp status notification
+            sendStatusNotification(confirmationModal.ticketId, confirmationModal.status, selectedComplaint).catch(err => {
+                console.error("Failed to send status confirmation notification:", err);
+            });
+        } catch (error) {
+            console.error("Error updating status:", error);
+            alert("Failed to update status. Please try again.");
+        } finally {
+            setConfirmationModal({ show: false, status: '', title: '', message: '', ticketId: '' });
         }
     };
 
@@ -397,13 +519,19 @@ const Complaints = () => {
     };
 
     // --- EXPORT LOGIC ---
-    const getExportData = useCallback(() => buildExportData(filteredComplaints), [filteredComplaints]);
+    // Builds data respecting export-modal date range (independent of the main view filter)
+    const getExportData = useCallback((includeProofUrls = false) => {
+        // Apply export-specific date range filter on top of current filtered view
+        const dateFiltered = filterByDateRange(filteredComplaints, exportDateRange, exportDateStart, exportDateEnd);
+        return buildExportData(dateFiltered, { includeProofUrls });
+    }, [filteredComplaints, exportDateRange, exportDateStart, exportDateEnd]);
 
     const handleExportExcel = () => {
         setExporting(true);
         setShowExportMenu(false);
+        setShowExportModal(false);
         try {
-            const data = getExportData();
+            const data = getExportData(exportIncludeProofs);
             if (!data.length) { alert("No data to export."); setExporting(false); return; }
             const ws = XLSX.utils.json_to_sheet(data);
             const colWidths = [];
@@ -428,8 +556,9 @@ const Complaints = () => {
     const handleExportCSV = () => {
         setExporting(true);
         setShowExportMenu(false);
+        setShowExportModal(false);
         try {
-            const data = getExportData();
+            const data = getExportData(exportIncludeProofs);
             if (!data.length) { alert("No data to export."); setExporting(false); return; }
             const csv = generateCSV(data);
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -450,8 +579,9 @@ const Complaints = () => {
     const handleExportPDF = async () => {
         setExporting(true);
         setShowExportMenu(false);
+        setShowExportModal(false);
         try {
-            const data = getExportData();
+            const data = getExportData(false); // PDFs don't need URL columns
             if (!data.length) { alert("No data to export."); setExporting(false); return; }
             const htmlStr = generatePDFHtml(data);
             const container = document.createElement('div');
@@ -583,9 +713,9 @@ const Complaints = () => {
                         )}
                     </div>
 
-                    <div className="w-full xl:w-auto relative" ref={exportMenuRef}>
+                    <div className="w-full xl:w-auto">
                         <button 
-                            onClick={() => setShowExportMenu(prev => !prev)}
+                            onClick={() => setShowExportModal(true)}
                             disabled={exporting}
                             className="w-full xl:w-auto flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold transition-all shadow-sm hover:shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
                         >
@@ -594,26 +724,8 @@ const Complaints = () => {
                             ) : (
                                 <Download size={18} />
                             )}
-                            {exporting ? 'Exporting...' : 'Download Complaints'}
+                            {exporting ? 'Exporting...' : 'Export Data'}
                         </button>
-                        {showExportMenu && (
-                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                                <div className="p-2 space-y-1">
-                                    <button onClick={handleExportCSV} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors">
-                                        <FileSpreadsheet size={18} className="text-green-600" /> Export as CSV
-                                    </button>
-                                    <button onClick={handleExportExcel} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors">
-                                        <FileSpreadsheet size={18} className="text-blue-600" /> Export as Excel
-                                    </button>
-                                    <button onClick={handleExportPDF} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors">
-                                        <FileSpreadsheet size={18} className="text-red-600" /> Export as PDF
-                                    </button>
-                                </div>
-                                <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{filteredComplaints.length} records • Filters applied</p>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
 
@@ -677,12 +789,23 @@ const Complaints = () => {
                                     {toSafeDate(selectedComplaint.created_at).toLocaleString([], { dateStyle: 'full', timeStyle: 'medium' })}
                                 </p>
                             </div>
-                            <button 
-                                onClick={() => setSelectedComplaint(null)}
-                                className="p-3 bg-slate-50 hover:bg-slate-200 rounded-full text-slate-500 transition-colors border border-slate-200"
-                            >
-                                <X size={24} />
-                            </button>
+                            <div className="flex items-center gap-3">
+                                {selectedComplaint.type !== 'Suggestion' && selectedComplaint.student?.phone && selectedComplaint.student.phone !== 'N/A' && (
+                                    <button
+                                        onClick={() => setShowWhatsAppChat(true)}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-full text-sm font-bold transition-colors shadow-sm hover:shadow-md cursor-pointer"
+                                    >
+                                        <MessageCircle size={18} />
+                                        Chat on WhatsApp
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => setSelectedComplaint(null)}
+                                    className="p-3 bg-slate-50 hover:bg-slate-200 rounded-full text-slate-500 transition-colors border border-slate-200"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Content */}
@@ -789,12 +912,37 @@ const Complaints = () => {
                                                 {selectedComplaint.attachments.map((url, i) => (
                                                     <div 
                                                         key={i} 
-                                                        onClick={() => setPreviewImage(url)}
-                                                        className="relative group rounded-2xl overflow-hidden border-2 border-slate-100 shadow-sm bg-slate-50 aspect-square cursor-zoom-in hover:border-slate-300 transition-colors"
+                                                        className="relative group rounded-2xl overflow-hidden border-2 border-slate-100 shadow-sm bg-slate-50 aspect-square hover:border-slate-300 transition-colors"
                                                     >
-                                                        <img src={url} alt={`Proof ${i+1}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-                                                            <ZoomIn className="text-white drop-shadow-md" size={36} strokeWidth={2} />
+                                                        <img 
+                                                            src={url} 
+                                                            alt={`Proof ${i+1}`} 
+                                                            loading="lazy" 
+                                                            onClick={() => setPreviewImage(url)}
+                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 cursor-zoom-in" 
+                                                        />
+                                                        <div className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-[2px]">
+                                                            <button
+                                                                onClick={() => setPreviewImage(url)}
+                                                                className="p-2.5 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"
+                                                                title="View full size"
+                                                            >
+                                                                <ZoomIn className="text-white drop-shadow-md" size={22} strokeWidth={2} />
+                                                            </button>
+                                                            <a
+                                                                href={url}
+                                                                download={`proof_${selectedComplaint.ticket_id || i+1}_image${i+1}.jpg`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="p-2.5 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"
+                                                                title="Download proof image"
+                                                            >
+                                                                <ArrowDownToLine className="text-white drop-shadow-md" size={22} strokeWidth={2} />
+                                                            </a>
+                                                        </div>
+                                                        <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm">
+                                                            Proof {i+1}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -819,15 +967,19 @@ const Complaints = () => {
                                                     
                                                     const isActive = selectedComplaint.status === status || (selectedComplaint.status === 'Reviewing' && status === 'In Review');
                                                     
+                                                    const isLocked = selectedComplaint.statusLocked === true;
                                                     return (
                                                         <button
                                                             key={status}
                                                             onClick={() => handleStatusUpdate(selectedComplaint.id, status)}
+                                                            disabled={isLocked}
                                                             className={clsx(
                                                                 "py-4 px-5 rounded-2xl text-sm font-bold border transition-all flex items-center justify-between group",
-                                                                isActive
-                                                                    ? STATUS_COLORS[status] + " ring-2 ring-offset-2 ring-" + STATUS_COLORS[status].split('-')[1] + "-200 shadow-sm scale-[1.02]"
-                                                                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                                                                isLocked
+                                                                    ? "opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200"
+                                                                    : isActive
+                                                                        ? STATUS_COLORS[status] + " ring-2 ring-offset-2 ring-" + STATUS_COLORS[status].split('-')[1] + "-200 shadow-sm scale-[1.02]"
+                                                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                                                             )}
                                                         >
                                                             <span className="flex items-center gap-3">
@@ -839,6 +991,14 @@ const Complaints = () => {
                                                     )
                                                 })}
                                             </div>
+                                            {selectedComplaint.statusLocked && (
+                                                <div className="px-8 pb-6">
+                                                    <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-600">
+                                                        <Lock size={16} className="text-slate-500" />
+                                                        🔒 Finalized — Final Status Locked
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -892,7 +1052,7 @@ const Complaints = () => {
                                             {selectedComplaint.status === 'Approved' && (
                                                 <div className="px-6 pb-5">
                                                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs font-semibold text-emerald-700 flex items-center gap-2">
-                                                        <CheckCircle2 size={14} /> Student awarded +20 reward points
+                                                        <CheckCircle2 size={14} /> This suggestion has been approved.
                                                     </div>
                                                 </div>
                                             )}
@@ -901,6 +1061,37 @@ const Complaints = () => {
 
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- STATUS CONFIRMATION MODAL --- */}
+            {confirmationModal.show && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-200">
+                        <div className="px-8 pt-8 pb-4">
+                            <h3 className="text-xl font-black text-slate-800 mb-3">{confirmationModal.title}</h3>
+                            <p className="text-sm text-slate-600 font-medium leading-relaxed whitespace-pre-line">{confirmationModal.message}</p>
+                        </div>
+                        <div className="px-8 pb-8 pt-4 flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => setConfirmationModal({ show: false, status: '', title: '', message: '', ticketId: '' })}
+                                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-sm font-bold transition-colors border border-slate-200"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmStatusUpdate}
+                                className={clsx(
+                                    "px-6 py-3 rounded-2xl text-sm font-bold transition-colors text-white shadow-sm hover:shadow-md",
+                                    confirmationModal.status === 'Refunded' 
+                                        ? "bg-purple-600 hover:bg-purple-700" 
+                                        : "bg-green-600 hover:bg-green-700"
+                                )}
+                            >
+                                Confirm
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -931,6 +1122,116 @@ const Complaints = () => {
                         >
                             <ExternalLink size={20} /> Open Original in New Tab
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {selectedComplaint && showWhatsAppChat && (
+                <WhatsAppChatDrawer 
+                    complaint={selectedComplaint} 
+                    onClose={() => setShowWhatsAppChat(false)} 
+                />
+            )}
+
+            {/* --- EXPORT MODAL --- */}
+            {showExportModal && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-200">
+                        <div className="px-8 pt-8 pb-4 flex justify-between items-center border-b border-slate-100">
+                            <h3 className="text-xl font-black text-slate-800">Export Complaints Data</h3>
+                            <button 
+                                onClick={() => setShowExportModal(false)}
+                                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            {/* Date Range Selection */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-500 uppercase tracking-widest block">Date Range</label>
+                                <select 
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-800/20 focus:border-slate-800 cursor-pointer"
+                                    value={exportDateRange}
+                                    onChange={(e) => setExportDateRange(e.target.value)}
+                                >
+                                    <option value="All">All Time (Default)</option>
+                                    <option value="Today">Today</option>
+                                    <option value="Yesterday">Yesterday</option>
+                                    <option value="ThisWeek">This Week</option>
+                                    <option value="ThisMonth">This Month</option>
+                                    <option value="Custom">Custom Date Range</option>
+                                </select>
+                            </div>
+
+                            {/* Custom Date Inputs */}
+                            {exportDateRange === 'Custom' && (
+                                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-200">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Start Date</label>
+                                        <input 
+                                            type="date" 
+                                            value={exportDateStart}
+                                            onChange={(e) => setExportDateStart(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none cursor-pointer"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">End Date</label>
+                                        <input 
+                                            type="date" 
+                                            value={exportDateEnd}
+                                            onChange={(e) => setExportDateEnd(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none cursor-pointer"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Include Proof URLs Checkbox */}
+                            <label className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-200 transition-colors cursor-pointer group">
+                                <input 
+                                    type="checkbox" 
+                                    checked={exportIncludeProofs}
+                                    onChange={(e) => setExportIncludeProofs(e.target.checked)}
+                                    className="w-4 h-4 text-slate-800 border-slate-300 rounded focus:ring-slate-800 cursor-pointer accent-slate-800"
+                                />
+                                <div className="text-left">
+                                    <span className="text-sm font-bold text-slate-700 block">Include Proof Image URLs</span>
+                                    <span className="text-xs font-medium text-slate-400 block mt-0.5">Adds a dedicated column listing all uploaded attachment URLs</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div className="px-8 pb-8 pt-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
+                            <button
+                                onClick={() => setShowExportModal(false)}
+                                className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl text-sm font-bold transition-colors border border-slate-200 order-last sm:order-first"
+                            >
+                                Cancel
+                            </button>
+                            <div className="flex flex-1 sm:flex-initial gap-3">
+                                <button
+                                    onClick={handleExportCSV}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl text-sm font-bold transition-colors shadow-sm"
+                                >
+                                    <FileSpreadsheet size={16} /> CSV
+                                </button>
+                                <button
+                                    onClick={handleExportExcel}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-2xl text-sm font-bold transition-colors shadow-sm"
+                                >
+                                    <FileSpreadsheet size={16} /> Excel
+                                </button>
+                                <button
+                                    onClick={handleExportPDF}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-3 rounded-2xl text-sm font-bold transition-colors shadow-sm"
+                                >
+                                    <FileSpreadsheet size={16} /> PDF
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

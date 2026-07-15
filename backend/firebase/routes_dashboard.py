@@ -8,7 +8,7 @@ dashboard_bp = Blueprint('dashboard', __name__)
 # Firebase Data Connect requires individual queries for each root field
 PRODUCTS_QUERY = """query GetProducts { products(limit: 1000) { productId productName category vendorId mrp quantity units gst unitCost landedCost eanNo selfLife vendor { vendorId vendorName } } }"""
 
-MACHINES_QUERY = """query GetMachines { machines(limit: 100) { machineId location status } }"""
+MACHINES_QUERY = """query GetMachines { machines(limit: 100) { machineId location status latitude longitude } }"""
 
 MACHINE_INVENTORIES_QUERY = """query GetMachineInventories { machineInventories(limit: 1000) { machineId productId currentStock } }"""
 
@@ -185,13 +185,14 @@ def dashboard():
                 "selfLife": self_life  # Shelf life in MONTHS (raw from database)
             })
             
-        # 2. Map Machines
         machines_out = []
         for m in data.get("machines", []):
             machines_out.append({
                 "Machine_ID": m.get("machineId"),
                 "Location": m.get("location"),
-                "Status": m.get("status")
+                "Status": m.get("status"),
+                "latitude": m.get("latitude"),
+                "longitude": m.get("longitude")
             })
             
         # 3. Map Stock (MachineInventory)
