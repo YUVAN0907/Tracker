@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 from auth_middleware import admin_required, manager_required, token_required
-from dataconnect_db import execute_graphql, format_timestamp
+from dataconnect_db import execute_graphql, format_timestamp, get_type_fields
 
 po_bp = Blueprint('po', __name__)
 
@@ -70,44 +70,56 @@ mutation DeletePOHeader($poId: String!) {
 }
 """
 
-GET_PO_ITEMS_QUERY = """
-query GetPOItems($poId: String!) {
-  purchaseOrderLines(where: {poId: {eq: $poId}}) {
-    lineId
-    poId
-    productId
-    noOfCases
-    unitsPerCase
-    poPrice
-    lineTotal
-    purchaseOrderHeader {
-      poId
-      vendorId
-      createdDate
-      totalAmount
-      status
-      rejectionReason
-    }
-    product {
-      productName
-      vendorId
-    }
-  }
-}
-"""
+def build_get_po_items_query(include_rejection: bool = False):
+        header_fields = [
+                "poId",
+                "vendorId",
+                "createdDate",
+                "totalAmount",
+                "status",
+        ]
+        if include_rejection:
+                header_fields.append("rejectionReason")
 
-GET_ALL_POS_QUERY = """
-query GetAllPOs {
-  purchaseOrderHeaders {
-    poId
-    vendorId
-    createdDate
-    totalAmount
-    status
-    rejectionReason
-  }
-}
-"""
+        header_block = "\n      ".join(header_fields)
+
+        return f'''query GetPOItems($poId: String!) {{
+    purchaseOrderLines(where: {{poId: {{eq: $poId}}}}) {{
+        lineId
+        poId
+        productId
+        noOfCases
+        unitsPerCase
+        poPrice
+        lineTotal
+        purchaseOrderHeader {{
+            {header_block}
+        }}
+        product {{
+            productName
+            vendorId
+        }}
+    }}
+}}'''
+
+def build_get_all_pos_query(include_rejection: bool = False):
+        header_fields = [
+                "poId",
+                "vendorId",
+                "createdDate",
+                "totalAmount",
+                "status",
+        ]
+        if include_rejection:
+                header_fields.append("rejectionReason")
+
+        header_block = "\n    ".join(header_fields)
+
+        return f'''query GetAllPOs {{
+    purchaseOrderHeaders {{
+        {header_block}
+    }}
+}}'''
 
 GET_ALL_POS_LINES_QUERY = """
 query GetAllPOLines {
@@ -130,8 +142,13 @@ query GetAllPOLines {
 def get_all_pos():
     """Get all purchase orders in flattened format for table display"""
     try:
+        # Determine whether the remote schema exposes `rejectionReason`
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        include_rejection = 'rejectionReason' in header_fields
+
         # Get all headers
-        headers_res = execute_graphql(GET_ALL_POS_QUERY, {})
+        headers_query = build_get_all_pos_query(include_rejection)
+        headers_res = execute_graphql(headers_query, {})
         po_headers = headers_res.get("purchaseOrderHeaders", [])
         
         # Get all lines
@@ -332,7 +349,11 @@ def create_multi_po():
 def approve_po(po_id):
     """Approve a PO after manager verification of product-vendor mapping"""
     try:
-        res = execute_graphql(GET_PO_ITEMS_QUERY, {"poId": po_id})
+        # Use introspection to include optional fields if available
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        include_rejection = 'rejectionReason' in header_fields
+        po_items_query = build_get_po_items_query(include_rejection)
+        res = execute_graphql(po_items_query, {"poId": po_id})
         po_lines = res.get('purchaseOrderLines', [])
 
         if not po_lines:
@@ -375,7 +396,21 @@ def approve_po(po_id):
                 'mismatches': mismatches
             }), 400
 
-        execute_graphql(UPDATE_PO_STATUS_MUTATION, {"poId": po_id, "status": "Approved", "rejectionReason": ""})
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        if 'rejectionReason' in header_fields:
+            mutation = """mutation UpdatePOStatus($poId: String!, $status: String!, $rejectionReason: String) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status, rejectionReason: $rejectionReason })
+}
+"""
+            vars = {"poId": po_id, "status": "Approved", "rejectionReason": ""}
+        else:
+            mutation = """mutation UpdatePOStatus($poId: String!, $status: String!) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status })
+}
+"""
+            vars = {"poId": po_id, "status": "Approved"}
+
+        execute_graphql(mutation, vars)
         return jsonify({'message': f'PO {po_id} approved successfully!', 'po_id': po_id})
 
     except Exception as e:
@@ -394,7 +429,10 @@ def reject_po(po_id):
         if not reason:
             return jsonify({'error': 'Rejection reason is required'}), 400
 
-        res = execute_graphql(GET_PO_ITEMS_QUERY, {"poId": po_id})
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        include_rejection = 'rejectionReason' in header_fields
+        po_items_query = build_get_po_items_query(include_rejection)
+        res = execute_graphql(po_items_query, {"poId": po_id})
         po_lines = res.get('purchaseOrderLines', [])
 
         if not po_lines:
@@ -412,7 +450,21 @@ def reject_po(po_id):
         if current_status == 'Approved':
             return jsonify({'error': f'PO {po_id} has already been approved and cannot be rejected.'}), 400
 
-        execute_graphql(REJECT_PO_MUTATION, {"poId": po_id, "status": "Rejected", "rejectionReason": reason})
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        if 'rejectionReason' in header_fields:
+            mutation = """mutation RejectPO($poId: String!, $status: String!, $rejectionReason: String!) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status, rejectionReason: $rejectionReason })
+}
+"""
+            vars = {"poId": po_id, "status": "Rejected", "rejectionReason": reason}
+        else:
+            mutation = """mutation RejectPO($poId: String!, $status: String!) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status })
+}
+"""
+            vars = {"poId": po_id, "status": "Rejected"}
+
+        execute_graphql(mutation, vars)
         return jsonify({'message': f'PO {po_id} rejected successfully.', 'po_id': po_id, 'reason': reason})
 
     except Exception as e:
@@ -425,7 +477,10 @@ def reject_po(po_id):
 def delete_po(po_id):
     """Delete a rejected PO header and its line items"""
     try:
-        res = execute_graphql(GET_PO_ITEMS_QUERY, {"poId": po_id})
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        include_rejection = 'rejectionReason' in header_fields
+        po_items_query = build_get_po_items_query(include_rejection)
+        res = execute_graphql(po_items_query, {"poId": po_id})
         po_lines = res.get('purchaseOrderLines', [])
 
         if not po_lines:
@@ -459,7 +514,10 @@ def delete_po(po_id):
 def get_po_items(po_id):
     """Get all line items for a PO"""
     try:
-        res = execute_graphql(GET_PO_ITEMS_QUERY, {"poId": po_id})
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        include_rejection = 'rejectionReason' in header_fields
+        po_items_query = build_get_po_items_query(include_rejection)
+        res = execute_graphql(po_items_query, {"poId": po_id})
         po_lines = res.get("purchaseOrderLines", [])
         
         if not po_lines:

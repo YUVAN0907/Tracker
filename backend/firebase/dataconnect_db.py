@@ -52,3 +52,41 @@ def generate_uuid():
 def format_timestamp(dt_obj):
     # Data Connect expects RFC 3339 timestamps, e.g., "2024-03-15T10:00:00Z"
     return dt_obj.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ------------------------
+# Schema introspection
+# ------------------------
+_schema_cache = {}
+
+def get_type_fields(type_name: str):
+    """Return a set of field names for a GraphQL type via introspection.
+
+    Results are cached in-memory for the lifespan of the process.
+    """
+    if type_name in _schema_cache:
+        return _schema_cache[type_name]
+
+    introspect_query = f'''query IntrospectType {{
+  __type(name: "{type_name}") {{
+    name
+    fields {{ name }}
+  }}
+}}'''
+
+    try:
+        resp = get_session().auth_session.post(DATACONNECT_ENDPOINT, json={"query": introspect_query})
+        resp.raise_for_status()
+        data = resp.json()
+        type_info = data.get('data', {}).get('__type')
+        if not type_info:
+            _schema_cache[type_name] = set()
+            return set()
+
+        fields = {f.get('name') for f in type_info.get('fields', []) if f.get('name')}
+        _schema_cache[type_name] = fields
+        return fields
+    except Exception as e:
+        print(f"Introspection failed for type {type_name}: {e}")
+        _schema_cache[type_name] = set()
+        return set()
