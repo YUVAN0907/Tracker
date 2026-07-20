@@ -249,14 +249,31 @@ _GENERAL = {
 
 # Master lookup: issue_type_lower → template_dict
 _ISSUE_TEMPLATES = {
-    'machine down':   _MACHINE_DOWN,
-    'product issue':  _PRODUCT_ISSUE,
-    'payment issue':  _PAYMENT_ISSUE,
-    'refund issue':   _REFUND_ISSUE,
-    'suggestion':     _SUGGESTION,
-    'feedback':       _SUGGESTION,
-    'general':        _GENERAL,
-    'general complaint': _GENERAL,
+    # Machine Down variations
+    'machine down':         _MACHINE_DOWN,
+    'machine issue':        _MACHINE_DOWN,
+    'vending machine down': _MACHINE_DOWN,
+    'machine not working':  _MACHINE_DOWN,
+    # Product Issue variations
+    'product issue':        _PRODUCT_ISSUE,
+    'product':              _PRODUCT_ISSUE,
+    'item not dispensed':   _PRODUCT_ISSUE,
+    'wrong product':        _PRODUCT_ISSUE,
+    # Payment Issue variations
+    'payment issue':        _PAYMENT_ISSUE,
+    'payment':              _PAYMENT_ISSUE,
+    'transaction issue':    _PAYMENT_ISSUE,
+    'money deducted':       _PAYMENT_ISSUE,
+    # Refund Issue variations
+    'refund issue':         _REFUND_ISSUE,
+    'refund':               _REFUND_ISSUE,
+    # Suggestion / Feedback
+    'suggestion':           _SUGGESTION,
+    'feedback':             _SUGGESTION,
+    # General / catch-all
+    'general':              _GENERAL,
+    'general complaint':    _GENERAL,
+    'other':                _GENERAL,
 }
 
 

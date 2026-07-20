@@ -5,11 +5,15 @@
  * Firestore ticket schema:
  *   ticketId, type, fullName, mobileNumber, registerNumber,
  *   machineId, issueType, complaintText, attachments,
- *   status, createdAt (Timestamp)
+ *   status, createdAt (Timestamp), resolvedAt, resolution,
+ *   refundAmount
  *
  * Firestore feedback schema:
  *   ticketId, type, fullName, mobileNumber, registerNumber,
  *   complaintText, status, createdAt (Timestamp)
+ *
+ * WhatsApp chats sub-collection:
+ *   tickets/{ticketId}/chats — queried on demand
  */
 
 /** Safely convert Firestore Timestamp, ISO string, or Date to a JS Date */
@@ -72,27 +76,49 @@ export function normalizeFeedback(raw, docId) {
  * Build export-ready data array from filtered complaints.
  * Includes all columns for CSV/Excel. PDF uses a subset via generatePDFHtml.
  * @param {Array} complaints - normalized complaint/feedback objects
- * @param {Object} options - optional flags: { includeProofUrls }
+ * @param {Object} options - optional flags:
+ *   { includeProofUrls, includeWhatsAppData, includeResolution }
  */
 export function buildExportData(complaints, options = {}) {
     return complaints.map(c => {
         const base = {
-            'Ticket ID': c.ticket_id || c.feedback_id || 'N/A',
-            'Type': c.type === 'Suggestion' ? 'Suggestion' : 'Complaint',
-            'Issue Type': c.issue_type || 'N/A',
-            'Status': c.status || 'N/A',
-            'Date Created': toSafeDate(c.created_at).toLocaleString(),
-            'Machine ID': c.machine_id || c.machine_name || 'N/A',
-            'Student Name': c.student?.name || 'Anonymous',
-            'Mobile': c.student?.phone || 'N/A',
-            'Register No': c.student?.reg_no || 'N/A',
-            'Description': c.issue_detail || c.message || '',
-            'Attachments Count': c.attachments?.length || 0,
+            'Ticket ID':          c.ticket_id || c.feedback_id || 'N/A',
+            'Type':               c.type === 'Suggestion' ? 'Suggestion' : 'Complaint',
+            'Issue Type':         c.issue_type || 'N/A',
+            'Status':             c.status || 'N/A',
+            'Date Created':       toSafeDate(c.created_at).toLocaleString(),
+            'Machine ID':         c.machine_id || c.machine_name || 'N/A',
+            'Student Name':       c.student?.name || 'Anonymous',
+            'Mobile':             c.student?.phone || 'N/A',
+            'Register No':        c.student?.reg_no || 'N/A',
+            'Description':        c.issue_detail || c.message || '',
+            'Attachments Count':  (c.attachments || []).length,
         };
 
-        // Include proof URLs as a pipe-separated column when requested
+        // Proof image URLs (pipe-separated) — off by default for smaller exports
         if (options.includeProofUrls) {
             base['Proof Image URLs'] = (c.attachments || []).join(' | ');
+        }
+
+        // WhatsApp communication columns
+        if (options.includeWhatsAppData !== false) {
+            base['WhatsApp Phone'] = c.student?.phone || 'N/A';
+            base['WA Chat Count']  = c.chatCount != null ? String(c.chatCount) : 'N/A';
+            base['Last WA Message'] = c.lastWhatsAppMessage
+                ? String(c.lastWhatsAppMessage).slice(0, 120)
+                : 'N/A';
+            base['Last WA At'] = c.lastWhatsAppAt
+                ? toSafeDate(c.lastWhatsAppAt).toLocaleString()
+                : 'N/A';
+        }
+
+        // Resolution / Refund columns
+        if (options.includeResolution !== false) {
+            base['Resolved At']     = c.resolvedAt
+                ? toSafeDate(c.resolvedAt).toLocaleString()
+                : 'N/A';
+            base['Resolution Notes'] = c.resolution || c.resolutionText || 'N/A';
+            base['Refund Amount']   = c.refundAmount != null ? `₹${c.refundAmount}` : 'N/A';
         }
 
         return base;
@@ -103,10 +129,12 @@ export function buildExportData(complaints, options = {}) {
 export function generateCSV(data) {
     if (!data.length) return '';
     const headers = Object.keys(data[0]);
-    const rows = [headers.join(',')];
+    const rows = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',')];
     data.forEach(row => {
         rows.push(headers.map(h => {
-            const val = (row[h] ?? '').toString().replace(/"/g, '""');
+            const val = (row[h] ?? '').toString()
+                .replace(/"/g, '""')   // escape quotes
+                .replace(/\r?\n/g, ' '); // collapse newlines in cells
             return `"${val}"`;
         }).join(','));
     });
@@ -121,15 +149,20 @@ export function generatePDFHtml(data, title = 'Complaints Report') {
     const cols = [
         'Ticket ID', 'Type', 'Issue Type', 'Status',
         'Date Created', 'Machine ID', 'Student Name', 'Mobile',
-        'Register No', 'Description'
-    ];
+        'Register No', 'Description',
+        'WA Chat Count', 'Last WA At', 'Resolved At', 'Resolution Notes',
+    ].filter(col => data.length === 0 || col in data[0]);
+
     const headerCells = cols.map(h =>
         `<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e2e8f0;font-weight:700;color:#475569;font-size:8px;white-space:nowrap;">${h}</th>`
     ).join('');
     const bodyRows = data.map((r, i) =>
-        `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'};">${cols.map(h =>
-            `<td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;font-size:8px;max-width:180px;word-break:break-word;">${r[h] || ''}</td>`
-        ).join('')}</tr>`
+        `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'};"><td colspan="${cols.length}"></td></tr>`.replace(
+            `<td colspan="${cols.length}"></td>`,
+            cols.map(h =>
+                `<td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;font-size:8px;max-width:180px;word-break:break-word;">${r[h] || ''}</td>`
+            ).join('')
+        )
     ).join('');
 
     return `<div style="font-family:Inter,sans-serif;padding:20px;">

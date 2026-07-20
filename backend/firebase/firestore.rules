@@ -1,88 +1,138 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Default: deny all
+
+    // =========================================================================
+    // DEFAULT: deny everything unless explicitly permitted below
+    // =========================================================================
     match /{document=**} {
       allow read, write: if false;
     }
-    
+
+    // =========================================================================
+    // INVENTORY & OPERATIONS COLLECTIONS
+    // =========================================================================
+
     // Products collection
     match /Products/{productId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Machines collection
     match /Machines/{machineId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Stock (Current_Stock) collection
     match /Stock/{stockId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Sales collection
     match /Sales/{saleId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Purchases (Vendor_Purchase) collection
     match /Purchases/{purchaseId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Refills collection
     match /Refills/{refillId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Vendors collection
     match /Vendors/{vendorId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Warehouse collection
     match /Warehouse/{warehouseId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Purchased_Products collection
     match /Purchased_Products/{ppId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Stocks (batch stocks) collection
     match /Stocks/{stockEntryId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Stock_Products collection
     match /Stock_Products/{spId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Stock_Assignments collection
     match /Stock_Assignments/{saId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // OUR_PO collection
     match /OUR_PO/{poId} {
       allow read: if true;
       allow write: if request.auth != null;
     }
+
+    // =========================================================================
+    // COMPLAINT & WHATSAPP COLLECTIONS
+    // =========================================================================
+
+    // Tickets — core complaint documents
+    // Authenticated admins can read/write; students submit via backend only.
+    match /tickets/{ticketId} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null;
+
+      // WhatsApp chat sub-collection (tickets/{ticketId}/chats/{chatDocId})
+      // Readable/writable only by authenticated admins.
+      // Students never write here directly — only via the Flask webhook.
+      match /chats/{chatDocId} {
+        allow read:  if request.auth != null;
+        allow write: if request.auth != null;
+      }
+    }
+
+    // Feedbacks — student suggestions / feedback documents
+    match /feedbacks/{feedbackId} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // WhatsApp conversation index — one document per phone/ticket pair
+    // Document IDs are UUIDs (never phone numbers). Indexed by studentPhone.
+    // Read: authenticated admins only.
+    // Write: backend service account only (webhook handler writes these).
+    //        Client-side writes are blocked — all updates go through Flask.
+    match /whatsappConversations/{conversationId} {
+      allow read:  if request.auth != null;
+      allow write: if false;  // Flask backend writes via Admin SDK (bypasses rules)
+    }
+
+    // WhatsApp message ID → ticket/chat mapping for idempotency & status tracking
+    // Never accessed from the frontend — admin SDK writes bypass these rules.
+    // Explicitly locked to prevent any direct client access.
+    match /whatsapp_message_map/{messageId} {
+      allow read:  if false;  // internal use only (admin SDK)
+      allow write: if false;  // internal use only (admin SDK)
+    }
+
   }
 }

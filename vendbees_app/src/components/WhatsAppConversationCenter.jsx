@@ -264,16 +264,18 @@ const WhatsAppConversationCenter = ({ complaint, onClose, onMinimize }) => {
     try {
       // 1. Check if we are in Internal Note mode
       if (isInternalMode) {
-        if (isTextEmpty) return;
-        const res = await sendInternalNote(ticketId, newMessage);
-        if (res.success) {
-          setNewMessage('');
-        } else {
-          setError(res.error || 'Failed to post internal note.');
+        if (!isTextEmpty) {
+          const res = await sendInternalNote(ticketId, newMessage);
+          if (res.success) {
+            setNewMessage('');
+          } else {
+            setError(res.error || 'Failed to post internal note.');
+          }
         }
-        setSending(false);
+        // Fall through to finally — setSending(false) is guaranteed
         return;
       }
+
 
       // 2. Outgoing WhatsApp text / media messages
       if (selectedFiles.length > 0) {

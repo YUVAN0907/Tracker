@@ -21,6 +21,37 @@ function getApiUrl() {
 }
 
 /**
+ * Fetch with a timeout using AbortController.
+ * @param {string} url
+ * @param {RequestInit} options
+ * @param {number} timeoutMs  - milliseconds before aborting (default 30 000)
+ */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30_000) {
+    const controller = new AbortController();
+    const timerId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timerId);
+    }
+}
+
+/**
+ * Map a fetch error to a user-friendly message string.
+ * @param {Error} error
+ */
+function _toUserError(error) {
+    if (error.name === 'AbortError') {
+        return 'Request timed out. The backend may be slow or unreachable.';
+    }
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        return 'Network error. Please check your connection and ensure the backend is running.';
+    }
+    return error.message || 'An unknown error occurred.';
+}
+
+
+/**
  * Send a WhatsApp message to a student for a specific complaint.
  * @param {string} ticketId - Firestore document ID of the ticket
  * @param {string} phone - Student's phone number (will be normalized server-side)
@@ -30,7 +61,7 @@ function getApiUrl() {
 export async function sendWhatsAppMessage(ticketId, phone, message) {
     const url = `${getApiUrl()}/whatsapp/send`;
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticketId, phone, message }),
@@ -41,10 +72,7 @@ export async function sendWhatsAppMessage(ticketId, phone, message) {
         }
         return data;
     } catch (error) {
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            return { success: false, error: 'Network error. Please check your connection and ensure the backend is running.' };
-        }
-        return { success: false, error: error.message || 'Failed to send message.' };
+        return { success: false, error: _toUserError(error) };
     }
 }
 
@@ -74,16 +102,15 @@ export async function sendStatusNotification(ticketId, status, complaint) {
 
     const url = `${getApiUrl()}/whatsapp/notify`;
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                ticketId,              // Firestore doc ID — used by backend to locate document
+                ticketId,
                 status,
                 phone,
                 studentName: complaint?.student?.name || complaint?.fullName || 'Student',
-                ticketDisplayId,       // Display-safe ticket ID shown in WhatsApp message
-                // Also pass full complaint data so backend can build issue-type-specific messages
+                ticketDisplayId,
                 issueType: complaint?.issue_type || complaint?.issueType || 'General',
                 machineId: complaint?.machine_id || complaint?.machineId || '',
                 complaintText: complaint?.issue_detail || complaint?.complaintText || complaint?.message || '',
@@ -95,7 +122,7 @@ export async function sendStatusNotification(ticketId, status, complaint) {
         }
         return data;
     } catch (error) {
-        return { success: false, error: error.message || 'Failed to send notification.' };
+        return { success: false, error: _toUserError(error) };
     }
 }
 
@@ -116,17 +143,17 @@ export async function sendWhatsAppImage(ticketId, phone, imageFile, caption = ''
     formData.append('image', imageFile);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             method: 'POST',
             body: formData,
-        });
+        }, 60_000);  // 60s for file uploads
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.error || 'Failed to send image');
         }
         return data;
     } catch (error) {
-        return { success: false, error: error.message || 'Failed to send image.' };
+        return { success: false, error: _toUserError(error) };
     }
 }
 
@@ -146,17 +173,17 @@ export async function sendWhatsAppDocument(ticketId, phone, docFile, caption = '
     formData.append('document', docFile);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             method: 'POST',
             body: formData,
-        });
+        }, 60_000);  // 60s for file uploads
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.error || 'Failed to send document');
         }
         return data;
     } catch (error) {
-        return { success: false, error: error.message || 'Failed to send document.' };
+        return { success: false, error: _toUserError(error) };
     }
 }
 
@@ -172,17 +199,17 @@ export async function uploadMedia(file, ticketId) {
     formData.append('file', file);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             method: 'POST',
             body: formData,
-        });
+        }, 60_000);  // 60s for file uploads
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.error || 'Failed to upload media');
         }
         return data;
     } catch (error) {
-        return { success: false, error: error.message || 'Failed to upload media.' };
+        return { success: false, error: _toUserError(error) };
     }
 }
 
@@ -194,7 +221,7 @@ export async function uploadMedia(file, ticketId) {
 export async function sendInternalNote(ticketId, note) {
     const url = `${getApiUrl()}/whatsapp/internal-note`;
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticketId, note }),
@@ -205,7 +232,7 @@ export async function sendInternalNote(ticketId, note) {
         }
         return data;
     } catch (error) {
-        return { success: false, error: error.message || 'Failed to add internal note.' };
+        return { success: false, error: _toUserError(error) };
     }
 }
 

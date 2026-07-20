@@ -26,13 +26,13 @@ def init_firebase():
             firebase_admin.initialize_app(cred, {
                 "projectId": FIREBASE_PROJECT_ID
             })
-            print(f"✔ Firebase initialized with service account key")
+            print(f"[OK] Firebase initialized with service account key")
         else:
             # Fallback: use application default credentials (for Cloud Run, etc.)
             firebase_admin.initialize_app(options={
                 "projectId": FIREBASE_PROJECT_ID
             })
-            print(f"✔ Firebase initialized with application default credentials")
+            print(f"[OK] Firebase initialized with application default credentials")
     
     return firestore.client()
 

@@ -1,17 +1,31 @@
 """
-WhatsApp API Routes
+WhatsApp API Routes — Production Hardened
 Flask Blueprint for WhatsApp Cloud API integration.
-Handles sending messages, webhook verification, and incoming event processing.
-All WhatsApp credentials are read from environment variables only.
+
+Features:
+  - Meta webhook signature verification (X-Hub-Signature-256)
+  - Webhook idempotency (duplicate event rejection)
+  - Complete 23-field chat document schema
+  - Conversation mapping with unread count
+  - Correct Firebase Storage paths (whatsapp/{ticketId}/...)
+  - Support: text, image, audio, voice, video, document,
+             sticker, location, contacts, reaction, interactive
+  - Outgoing: text, image, document
+  - Status tracking: sending → sent → delivered → read → failed
+  - All credentials from environment variables only
 """
+
 import sys
 import uuid
+import hmac
+import hashlib
 import traceback
 from flask import Blueprint, request, jsonify
-import firebase_config  # ensures Firebase app is initialized
 from firebase_admin import firestore as admin_firestore
+import firebase_config  # ensures Firebase app is initialized
 from whatsapp_service import (
     send_text_message,
+    send_template_message,
     send_image_message,
     send_document_message,
     validate_phone,
@@ -19,145 +33,233 @@ from whatsapp_service import (
     download_media,
     upload_to_firebase_storage,
     get_media_extension,
-    WHATSAPP_VERIFY_TOKEN,
     ALLOWED_MIME_TYPES,
+    reload_whatsapp_config,
 )
 
 whatsapp_bp = Blueprint('whatsapp', __name__)
 
-# Connect to the named 'vendbeesdb' database (same database the frontend uses)
+# Connect to the named 'vendbeesdb' database
 vendbeesdb = admin_firestore.client(database_id='vendbeesdb')
 
 
-# --------------------------------------------------
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# Ordered status progression (higher index = more advanced)
+_STATUS_ORDER = {'sending': 0, 'sent': 1, 'delivered': 2, 'read': 3, 'failed': -1}
+
+# Meta webhook status names → internal status names
+_META_STATUS_MAP = {
+    'sent': 'sent',
+    'delivered': 'delivered',
+    'read': 'read',
+    'failed': 'failed',
+}
+
+
+# =============================================================================
 # FIRESTORE HELPERS
-# --------------------------------------------------
+# =============================================================================
 
-def _build_chat_doc(message_id, ticket_id, sender_type, sender_phone, message, 
-                    message_type='text', status='sending', whatsapp_message_id=None,
-                    meta_conversation_id=None, meta_media_id=None, media_url=None,
-                    storage_path=None, mime_type=None, file_name=None, file_size=None,
-                    duration=None, caption=None, reply_to_message_id=None,
-                    delivery_status=None, read_status=None):
-    """Build a complete chat document mapping exactly to the 23-field schema."""
-    return {
-        'messageId': message_id,
-        'ticketId': ticket_id,
-        'senderType': sender_type,
-        'senderPhone': sender_phone,
-        'message': message,
-        'messageType': message_type,
-        'timestamp': admin_firestore.SERVER_TIMESTAMP,
-        'status': status,
-        'whatsappMessageId': whatsapp_message_id,
-        'metaConversationId': meta_conversation_id,
-        'metaMediaId': meta_media_id,
-        'mediaUrl': media_url,
-        'storagePath': storage_path,
-        'mimeType': mime_type,
-        'fileName': file_name,
-        'fileSize': file_size,
-        'duration': duration,
-        'caption': caption,
-        'replyToMessageId': reply_to_message_id,
-        'deliveryStatus': delivery_status or status,
-        'readStatus': read_status or ('read' if status == 'read' else 'unread'),
-        'createdAt': admin_firestore.SERVER_TIMESTAMP,
-        'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+def _build_chat_doc(
+    message_id, ticket_id, conversation_id, sender_type,
+    sender_phone, receiver_phone, message,
+    message_type='text', status='sending',
+    whatsapp_message_id=None, meta_media_id=None,
+    firebase_storage_path=None, firebase_download_url=None,
+    mime_type=None, file_name=None, file_size=None,
+    duration=None, caption=None, reply_to_message_id=None,
+    delivery_status=None, read_status=None, failed_reason=None,
+    latitude=None, longitude=None,
+):
+    """
+    Build a complete, production-ready chat document.
+    Stores every field the objective requires and every Meta attribute
+    that may be useful later.
+    """
+    now = admin_firestore.SERVER_TIMESTAMP
+    doc = {
+        # Identity
+        'messageId':            message_id,
+        'ticketId':             ticket_id,
+        'conversationId':       conversation_id,
+
+        # Participants
+        'senderType':           sender_type,          # 'student' | 'admin' | 'internal' | 'system'
+        'sender':               sender_type,          # alias kept for any existing queries
+        'senderPhone':          sender_phone,
+        'receiver':             'admin' if sender_type == 'student' else 'student',
+        'receiverPhone':        receiver_phone,
+
+        # Content
+        'message':              message,
+        'text':                 message,              # alias for raw text queries
+        'messageType':          message_type,         # text|image|audio|voice|video|document|sticker|location|contacts|reaction|interactive|note|system
+        'caption':              caption,
+        'duration':             duration,
+        'replyToMessageId':     reply_to_message_id,
+
+        # Latitude / Longitude (for location messages)
+        'latitude':             latitude,
+        'longitude':            longitude,
+
+        # Media
+        'mediaType':            message_type if message_type not in ('text', 'note', 'system', 'internal') else None,
+        'firebaseStoragePath':  firebase_storage_path,
+        'firebaseDownloadUrl':  firebase_download_url,
+        'mediaUrl':             firebase_download_url,   # alias kept for existing frontend queries
+        'storagePath':          firebase_storage_path,   # alias
+        'mimeType':             mime_type,
+        'fileName':             file_name,
+        'fileSize':             file_size,
+
+        # Meta identifiers
+        'whatsappMessageId':    whatsapp_message_id,
+        'metaMessageId':        whatsapp_message_id,   # alias
+        'metaMediaId':          meta_media_id,
+
+        # Status
+        'status':               status,
+        'deliveryStatus':       delivery_status or status,
+        'readStatus':           read_status or ('read' if status == 'read' else 'unread'),
+        'failedReason':         failed_reason,
+
+        # Timestamps
+        'createdAt':            now,
+        'updatedAt':            now,
+        'timestamp':            now,   # alias used by existing frontend orderBy queries
     }
+    return doc
 
 
-def _store_outgoing_message(ticket_id, phone, message, doc_id, status='sent'):
-    """Store an outgoing (admin) message in tickets/{ticketId}/chats/{docId}."""
+def _store_outgoing_message(
+    ticket_id, phone, message, doc_id, status='sending',
+    message_type='text', media_url=None, mime_type=None,
+    file_name=None, file_size=None, caption=None,
+    storage_path=None, conversation_id=None,
+):
+    """Store an outgoing (admin → student) message in tickets/{ticketId}/chats/{docId}."""
     doc_data = _build_chat_doc(
         message_id=doc_id,
         ticket_id=ticket_id,
+        conversation_id=conversation_id,
         sender_type='admin',
         sender_phone=None,
+        receiver_phone=phone,
         message=message,
-        message_type='text',
+        message_type=message_type,
         status=status,
-        whatsapp_message_id=None
+        firebase_storage_path=storage_path,
+        firebase_download_url=media_url,
+        mime_type=mime_type,
+        file_name=file_name,
+        file_size=file_size,
+        caption=caption,
     )
     vendbeesdb.collection('tickets').document(ticket_id) \
         .collection('chats').document(doc_id).set(doc_data)
     return doc_id
 
 
-def _store_incoming_message(ticket_id, phone, message, whatsapp_message_id,
-                           sender_name='Student', message_type='text',
-                           media_url=None, mime_type=None, file_name=None,
-                           file_size=None, duration=None, caption=None,
-                           latitude=None, longitude=None, reply_to_message_id=None,
-                           meta_conversation_id=None, meta_media_id=None,
-                           storage_path=None):
-    """Store an incoming (student) message in tickets/{ticketId}/chats/{docId}."""
+def _store_incoming_message(
+    ticket_id, conversation_id, phone, student_name,
+    message, whatsapp_message_id,
+    message_type='text', media_url=None, mime_type=None,
+    file_name=None, file_size=None, duration=None, caption=None,
+    latitude=None, longitude=None, reply_to_message_id=None,
+    meta_media_id=None, storage_path=None,
+):
+    """Store an incoming (student → admin) message in tickets/{ticketId}/chats/{docId}."""
     doc_id = whatsapp_message_id or str(uuid.uuid4())
     doc_data = _build_chat_doc(
         message_id=doc_id,
         ticket_id=ticket_id,
+        conversation_id=conversation_id,
         sender_type='student',
         sender_phone=phone,
+        receiver_phone=None,
         message=message,
         message_type=message_type,
         status='received',
         whatsapp_message_id=whatsapp_message_id,
-        meta_conversation_id=meta_conversation_id,
         meta_media_id=meta_media_id,
-        media_url=media_url,
-        storage_path=storage_path,
+        firebase_storage_path=storage_path,
+        firebase_download_url=media_url,
         mime_type=mime_type,
         file_name=file_name,
         file_size=file_size,
         duration=duration,
         caption=caption,
-        reply_to_message_id=reply_to_message_id
+        reply_to_message_id=reply_to_message_id,
+        latitude=latitude,
+        longitude=longitude,
     )
-    
-    # Store coordinates separately if present
-    if latitude is not None:
-        doc_data['latitude'] = latitude
-    if longitude is not None:
-        doc_data['longitude'] = longitude
-        
     vendbeesdb.collection('tickets').document(ticket_id) \
         .collection('chats').document(doc_id).set(doc_data)
     return doc_id
 
 
-def _store_message_mapping(whatsapp_message_id, ticket_id, chat_doc_id):
-    """Store whatsappMessageId → (ticketId, chatDocId) mapping for webhook status lookups."""
+def _store_message_mapping(whatsapp_message_id, ticket_id, chat_doc_id, conversation_id=None):
+    """Store whatsappMessageId → (ticketId, chatDocId, conversationId) for webhook status lookups."""
     vendbeesdb.collection('whatsapp_message_map').document(whatsapp_message_id).set({
-        'ticketId': ticket_id,
-        'chatDocId': chat_doc_id,
+        'ticketId':       ticket_id,
+        'chatDocId':      chat_doc_id,
+        'conversationId': conversation_id,
+        'createdAt':      admin_firestore.SERVER_TIMESTAMP,
     })
+
+
+def _is_duplicate_event(whatsapp_message_id):
+    """
+    Return True if this message ID was already processed.
+    Uses whatsapp_message_map as the idempotency store.
+    """
+    if not whatsapp_message_id:
+        return False
+    try:
+        doc = vendbeesdb.collection('whatsapp_message_map') \
+            .document(whatsapp_message_id).get()
+        return doc.exists
+    except Exception:
+        return False
+
+
+# =============================================================================
+# PHONE & TICKET LOOKUP
+# =============================================================================
+
+def _normalize_digits(phone_raw):
+    """Return all plausible E.164 digit formats for a given phone string."""
+    digits = ''.join(c for c in str(phone_raw) if c.isdigit())
+    formats = {digits}
+    if len(digits) > 10:
+        formats.add(digits[-10:])
+    if len(digits) == 10:
+        formats.add('91' + digits)
+    if digits.startswith('91') and len(digits) == 12:
+        formats.add(digits[2:])
+    if digits.startswith('0') and len(digits) == 11:
+        formats.add(digits[1:])
+    return formats
 
 
 def _find_ticket_by_phone(phone_raw):
     """
     Find the most recent active ticket for a given phone number.
-    Checks the whatsappConversations mapping first for O(1) lookup,
-    then falls back to querying the tickets collection.
+
+    Lookup order (fastest first):
+      1. whatsappConversations (indexed by studentPhone)  ← production path
+      2. tickets collection by mobileNumber               ← slow fallback
+      3. tickets collection by phoneNumber                ← alternative schema
+
     Returns (ticket_doc_id, ticket_data) or (None, None).
     """
-    digits = ''.join(c for c in str(phone_raw) if c.isdigit())
+    formats = _normalize_digits(phone_raw)
 
-    # Build all plausible formats of this number
-    formats_to_try = set()
-    formats_to_try.add(digits)                 # As-is:  918610579379 or 8610579379
-    if len(digits) > 10:
-        formats_to_try.add(digits[-10:])        # Strip country code: 8610579379
-    if len(digits) == 10:
-        formats_to_try.add('91' + digits)       # Add India code: 918610579379
-    if digits.startswith('91') and len(digits) == 12:
-        formats_to_try.add(digits[2:])          # Strip 91: 8610579379
-    if digits.startswith('0') and len(digits) == 11:
-        formats_to_try.add(digits[1:])          # Strip leading 0
-
-    print(f"[WHATSAPP] Searching ticket for phone variants: {formats_to_try}", file=sys.stderr, flush=True)
-
-    # --- Fast path: check NEW whatsappConversations collection (indexed by studentPhone) ---
-    for fmt in formats_to_try:
+    # ── Fast path: whatsappConversations (UUID doc IDs, indexed by studentPhone) ──
+    for fmt in formats:
         try:
             convs = list(
                 vendbeesdb.collection('whatsappConversations')
@@ -166,173 +268,420 @@ def _find_ticket_by_phone(phone_raw):
                 .get()
             )
             if convs:
-                conv_data = convs[0].to_dict()
-                mapped_ticket_id = conv_data.get('ticketId')
+                mapped_ticket_id = convs[0].to_dict().get('ticketId')
                 if mapped_ticket_id:
                     ticket_snap = vendbeesdb.collection('tickets').document(mapped_ticket_id).get()
                     if ticket_snap.exists:
-                        print(f"[WHATSAPP] Fast-path (new): found ticket {mapped_ticket_id} via whatsappConversations", file=sys.stderr, flush=True)
                         return ticket_snap.id, ticket_snap.to_dict()
-        except Exception as e:
-            print(f"[WHATSAPP] whatsappConversations lookup error for {fmt}: {e}", file=sys.stderr, flush=True)
+        except Exception as exc:
+            print(f"[WA] whatsappConversations lookup error for {fmt}: {exc}", file=sys.stderr)
 
-    # --- Fast path: check OLD whatsapp_conversations collection (phone as doc ID) ---
-    for fmt in formats_to_try:
-        try:
-            conv_doc = vendbeesdb.collection('whatsapp_conversations').document(fmt).get()
-            if conv_doc.exists:
-                conv_data = conv_doc.to_dict()
-                mapped_ticket_id = conv_data.get('ticketId')
-                if mapped_ticket_id:
-                    ticket_snap = vendbeesdb.collection('tickets').document(mapped_ticket_id).get()
-                    if ticket_snap.exists:
-                        print(f"[WHATSAPP] Fast-path (legacy): found ticket {mapped_ticket_id} via whatsapp_conversations", file=sys.stderr, flush=True)
-                        return ticket_snap.id, ticket_snap.to_dict()
-        except Exception as e:
-            print(f"[WHATSAPP] Legacy conversation mapping lookup error for {fmt}: {e}", file=sys.stderr, flush=True)
+    # ── Slow path: direct tickets query ──
+    for field in ('mobileNumber', 'phoneNumber'):
+        for fmt in formats:
+            try:
+                tickets = list(
+                    vendbeesdb.collection('tickets')
+                    .where(field, '==', fmt)
+                    .get()
+                )
+                if tickets:
+                    active = [t for t in tickets if not t.to_dict().get('statusLocked')]
+                    target = active[0] if active else tickets[0]
+                    return target.id, target.to_dict()
+            except Exception as exc:
+                print(f"[WA] tickets query error (field={field}, fmt={fmt}): {exc}", file=sys.stderr)
 
-    # --- Slow path: query tickets collection by mobileNumber ---
-    for fmt in formats_to_try:
-        try:
-            tickets = list(
-                vendbeesdb.collection('tickets')
-                .where('mobileNumber', '==', fmt)
-                .get()
-            )
-            if tickets:
-                # Prefer active (not locked) tickets, then most recent
-                active = [t for t in tickets if not t.to_dict().get('statusLocked')]
-                target = active[0] if active else tickets[0]
-                print(f"[WHATSAPP] Slow-path: found ticket {target.id} via mobileNumber={fmt}", file=sys.stderr, flush=True)
-                return target.id, target.to_dict()
-        except Exception as e:
-            print(f"[WHATSAPP] Error querying tickets for mobileNumber={fmt}: {e}", file=sys.stderr, flush=True)
-
-    # --- Also try phoneNumber field (alternative schema) ---
-    for fmt in formats_to_try:
-        try:
-            tickets = list(
-                vendbeesdb.collection('tickets')
-                .where('phoneNumber', '==', fmt)
-                .get()
-            )
-            if tickets:
-                active = [t for t in tickets if not t.to_dict().get('statusLocked')]
-                target = active[0] if active else tickets[0]
-                print(f"[WHATSAPP] Slow-path: found ticket {target.id} via phoneNumber={fmt}", file=sys.stderr, flush=True)
-                return target.id, target.to_dict()
-        except Exception as e:
-            print(f"[WHATSAPP] Error querying tickets for phoneNumber={fmt}: {e}", file=sys.stderr, flush=True)
-
-    print(f"[WHATSAPP] No ticket found for any phone format: {formats_to_try}", file=sys.stderr, flush=True)
+    print(f"[WA] No ticket found for phone variants: {formats}", file=sys.stderr)
     return None, None
 
 
-def _update_message_status(whatsapp_message_id, new_status):
-    """Update delivery status of an outgoing message using the message mapping collection."""
+# =============================================================================
+# CONVERSATION MAPPING
+# =============================================================================
+
+# =============================================================================
+# CONVERSATION STATE & FLOW MANAGEMENT
+# =============================================================================
+
+def _is_customer_service_window_open(phone_short):
+    """
+    Check if there is an active 24-hour customer service window open for the given phone.
+    Returns: (is_open: bool, conversation_doc: dict|None, conv_id: str|None)
+    """
+    try:
+        existing = list(
+            vendbeesdb.collection('whatsappConversations')
+            .where('studentPhone', '==', phone_short)
+            .limit(1)
+            .get()
+        )
+        if not existing:
+            return False, None, None
+        
+        conv_doc = existing[0].to_dict()
+        conv_id = existing[0].id
+        
+        # Check lastCustomerMessageTime field
+        last_cust_time = conv_doc.get('lastCustomerMessageTime')
+        if not last_cust_time:
+            return False, conv_doc, conv_id
+        
+        # Determine timestamp
+        from datetime import datetime, timezone
+        if hasattr(last_cust_time, 'timestamp'):
+            last_cust_ts = last_cust_time.timestamp()
+        elif isinstance(last_cust_time, (int, float)):
+            last_cust_ts = last_cust_time
+        else:
+            try:
+                from dateutil import parser
+                last_cust_ts = parser.parse(str(last_cust_time)).timestamp()
+            except Exception:
+                return False, conv_doc, conv_id
+        
+        now_ts = datetime.now(timezone.utc).timestamp()
+        elapsed = now_ts - last_cust_ts
+        
+        if elapsed < 86400:  # 24 hours in seconds
+            return True, conv_doc, conv_id
+        
+        return False, conv_doc, conv_id
+    except Exception as exc:
+        print(f"[WA] Error checking conversation window: {exc}", file=sys.stderr)
+        return False, None, None
+
+
+def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text', media_url=None, filename=None, caption=None):
+    """
+    Common flow that:
+    1. Checks if customer service window is open.
+    2. Sends normal message if open.
+    3. Sends utility template if closed.
+    4. Automatically retries with template if normal send fails with 24h window error.
+    5. Returns (result_dict, was_template_sent, actual_text_sent)
+    """
+    import os
+    phone_short = normalized_phone[-10:] if len(normalized_phone) > 10 else normalized_phone
+    
+    window_open, conv_doc, conv_id = _is_customer_service_window_open(phone_short)
+    
+    student_name = 'Student'
+    ticket_display_id = ticket_id
+    try:
+        ticket_doc = vendbeesdb.collection('tickets').document(ticket_id).get()
+        if ticket_doc.exists:
+            tdata = ticket_doc.to_dict()
+            student_name = tdata.get('fullName') or tdata.get('studentName') or 'Student'
+            ticket_display_id = tdata.get('ticketId') or tdata.get('ticket_id') or ticket_id
+    except Exception as exc:
+        print(f"[WA] Error fetching ticket in flow: {exc}", file=sys.stderr)
+        
+    template_name = os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
+    
+    if template_name == 'hello_world':
+        template_text = "Hello World"
+    else:
+        template_text = (
+            f"Hello {student_name},\n\n"
+            f"We have an update regarding your complaint {ticket_display_id}.\n\n"
+            f"Please reply to this message to continue chatting with our support team.\n\n"
+            f"Regards,\nVendBees Support"
+        )
+
+    def send_template():
+        if template_name == 'hello_world':
+            comps = None
+        else:
+            comps = [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": student_name},
+                        {"type": "text", "text": ticket_display_id}
+                    ]
+                }
+            ]
+        res = send_template_message(normalized_phone, template_name, components=comps)
+        return res
+
+    if window_open:
+        if msg_type == 'image' and media_url:
+            result = send_image_message(normalized_phone, media_url, caption or '')
+        elif msg_type == 'document' and media_url:
+            result = send_document_message(normalized_phone, media_url, filename or 'document', caption or '')
+        else:
+            result = send_text_message(normalized_phone, text_body)
+            
+        is_window_closed_error = False
+        if not result['success']:
+            err_code = result.get('error_code') or 0
+            err_sub = result.get('error_subcode') or 0
+            err_msg = str(result.get('error', '')).lower()
+            if err_code == 131047 or err_sub == 131047 or '24 hour' in err_msg or 'window' in err_msg or 'template' in err_msg:
+                is_window_closed_error = True
+                
+        if is_window_closed_error:
+            print(f"[WA] Meta rejected free-form (window closed). Retrying with template...", file=sys.stderr)
+            result = send_template()
+            return result, True, template_text
+            
+        return result, False, text_body
+    else:
+        print(f"[WA] Customer service window closed for {phone_short}. Sending template instead...", file=sys.stderr)
+        result = send_template()
+        return result, True, template_text
+
+
+def _upsert_conversation(
+    phone_raw, ticket_id, last_doc_id, last_sender,
+    last_message='', last_message_type='text',
+    ticket_data=None, increment_unread=False,
+    is_template=False,
+):
+    """
+    Upsert the whatsappConversations document for this phone/ticket pair.
+    Document ID = UUID (never a phone number — security requirement).
+    Indexed by studentPhone for fast webhook lookup.
+    """
+    local_phone = ''.join(c for c in str(phone_raw) if c.isdigit())
+    if len(local_phone) > 10:
+        local_phone_short = local_phone[-10:]
+    else:
+        local_phone_short = local_phone
+
+    student_name = ''
+    if ticket_data:
+        student_name = (
+            ticket_data.get('fullName') or
+            ticket_data.get('studentName') or
+            ''
+        )
+
+    payload = {
+        'ticketId':        ticket_id,
+        'studentPhone':    local_phone_short,
+        'studentPhoneFull': local_phone,
+        'studentName':     student_name,
+        'lastMessage':     last_message[:500] if last_message else '',
+        'lastMessageType': last_message_type,
+        'lastMessageId':   last_doc_id,
+        'lastSender':      last_sender,
+        'lastMessageAt':   admin_firestore.SERVER_TIMESTAMP,
+        'status':          'active',
+        'updatedAt':       admin_firestore.SERVER_TIMESTAMP,
+    }
+
+    if last_sender == 'student':
+        payload['lastCustomerMessageTime'] = admin_firestore.SERVER_TIMESTAMP
+        payload['conversationOpen'] = True
+        payload['conversationType'] = 'free_form'
+    elif last_sender == 'admin':
+        if is_template:
+            payload['lastTemplateSent'] = admin_firestore.SERVER_TIMESTAMP
+            payload['conversationOpen'] = False
+            payload['conversationType'] = 'utility'
+        else:
+            payload['conversationOpen'] = True
+            payload['conversationType'] = 'free_form'
+
+    try:
+        existing = list(
+            vendbeesdb.collection('whatsappConversations')
+            .where('studentPhone', '==', local_phone_short)
+            .limit(1)
+            .get()
+        )
+        if existing:
+            conv_ref = vendbeesdb.collection('whatsappConversations').document(existing[0].id)
+            if increment_unread:
+                # Atomic increment — avoids race conditions on concurrent webhook events
+                payload['unreadCount'] = admin_firestore.Increment(1)
+            else:
+                payload['unreadCount'] = 0
+            conv_ref.set(payload, merge=True)
+            return existing[0].id
+        else:
+            conv_id = str(uuid.uuid4())
+            payload['conversationId'] = conv_id
+            payload['unreadCount'] = 1 if increment_unread else 0
+            payload['createdAt'] = admin_firestore.SERVER_TIMESTAMP
+            vendbeesdb.collection('whatsappConversations').document(conv_id).set(payload)
+            return conv_id
+    except Exception as exc:
+        print(f"[WA] Error upserting whatsappConversations for {local_phone_short}: {exc}", file=sys.stderr)
+        return None
+
+
+def _get_conversation_id(phone_raw):
+    """Return existing conversation UUID for a phone, or None."""
+    local_phone = ''.join(c for c in str(phone_raw) if c.isdigit())
+    short = local_phone[-10:] if len(local_phone) > 10 else local_phone
+    try:
+        docs = list(
+            vendbeesdb.collection('whatsappConversations')
+            .where('studentPhone', '==', short)
+            .limit(1)
+            .get()
+        )
+        if docs:
+            return docs[0].to_dict().get('conversationId', docs[0].id)
+    except Exception:
+        pass
+    return None
+
+
+# =============================================================================
+# STATUS TRACKING
+# =============================================================================
+
+def _update_message_status(whatsapp_message_id, new_status, failed_reason=None):
+    """
+    Update delivery status of a tracked outgoing message.
+    Only advances the status forward (sent → delivered → read).
+    Marks as failed regardless of current status.
+    """
     try:
         mapping_doc = vendbeesdb.collection('whatsapp_message_map') \
             .document(whatsapp_message_id).get()
-        
         if not mapping_doc.exists:
-            print(f"[WHATSAPP] No mapping found for message {whatsapp_message_id}", file=sys.stderr, flush=True)
             return
-        
+
         mapping = mapping_doc.to_dict()
         ticket_id = mapping.get('ticketId')
         chat_doc_id = mapping.get('chatDocId')
-        
         if not ticket_id or not chat_doc_id:
             return
-        
+
         chat_ref = vendbeesdb.collection('tickets').document(ticket_id) \
             .collection('chats').document(chat_doc_id)
         chat_doc = chat_ref.get()
-        
         if not chat_doc.exists:
             return
-        
+
         current_status = chat_doc.to_dict().get('status', '')
-        status_order = {'sending': 0, 'sent': 1, 'delivered': 2, 'read': 3, 'failed': -1}
-        current_rank = status_order.get(current_status, -2)
-        new_rank = status_order.get(new_status, -2)
-        
-        # Only update if progressing forward, or if marking as failed
+        current_rank = _STATUS_ORDER.get(current_status, -2)
+        new_rank = _STATUS_ORDER.get(new_status, -2)
+
         if new_status == 'failed' or new_rank > current_rank:
             updates = {
-                'status': new_status,
+                'status':         new_status,
                 'deliveryStatus': new_status,
-                'updatedAt': admin_firestore.SERVER_TIMESTAMP
+                'updatedAt':      admin_firestore.SERVER_TIMESTAMP,
             }
             if new_status == 'read':
                 updates['readStatus'] = 'read'
+                updates['readAt'] = admin_firestore.SERVER_TIMESTAMP
+            if new_status == 'delivered':
+                updates['deliveredAt'] = admin_firestore.SERVER_TIMESTAMP
+            if new_status == 'failed' and failed_reason:
+                updates['failedReason'] = failed_reason
             chat_ref.update(updates)
-            print(f"[WHATSAPP] Message {whatsapp_message_id}: {current_status} -> {new_status}",
-                  file=sys.stderr, flush=True)
-    except Exception as e:
-        print(f"[WHATSAPP] Error updating message status: {e}", file=sys.stderr, flush=True)
+    except Exception as exc:
+        print(f"[WA] Error updating message status {whatsapp_message_id}: {exc}", file=sys.stderr)
 
 
-# --------------------------------------------------
-# API ENDPOINTS
-# --------------------------------------------------
+# =============================================================================
+# WEBHOOK SIGNATURE VERIFICATION
+# =============================================================================
+
+def _verify_webhook_signature(request_body: bytes, signature_header: str, app_secret: str) -> bool:
+    """
+    Verify Meta's X-Hub-Signature-256 header.
+    Expected format: 'sha256=<hex_digest>'
+    """
+    if not app_secret:
+        # Not configured — skip verification with a warning
+        print("[WA] WARNING: WHATSAPP_APP_SECRET not set. Skipping signature verification.", file=sys.stderr)
+        return True
+    if not signature_header or not signature_header.startswith('sha256='):
+        return False
+    expected = 'sha256=' + hmac.new(
+        app_secret.encode('utf-8'),
+        request_body,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+# =============================================================================
+# API ENDPOINTS — OUTGOING MESSAGES
+# =============================================================================
 
 @whatsapp_bp.route('/api/whatsapp/send', methods=['POST'])
 def send_message():
     """
     Send a WhatsApp text message to a student.
     Request:  { ticketId, phone, message }
-    Response: { success, messageId } or { success: false, error }
+    Response: { success, messageId } | { success: false, error }
     """
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'error': 'Request body is required.'}), 400
-    
+
     ticket_id = data.get('ticketId')
     phone = data.get('phone')
-    message = data.get('message')
-    
+    message = data.get('message', '').strip()
+
     if not ticket_id:
         return jsonify({'success': False, 'error': 'ticketId is required.'}), 400
     if not phone:
         return jsonify({'success': False, 'error': 'phone is required.'}), 400
     if not message:
         return jsonify({'success': False, 'error': 'message is required.'}), 400
-    
-    # Validate phone number
+
     is_valid, normalized_phone, phone_error = validate_phone(phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
-    
-    # Store message with 'sending' status (frontend Firestore listener sees it immediately)
+
+    conv_id = _get_conversation_id(normalized_phone)
     temp_id = str(uuid.uuid4())
-    _store_outgoing_message(ticket_id, normalized_phone, message, temp_id, status='sending')
-    
-    # Send via WhatsApp Cloud API
-    result = send_text_message(normalized_phone, message)
-    
+
+    # Call outgoing flow to determine if normal message or template should be sent
+    result, was_template_sent, actual_message = _send_outgoing_flow(
+        ticket_id, normalized_phone, message, msg_type='text'
+    )
+
+    _store_outgoing_message(
+        ticket_id, normalized_phone, actual_message, temp_id,
+        status='sending', conversation_id=conv_id,
+        message_type='template' if was_template_sent else 'text',
+    )
+
     if result['success']:
-        whatsapp_msg_id = result.get('messageId')
-        # Update with real WhatsApp message ID and 'sent' status
+        wa_msg_id = result.get('messageId')
+        updates = {
+            'status':          'sent',
+            'deliveryStatus':  'sent',
+            'updatedAt':       admin_firestore.SERVER_TIMESTAMP,
+        }
+        if wa_msg_id:
+            updates['whatsappMessageId'] = wa_msg_id
+            updates['metaMessageId'] = wa_msg_id
+        if was_template_sent:
+            updates['originalAdminMessage'] = message
+
+        vendbeesdb.collection('tickets').document(ticket_id) \
+            .collection('chats').document(temp_id).update(updates)
+
+        if wa_msg_id:
+            _store_message_mapping(wa_msg_id, ticket_id, temp_id, conv_id)
+
+        _upsert_conversation(
+            normalized_phone, ticket_id, temp_id, 'admin',
+            last_message=actual_message, last_message_type='template' if was_template_sent else 'text',
+            increment_unread=False, is_template=was_template_sent
+        )
+        return jsonify({'success': True, 'messageId': wa_msg_id}), 200
+    else:
         vendbeesdb.collection('tickets').document(ticket_id) \
             .collection('chats').document(temp_id).update({
-                'status': 'sent',
-                'whatsappMessageId': whatsapp_msg_id,
+                'status': 'failed',
+                'deliveryStatus': 'failed',
+                'failedReason': result.get('error', ''),
+                'updatedAt': admin_firestore.SERVER_TIMESTAMP,
             })
-        # Store mapping for webhook status updates
-        if whatsapp_msg_id:
-            _store_message_mapping(whatsapp_msg_id, ticket_id, temp_id)
-        print(f"[WHATSAPP] Sent to {normalized_phone} for ticket {ticket_id}: {whatsapp_msg_id}",
-              file=sys.stderr, flush=True)
-        return jsonify({'success': True, 'messageId': whatsapp_msg_id}), 200
-    else:
-        # Mark message as failed
-        vendbeesdb.collection('tickets').document(ticket_id) \
-            .collection('chats').document(temp_id).update({'status': 'failed'})
-        error_msg = result.get('error', 'Failed to send message.')
-        print(f"[WHATSAPP] Send failed for {normalized_phone}: {error_msg}",
-              file=sys.stderr, flush=True)
-        return jsonify({'success': False, 'error': error_msg}), 502
+        return jsonify({'success': False, 'error': result.get('error', 'Failed to send message.')}), 502
 
 
 @whatsapp_bp.route('/api/whatsapp/notify', methods=['POST'])
@@ -341,32 +690,30 @@ def send_status_notification():
     Send automatic WhatsApp notification when complaint status changes.
     Request:  { ticketId, status, phone, studentName, ticketDisplayId,
                 issueType, machineId, complaintText }
-    Response: { success, messageId } or { success: false, error }
+    Response: { success, messageId } | { success: false, error }
     """
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'error': 'Request body is required.'}), 400
 
-    ticket_id = data.get('ticketId')
-    status = data.get('status')
-    phone = data.get('phone')
+    ticket_id    = data.get('ticketId')
+    status       = data.get('status')
+    phone        = data.get('phone')
     student_name = data.get('studentName', 'Student')
     ticket_display_id = data.get('ticketDisplayId') or ticket_id
 
-    # Additional context from frontend for issue-type-specific messages
-    issue_type_hint = data.get('issueType', '')
-    machine_id_hint = data.get('machineId', '')
+    issue_type_hint     = data.get('issueType', '')
+    machine_id_hint     = data.get('machineId', '')
     complaint_text_hint = data.get('complaintText', '')
 
     if not ticket_id or not status or not phone:
         return jsonify({'success': False, 'error': 'ticketId, status, and phone are required.'}), 400
 
-    # Fetch full ticket details from Firestore to build context-aware template
+    # Fetch full ticket details from Firestore for context-aware template
     try:
         ticket_doc = vendbeesdb.collection('tickets').document(ticket_id).get()
         if ticket_doc.exists:
             complaint_data = ticket_doc.to_dict()
-            # Always use the stored display ticket_id for customer-facing messages
             complaint_data['ticket_id'] = (
                 complaint_data.get('ticketId') or
                 complaint_data.get('ticket_id') or
@@ -376,22 +723,22 @@ def send_status_notification():
         else:
             complaint_data = {
                 'ticket_id': ticket_display_id,
-                'ticketId': ticket_display_id,
-                'fullName': student_name,
+                'ticketId':  ticket_display_id,
+                'fullName':  student_name,
                 'mobileNumber': phone,
                 'status': status,
             }
-    except Exception as e:
-        print(f"[WHATSAPP] Error fetching ticket doc for notification: {e}", file=sys.stderr, flush=True)
+    except Exception as exc:
+        print(f"[WA] Error fetching ticket {ticket_id} for notification: {exc}", file=sys.stderr)
         complaint_data = {
             'ticket_id': ticket_display_id,
-            'ticketId': ticket_display_id,
-            'fullName': student_name,
+            'ticketId':  ticket_display_id,
+            'fullName':  student_name,
             'mobileNumber': phone,
             'status': status,
         }
 
-    # Overlay hints from frontend if Firestore fields are missing
+    # Overlay hints from frontend when Firestore fields are missing
     if issue_type_hint and not complaint_data.get('issueType') and not complaint_data.get('issue_type'):
         complaint_data['issueType'] = issue_type_hint
     if machine_id_hint and not complaint_data.get('machineId') and not complaint_data.get('machine_id'):
@@ -402,428 +749,393 @@ def send_status_notification():
     from notification_builder import NotificationBuilder
     message = NotificationBuilder.build_notification(complaint_data, status)
     if not message:
-        return jsonify({'success': False, 'error': f'No notification message generated for status: {status}'}), 400
+        return jsonify({'success': False, 'error': f'No notification template for status: {status}'}), 400
 
-    
-    # Validate phone
     is_valid, normalized_phone, phone_error = validate_phone(phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
-    
-    # Store with 'sending' status
+
+    conv_id = _get_conversation_id(normalized_phone)
     temp_id = str(uuid.uuid4())
-    _store_outgoing_message(ticket_id, normalized_phone, message, temp_id, status='sending')
-    
-    # Send via WhatsApp
-    result = send_text_message(normalized_phone, message)
-    
+
+    result, was_template_sent, actual_message = _send_outgoing_flow(
+        ticket_id, normalized_phone, message, msg_type='text'
+    )
+
+    _store_outgoing_message(
+        ticket_id, normalized_phone, actual_message, temp_id,
+        status='sending', conversation_id=conv_id,
+        message_type='template' if was_template_sent else 'text',
+    )
+
     if result['success']:
-        whatsapp_msg_id = result.get('messageId')
+        wa_msg_id = result.get('messageId')
+        updates = {
+            'status':         'sent',
+            'deliveryStatus': 'sent',
+            'updatedAt':      admin_firestore.SERVER_TIMESTAMP,
+        }
+        if wa_msg_id:
+            updates['whatsappMessageId'] = wa_msg_id
+            updates['metaMessageId'] = wa_msg_id
+        if was_template_sent:
+            updates['originalAdminMessage'] = message
+
         vendbeesdb.collection('tickets').document(ticket_id) \
-            .collection('chats').document(temp_id).update({
-                'status': 'sent',
-                'whatsappMessageId': whatsapp_msg_id,
-            })
-        if whatsapp_msg_id:
-            _store_message_mapping(whatsapp_msg_id, ticket_id, temp_id)
-        print(f"[WHATSAPP] Notification ({status}) sent for {ticket_display_id}",
-              file=sys.stderr, flush=True)
-        return jsonify({'success': True, 'messageId': whatsapp_msg_id}), 200
+            .collection('chats').document(temp_id).update(updates)
+
+        if wa_msg_id:
+            _store_message_mapping(wa_msg_id, ticket_id, temp_id, conv_id)
+
+        _upsert_conversation(
+            normalized_phone, ticket_id, temp_id, 'admin',
+            last_message=actual_message, last_message_type='template' if was_template_sent else 'text',
+            increment_unread=False, is_template=was_template_sent
+        )
+        return jsonify({'success': True, 'messageId': wa_msg_id}), 200
     else:
         vendbeesdb.collection('tickets').document(ticket_id) \
-            .collection('chats').document(temp_id).update({'status': 'failed'})
-        error_msg = result.get('error', 'Failed to send notification.')
-        print(f"[WHATSAPP] Notification failed for {ticket_display_id}: {error_msg}",
-              file=sys.stderr, flush=True)
-        return jsonify({'success': False, 'error': error_msg}), 502
+            .collection('chats').document(temp_id).update({
+                'status': 'failed',
+                'deliveryStatus': 'failed',
+                'failedReason': result.get('error', ''),
+                'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+            })
+        return jsonify({'success': False, 'error': result.get('error', 'Failed to send notification.')}), 502
 
 
-# --------------------------------------------------
+# =============================================================================
 # WEBHOOK ENDPOINTS
-# --------------------------------------------------
+# =============================================================================
 
 @whatsapp_bp.route('/webhook/whatsapp', methods=['GET'])
 def verify_webhook():
     """
-    Webhook verification endpoint for Meta.
-    Meta sends GET with hub.mode, hub.verify_token, hub.challenge.
+    Meta webhook verification endpoint.
+    GET with hub.mode=subscribe, hub.verify_token, hub.challenge.
     """
-    mode = request.args.get('hub.mode')
-    token = request.args.get('hub.verify_token')
+    mode      = request.args.get('hub.mode')
+    token     = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
-    
-    from whatsapp_service import reload_whatsapp_config
+
     _, _, _, _, verify_token, _ = reload_whatsapp_config()
-    
+
     if mode == 'subscribe' and token == verify_token:
-        print(f"[WHATSAPP] Webhook verified successfully.", file=sys.stderr, flush=True)
+        print("[WA] Webhook verified successfully.", file=sys.stderr)
         return challenge, 200
-    else:
-        print(f"[WHATSAPP] Webhook verification failed. Token mismatch.", file=sys.stderr, flush=True)
-        return 'Forbidden', 403
+
+    print("[WA] Webhook verification failed - token mismatch.", file=sys.stderr)
+    return 'Forbidden', 403
 
 
 @whatsapp_bp.route('/webhook/whatsapp', methods=['POST'])
 def handle_webhook():
     """
     Handle incoming webhook events from Meta WhatsApp.
-    Processes incoming messages and delivery status updates.
-    Always returns 200 to acknowledge receipt (Meta requirement).
+
+    Security:
+      - Verifies X-Hub-Signature-256 before any processing.
+
+    Idempotency:
+      - Checks whatsapp_message_map before processing messages.
+
+    Always returns 200 to prevent Meta retry storm.
     """
-    payload = request.get_json()
+    # ── 1. Signature verification ──────────────────────────────────────────
+    _, _, _, _, _, _ = reload_whatsapp_config()  # loads env
+    import os
+    app_secret = os.environ.get('WHATSAPP_APP_SECRET', '')
+    signature  = request.headers.get('X-Hub-Signature-256', '')
+    raw_body   = request.get_data()
+
+    if not _verify_webhook_signature(raw_body, signature, app_secret):
+        print("[WA] Webhook rejected - invalid signature.", file=sys.stderr)
+        return 'Forbidden', 403
+
+    # ── 2. Parse payload ───────────────────────────────────────────────────
+    payload = request.get_json(force=True, silent=True)
     if not payload:
         return 'OK', 200
-    
+
     try:
         for entry in payload.get('entry', []):
             for change in entry.get('changes', []):
                 value = change.get('value', {})
-                
-                # Process incoming messages from students
+
+                # Incoming messages from students
                 for msg in value.get('messages', []):
                     _process_incoming_message(msg, value)
-                
-                # Process delivery status updates (sent/delivered/read/failed)
+
+                # Delivery/read status updates
                 for status_event in value.get('statuses', []):
                     _process_status_update(status_event)
-    except Exception as e:
-        print(f"[WHATSAPP] Webhook processing error: {e}", file=sys.stderr, flush=True)
+
+    except Exception as exc:
+        print(f"[WA] Webhook processing error: {exc}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
-    
-    # Always return 200 to prevent Meta from retrying
+
     return 'OK', 200
 
 
+# =============================================================================
+# INCOMING MESSAGE PROCESSOR
+# =============================================================================
+
 def _process_incoming_message(msg, value):
     """Process a single incoming WhatsApp message from a student."""
-    sender_phone = msg.get('from', '')
-    whatsapp_msg_id = msg.get('id', '')
-    msg_type = msg.get('type', 'text')
+    sender_phone    = msg.get('from', '')
+    wa_msg_id       = msg.get('id', '')
+    msg_type        = msg.get('type', 'text')
 
-    # Find which ticket this message belongs to (needed for media storage path)
+    # ── Idempotency check ──────────────────────────────────────────────────
+    if _is_duplicate_event(wa_msg_id):
+        print(f"[WA] Duplicate event skipped: {wa_msg_id}", file=sys.stderr)
+        return
+
+    # ── Ticket lookup ──────────────────────────────────────────────────────
     ticket_id, ticket_data = _find_ticket_by_phone(sender_phone)
 
-    # Default media metadata
-    media_url = None
-    mime_type = None
-    file_name = None
-    file_size = None
-    duration = None
-    caption = None
-    latitude = None
-    longitude = None
-    meta_media_id = None
-    storage_path = None
-    message_type = msg_type  # will be stored in Firestore as-is
-    
-    reply_to_message_id = msg.get('context', {}).get('id')
-    meta_conversation_id = value.get('metadata', {}).get('display_phone_number')
+    # Defaults
+    media_url       = None
+    mime_type       = None
+    file_name       = None
+    file_size       = None
+    duration        = None
+    caption         = None
+    latitude        = None
+    longitude       = None
+    meta_media_id   = None
+    storage_path    = None
+    message_type    = msg_type
 
-    # ------- TEXT -------
+    reply_to_msg_id = msg.get('context', {}).get('id')
+
+    # ── Per-type extraction ────────────────────────────────────────────────
+
     if msg_type == 'text':
         message_text = msg.get('text', {}).get('body', '')
 
-    # ------- IMAGE -------
     elif msg_type == 'image':
-        image_data = msg.get('image', {})
-        media_id = image_data.get('id')
-        caption = image_data.get('caption', '')
-        mime_type = image_data.get('mime_type', 'image/jpeg')
+        obj = msg.get('image', {})
+        media_id = obj.get('id')
+        caption  = obj.get('caption', '')
+        mime_type = obj.get('mime_type', 'image/jpeg')
         message_text = caption or '[Image received]'
         if media_id and ticket_id:
-            dl = download_media(media_id)
-            if dl['success']:
-                ext = get_media_extension(dl['mime_type'])
-                mime_type = dl['mime_type']
-                file_name = f"image{ext}"
-                file_size = dl['file_size']
-                upload = upload_to_firebase_storage(dl['content_bytes'], mime_type, file_name, ticket_id, 'whatsapp/student/images')
-                if upload['success']:
-                    media_url = upload['download_url']
-                    storage_path = upload.get('storage_path')
-                    meta_media_id = media_id
-                else:
-                    print(f"[WHATSAPP] Image upload failed: {upload['error']}", file=sys.stderr, flush=True)
-            else:
-                print(f"[WHATSAPP] Image download failed: {dl['error']}", file=sys.stderr, flush=True)
+            media_url, storage_path, mime_type, file_size, meta_media_id = _fetch_and_store_media(
+                media_id, ticket_id, 'student', 'images', 'image'
+            )
 
-    # ------- AUDIO -------
     elif msg_type == 'audio':
-        audio_data = msg.get('audio', {})
-        media_id = audio_data.get('id')
-        mime_type = audio_data.get('mime_type', 'audio/ogg')
-        message_text = '[Voice note received]'
+        obj = msg.get('audio', {})
+        media_id  = obj.get('id')
+        mime_type = obj.get('mime_type', 'audio/ogg')
+        # voice_note flag differentiates WhatsApp voice from regular audio
+        sub_folder = 'voice' if obj.get('voice') else 'audio'
+        message_type = 'voice' if obj.get('voice') else 'audio'
+        message_text = '[Voice note received]' if message_type == 'voice' else '[Audio received]'
         if media_id and ticket_id:
-            dl = download_media(media_id)
-            if dl['success']:
-                ext = get_media_extension(dl['mime_type'])
-                mime_type = dl['mime_type']
-                file_name = f"audio{ext}"
-                file_size = dl['file_size']
-                upload = upload_to_firebase_storage(dl['content_bytes'], mime_type, file_name, ticket_id, 'whatsapp/student/audio')
-                if upload['success']:
-                    media_url = upload['download_url']
-                    storage_path = upload.get('storage_path')
-                    meta_media_id = media_id
-                else:
-                    print(f"[WHATSAPP] Audio upload failed: {upload['error']}", file=sys.stderr, flush=True)
-            else:
-                print(f"[WHATSAPP] Audio download failed: {dl['error']}", file=sys.stderr, flush=True)
+            media_url, storage_path, mime_type, file_size, meta_media_id = _fetch_and_store_media(
+                media_id, ticket_id, 'student', sub_folder, 'audio'
+            )
 
-    # ------- VIDEO -------
     elif msg_type == 'video':
-        video_data = msg.get('video', {})
-        media_id = video_data.get('id')
-        caption = video_data.get('caption', '')
-        mime_type = video_data.get('mime_type', 'video/mp4')
+        obj = msg.get('video', {})
+        media_id  = obj.get('id')
+        caption   = obj.get('caption', '')
+        mime_type = obj.get('mime_type', 'video/mp4')
         message_text = caption or '[Video received]'
         if media_id and ticket_id:
-            dl = download_media(media_id)
-            if dl['success']:
-                ext = get_media_extension(dl['mime_type'])
-                mime_type = dl['mime_type']
-                file_name = f"video{ext}"
-                file_size = dl['file_size']
-                upload = upload_to_firebase_storage(dl['content_bytes'], mime_type, file_name, ticket_id, 'whatsapp/student/video')
-                if upload['success']:
-                    media_url = upload['download_url']
-                    storage_path = upload.get('storage_path')
-                    meta_media_id = media_id
-                else:
-                    print(f"[WHATSAPP] Video upload failed: {upload['error']}", file=sys.stderr, flush=True)
-            else:
-                print(f"[WHATSAPP] Video download failed: {dl['error']}", file=sys.stderr, flush=True)
+            media_url, storage_path, mime_type, file_size, meta_media_id = _fetch_and_store_media(
+                media_id, ticket_id, 'student', 'videos', 'video'
+            )
 
-    # ------- DOCUMENT -------
     elif msg_type == 'document':
-        doc_data = msg.get('document', {})
-        media_id = doc_data.get('id')
-        caption = doc_data.get('caption', '')
-        mime_type = doc_data.get('mime_type', 'application/pdf')
-        file_name = doc_data.get('filename', 'document')
+        obj = msg.get('document', {})
+        media_id  = obj.get('id')
+        caption   = obj.get('caption', '')
+        mime_type = obj.get('mime_type', 'application/pdf')
+        file_name = obj.get('filename', 'document')
         message_text = caption or f'[Document: {file_name}]'
         if media_id and ticket_id:
-            dl = download_media(media_id)
-            if dl['success']:
-                mime_type = dl['mime_type']
-                file_size = dl['file_size']
-                upload = upload_to_firebase_storage(dl['content_bytes'], mime_type, file_name, ticket_id, 'whatsapp/student/documents')
-                if upload['success']:
-                    media_url = upload['download_url']
-                    storage_path = upload.get('storage_path')
-                    meta_media_id = media_id
-                else:
-                    print(f"[WHATSAPP] Document upload failed: {upload['error']}", file=sys.stderr, flush=True)
-            else:
-                print(f"[WHATSAPP] Document download failed: {dl['error']}", file=sys.stderr, flush=True)
+            media_url, storage_path, mime_type, file_size, meta_media_id = _fetch_and_store_media(
+                media_id, ticket_id, 'student', 'documents', 'document',
+                original_filename=file_name,
+            )
 
-    # ------- LOCATION -------
+    elif msg_type == 'sticker':
+        obj = msg.get('sticker', {})
+        media_id  = obj.get('id')
+        mime_type = obj.get('mime_type', 'image/webp')
+        message_text = '[Sticker received]'
+        if media_id and ticket_id:
+            media_url, storage_path, mime_type, file_size, meta_media_id = _fetch_and_store_media(
+                media_id, ticket_id, 'student', 'stickers', 'sticker'
+            )
+
     elif msg_type == 'location':
-        loc = msg.get('location', {})
-        latitude = loc.get('latitude')
+        loc       = msg.get('location', {})
+        latitude  = loc.get('latitude')
         longitude = loc.get('longitude')
-        loc_name = loc.get('name', '')
-        loc_address = loc.get('address', '')
-        parts = [p for p in [loc_name, loc_address] if p]
+        loc_name  = loc.get('name', '')
+        loc_addr  = loc.get('address', '')
+        parts     = [p for p in [loc_name, loc_addr] if p]
         message_text = f"[Location: {latitude}, {longitude}]"
         if parts:
-            message_text += f" {', '.join(parts)}"
+            message_text += f" — {', '.join(parts)}"
 
-    # ------- CONTACTS -------
     elif msg_type == 'contacts':
         contacts_list = msg.get('contacts', [])
         if contacts_list:
-            contact = contacts_list[0]
-            contact_name = contact.get('name', {}).get('formatted_name', 'Unknown')
-            phones = contact.get('phones', [])
-            contact_phone = phones[0].get('phone', '') if phones else ''
-            message_text = f"[Contact: {contact_name} {contact_phone}]"
+            c = contacts_list[0]
+            c_name  = c.get('name', {}).get('formatted_name', 'Unknown')
+            c_phone = c.get('phones', [{}])[0].get('phone', '')
+            message_text = f"[Contact: {c_name} {c_phone}]"
         else:
             message_text = '[Contact received]'
 
-    # ------- REACTION -------
     elif msg_type == 'reaction':
-        message_text = f"[Reaction: {msg.get('reaction', {}).get('emoji', '')}]"
+        emoji = msg.get('reaction', {}).get('emoji', '')
+        message_text = f"[Reaction: {emoji}]"
 
-    # ------- INTERACTIVE -------
     elif msg_type == 'interactive':
         interactive = msg.get('interactive', {})
-        if interactive.get('type') == 'button_reply':
+        sub_type = interactive.get('type', '')
+        if sub_type == 'button_reply':
             message_text = interactive.get('button_reply', {}).get('title', '[Button reply]')
-        elif interactive.get('type') == 'list_reply':
+        elif sub_type == 'list_reply':
             message_text = interactive.get('list_reply', {}).get('title', '[List reply]')
         else:
             message_text = '[Interactive message]'
 
-    # ------- UNKNOWN -------
     else:
         message_text = f'[{msg_type} message]'
 
-    # Store the message if a ticket was found
+    # ── Store if ticket found ──────────────────────────────────────────────
     if ticket_id:
-        chat_doc_id = _store_incoming_message(
-            ticket_id, sender_phone, message_text, whatsapp_msg_id,
-            message_type=message_type, media_url=media_url,
-            mime_type=mime_type, file_name=file_name,
-            file_size=file_size, duration=duration, caption=caption,
-            latitude=latitude, longitude=longitude,
-            reply_to_message_id=reply_to_message_id,
-            meta_conversation_id=meta_conversation_id,
-            meta_media_id=meta_media_id,
-            storage_path=storage_path
-        )
-        # Store message ID mapping so webhook status events can update this message
-        if whatsapp_msg_id and chat_doc_id:
-            _store_message_mapping(whatsapp_msg_id, ticket_id, chat_doc_id)
-        # Update conversation mapping using both full and short phone formats for fast future lookups
-        _update_conversation_mapping(sender_phone, ticket_id,
-                                     whatsapp_msg_id or str(uuid.uuid4()), 'student')
-        print(f"[WHATSAPP] Incoming {msg_type} from {sender_phone} stored for ticket {ticket_id} (chatDocId={chat_doc_id})",
-              file=sys.stderr, flush=True)
-    else:
-        print(f"[WHATSAPP] No ticket found for phone {sender_phone}. Message NOT stored.",
-              file=sys.stderr, flush=True)
-
-
-def _process_status_update(status_event):
-    """Process a delivery status update (sent/delivered/read/failed) from Meta."""
-    whatsapp_msg_id = status_event.get('id', '')
-    status = status_event.get('status', '')
-    
-    status_mapping = {
-        'sent': 'sent',
-        'delivered': 'delivered',
-        'read': 'read',
-        'failed': 'failed',
-    }
-    
-    mapped_status = status_mapping.get(status)
-    if mapped_status and whatsapp_msg_id:
-        _update_message_status(whatsapp_msg_id, mapped_status)
-
-
-# --------------------------------------------------
-# CONVERSATION MAPPING HELPER
-# --------------------------------------------------
-
-def _update_conversation_mapping(phone, ticket_id, doc_id, sender, ticket_data=None):
-    """
-    Write to the new production 'whatsappConversations' collection.
-    Document ID = UUID (never a phone number).
-    Indexed by studentPhone for fast lookup in _find_ticket_by_phone.
-    Also upserts the legacy 'whatsapp_conversations' collection for
-    backward compatibility during the migration window.
-    """
-    digits = ''.join(c for c in str(phone) if c.isdigit())
-    # Local 10-digit form
-    local_phone = digits[-10:] if len(digits) >= 10 else digits
-
-    # Extract student name from ticket_data if provided
-    student_name = ''
-    if ticket_data:
         student_name = (
             ticket_data.get('fullName') or
             ticket_data.get('studentName') or
-            ticket_data.get('student', {}).get('name', '') or
-            ''
+            'Student'
+        ) if ticket_data else 'Student'
+
+        conv_id = _upsert_conversation(
+            sender_phone, ticket_id, wa_msg_id, 'student',
+            last_message=message_text,
+            last_message_type=message_type,
+            ticket_data=ticket_data,
+            increment_unread=True,
         )
 
-    # ── New collection: whatsappConversations (UUID doc IDs) ──────────────
-    # Check if a document for this phone already exists
-    new_payload = {
-        'ticketId': ticket_id,
-        'studentPhone': local_phone,
-        'studentPhoneFull': digits,
-        'studentName': student_name,
-        'lastMessageId': doc_id,
-        'lastMessageAt': admin_firestore.SERVER_TIMESTAMP,
-        'lastSender': sender,
-        'updatedAt': admin_firestore.SERVER_TIMESTAMP,
-    }
-    try:
-        # Try to find existing conversation doc for this phone
-        existing = list(
-            vendbeesdb.collection('whatsappConversations')
-            .where('studentPhone', '==', local_phone)
-            .limit(1)
-            .get()
+        chat_doc_id = _store_incoming_message(
+            ticket_id=ticket_id,
+            conversation_id=conv_id,
+            phone=sender_phone,
+            student_name=student_name,
+            message=message_text,
+            whatsapp_message_id=wa_msg_id,
+            message_type=message_type,
+            media_url=media_url,
+            mime_type=mime_type,
+            file_name=file_name,
+            file_size=file_size,
+            duration=duration,
+            caption=caption,
+            latitude=latitude,
+            longitude=longitude,
+            reply_to_message_id=reply_to_msg_id,
+            meta_media_id=meta_media_id,
+            storage_path=storage_path,
         )
-        if existing:
-            # Update existing document
-            vendbeesdb.collection('whatsappConversations').document(existing[0].id).set(
-                new_payload, merge=True
-            )
-        else:
-            # Create new document with UUID
-            conv_id = str(uuid.uuid4())
-            new_payload['conversationId'] = conv_id
-            new_payload['createdAt'] = admin_firestore.SERVER_TIMESTAMP
-            new_payload['status'] = 'active'
-            vendbeesdb.collection('whatsappConversations').document(conv_id).set(new_payload)
-    except Exception as e:
-        print(f"[WHATSAPP] Error updating whatsappConversations for {local_phone}: {e}", file=sys.stderr, flush=True)
 
-    # ── Legacy collection: whatsapp_conversations (phone as doc ID) ───────
-    # Keep writing here so existing fast-path lookups still work
-    legacy_payload = {
-        'phone': digits,
-        'ticketId': ticket_id,
-        'lastMessageId': doc_id,
-        'lastMessageAt': admin_firestore.SERVER_TIMESTAMP,
-        'lastSender': sender,
-    }
-    for fmt in {digits, local_phone}:
-        try:
-            vendbeesdb.collection('whatsapp_conversations').document(fmt).set(legacy_payload, merge=True)
-        except Exception as e:
-            print(f"[WHATSAPP] Error updating legacy conversation mapping for {fmt}: {e}", file=sys.stderr, flush=True)
+        if wa_msg_id and chat_doc_id:
+            _store_message_mapping(wa_msg_id, ticket_id, chat_doc_id, conv_id)
+
+        print(
+            f"[WA] Incoming {msg_type} from {sender_phone} → ticket {ticket_id} "
+            f"(docId={chat_doc_id})",
+            file=sys.stderr,
+        )
+    else:
+        print(f"[WA] No ticket for phone {sender_phone}. Message not stored.", file=sys.stderr)
 
 
-# --------------------------------------------------
-# OUTGOING MEDIA MESSAGE HELPER
-# --------------------------------------------------
+# =============================================================================
+# MEDIA HELPER
+# =============================================================================
 
-def _store_outgoing_media_message(ticket_id, phone, message, doc_id,
-                                  message_type='image', media_url=None,
-                                  mime_type=None, file_name=None,
-                                  file_size=None, caption=None, status='sent',
-                                  storage_path=None):
-    """Store an outgoing (admin) media message in tickets/{ticketId}/chats/{docId}."""
-    doc_data = _build_chat_doc(
-        message_id=doc_id,
-        ticket_id=ticket_id,
-        sender_type='admin',
-        sender_phone=None,
-        message=message,
-        message_type=message_type,
-        status=status,
-        whatsapp_message_id=None,
-        media_url=media_url,
-        storage_path=storage_path,
-        mime_type=mime_type,
-        file_name=file_name,
-        file_size=file_size,
-        caption=caption
+def _fetch_and_store_media(
+    media_id, ticket_id, sender_dir, sub_folder, file_prefix,
+    original_filename=None,
+):
+    """
+    Download media from Meta and upload to Firebase Storage.
+    Storage path: whatsapp/{ticketId}/{sender_dir}/{sub_folder}/
+    Returns (media_url, storage_path, mime_type, file_size, meta_media_id).
+    """
+    dl = download_media(media_id)
+    if not dl['success']:
+        print(f"[WA] Media download failed ({media_id}): {dl['error']}", file=sys.stderr)
+        return None, None, None, None, media_id
+
+    mime = dl['mime_type']
+    if mime not in ALLOWED_MIME_TYPES:
+        print(f"[WA] Rejected media MIME type: {mime}", file=sys.stderr)
+        return None, None, mime, None, media_id
+
+    ext       = get_media_extension(mime)
+    file_name = original_filename or f"{file_prefix}{ext}"
+    category  = f"whatsapp/{sender_dir}/{sub_folder}"
+
+    upload = upload_to_firebase_storage(
+        dl['content_bytes'], mime, file_name, ticket_id, category
     )
-    vendbeesdb.collection('tickets').document(ticket_id) \
-        .collection('chats').document(doc_id).set(doc_data)
-    return doc_id
+    if not upload['success']:
+        print(f"[WA] Storage upload failed: {upload['error']}", file=sys.stderr)
+        return None, None, mime, dl['file_size'], media_id
+
+    return (
+        upload['download_url'],
+        upload['storage_path'],
+        mime,
+        dl['file_size'],
+        media_id,
+    )
 
 
-# --------------------------------------------------
-# MEDIA API ENDPOINTS
-# --------------------------------------------------
+# =============================================================================
+# STATUS UPDATE PROCESSOR
+# =============================================================================
+
+def _process_status_update(status_event):
+    """Process a delivery/read/failed status update event from Meta."""
+    wa_msg_id = status_event.get('id', '')
+    status    = status_event.get('status', '')
+    errors    = status_event.get('errors', [])
+
+    failed_reason = None
+    if errors:
+        err = errors[0]
+        failed_reason = f"[{err.get('code')}] {err.get('title', '')} — {err.get('message', '')}"
+
+    mapped = _META_STATUS_MAP.get(status)
+    if mapped and wa_msg_id:
+        _update_message_status(wa_msg_id, mapped, failed_reason=failed_reason)
+
+
+# =============================================================================
+# OUTGOING MEDIA ENDPOINTS
+# =============================================================================
 
 @whatsapp_bp.route('/api/whatsapp/send-image', methods=['POST'])
 def send_image():
     """
     Send an image via WhatsApp.
-    Request (multipart/form-data): ticketId, phone, caption (optional), image (file)
-    Response: { success, messageId } or { success: false, error }
+    Multipart: ticketId, phone, caption (optional), image (file)
     """
     ticket_id = request.form.get('ticketId')
-    phone = request.form.get('phone')
-    caption = request.form.get('caption', '')
+    phone     = request.form.get('phone')
+    caption   = request.form.get('caption', '')
 
     if not ticket_id:
         return jsonify({'success': False, 'error': 'ticketId is required.'}), 400
@@ -834,74 +1146,103 @@ def send_image():
     if not image_file or not image_file.filename:
         return jsonify({'success': False, 'error': 'image file is required.'}), 400
 
-    # Validate phone
     is_valid, normalized_phone, phone_error = validate_phone(phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
 
-    # Validate MIME type
     content_type = image_file.content_type or 'application/octet-stream'
     if content_type not in ALLOWED_MIME_TYPES:
         return jsonify({'success': False, 'error': f'File type {content_type} is not allowed.'}), 400
+    if not content_type.startswith('image/'):
+        return jsonify({'success': False, 'error': 'Only image files are accepted on this endpoint.'}), 400
 
     try:
         file_bytes = image_file.read()
-        filename = image_file.filename
+        filename   = image_file.filename
 
-        # Upload to Firebase Storage under organized admin/images path
-        upload_result = upload_to_firebase_storage(file_bytes, content_type, filename, ticket_id, 'whatsapp/admin/images')
+        upload_result = upload_to_firebase_storage(
+            file_bytes, content_type, filename, ticket_id, 'whatsapp/admin/images'
+        )
         if not upload_result['success']:
             return jsonify({'success': False, 'error': upload_result['error']}), 500
 
         public_url = upload_result['download_url']
+        conv_id    = _get_conversation_id(normalized_phone)
+        temp_id    = str(uuid.uuid4())
 
-        # Store message with 'sending' status
-        temp_id = str(uuid.uuid4())
-        _store_outgoing_media_message(
-            ticket_id, normalized_phone, caption or '[Image]', temp_id,
-            message_type='image', media_url=public_url,
-            mime_type=content_type, file_name=filename,
-            file_size=upload_result['file_size'], caption=caption,
-            status='sending',
-            storage_path=upload_result.get('storage_path')
+        # Call outgoing flow to determine if image should be sent or converted to template
+        result, was_template_sent, actual_message = _send_outgoing_flow(
+            ticket_id, normalized_phone, caption or '[Image]',
+            msg_type='image', media_url=public_url, caption=caption
         )
-        # Send via WhatsApp Cloud API
-        result = send_image_message(normalized_phone, public_url, caption)
+
+        if was_template_sent:
+            _store_outgoing_message(
+                ticket_id, normalized_phone, actual_message, temp_id,
+                status='sending', conversation_id=conv_id,
+                message_type='template',
+            )
+        else:
+            _store_outgoing_message(
+                ticket_id, normalized_phone, caption or '[Image]', temp_id,
+                message_type='image', media_url=public_url,
+                mime_type=content_type, file_name=filename,
+                file_size=upload_result['file_size'], caption=caption,
+                status='sending', storage_path=upload_result.get('storage_path'),
+                conversation_id=conv_id,
+            )
 
         if result['success']:
-            whatsapp_msg_id = result.get('messageId')
+            wa_msg_id = result.get('messageId')
+            updates = {
+                'status':          'sent',
+                'deliveryStatus':  'sent',
+                'updatedAt':       admin_firestore.SERVER_TIMESTAMP,
+            }
+            if wa_msg_id:
+                updates['whatsappMessageId'] = wa_msg_id
+                updates['metaMessageId'] = wa_msg_id
+            if was_template_sent:
+                updates['originalAdminMessage'] = caption or '[Image]'
+                updates['originalMediaUrl'] = public_url
+
             vendbeesdb.collection('tickets').document(ticket_id) \
-                .collection('chats').document(temp_id).update({
-                    'status': 'sent',
-                    'whatsappMessageId': whatsapp_msg_id,
-                })
-            if whatsapp_msg_id:
-                _store_message_mapping(whatsapp_msg_id, ticket_id, temp_id)
-            _update_conversation_mapping(normalized_phone, ticket_id, temp_id, 'admin')
-            print(f"[WHATSAPP] Image sent to {normalized_phone} for ticket {ticket_id}",
-                  file=sys.stderr, flush=True)
-            return jsonify({'success': True, 'messageId': whatsapp_msg_id}), 200
+                .collection('chats').document(temp_id).update(updates)
+
+            if wa_msg_id:
+                _store_message_mapping(wa_msg_id, ticket_id, temp_id, conv_id)
+
+            _upsert_conversation(
+                normalized_phone, ticket_id, temp_id, 'admin',
+                last_message=actual_message,
+                last_message_type='template' if was_template_sent else 'image',
+                increment_unread=False, is_template=was_template_sent
+            )
+            return jsonify({'success': True, 'messageId': wa_msg_id}), 200
         else:
             vendbeesdb.collection('tickets').document(ticket_id) \
-                .collection('chats').document(temp_id).update({'status': 'failed'})
+                .collection('chats').document(temp_id).update({
+                    'status': 'failed',
+                    'deliveryStatus': 'failed',
+                    'failedReason': result.get('error', ''),
+                    'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+                })
             return jsonify({'success': False, 'error': result.get('error', 'Failed to send image.')}), 502
 
-    except Exception as e:
-        print(f"[WHATSAPP] send-image error: {e}", file=sys.stderr, flush=True)
-        traceback.print_exc(file=sys.stderr)
-        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
+    except Exception as exc:
+        print(f"[WA] send-image error: {exc}", file=sys.stderr)
+        return jsonify({'success': False, 'error': f'Server error: {str(exc)}'}), 500
 
 
 @whatsapp_bp.route('/api/whatsapp/send-document', methods=['POST'])
 def send_document():
     """
     Send a document via WhatsApp.
-    Request (multipart/form-data): ticketId, phone, caption (optional), document (file)
-    Response: { success, messageId } or { success: false, error }
+    Multipart: ticketId, phone, caption (optional), document (file)
     """
     ticket_id = request.form.get('ticketId')
-    phone = request.form.get('phone')
-    caption = request.form.get('caption', '')
+    phone     = request.form.get('phone')
+    caption   = request.form.get('caption', '')
 
     if not ticket_id:
         return jsonify({'success': False, 'error': 'ticketId is required.'}), 400
@@ -912,68 +1253,97 @@ def send_document():
     if not doc_file or not doc_file.filename:
         return jsonify({'success': False, 'error': 'document file is required.'}), 400
 
-    # Validate phone
     is_valid, normalized_phone, phone_error = validate_phone(phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
 
-    # Validate MIME type
     content_type = doc_file.content_type or 'application/octet-stream'
     if content_type not in ALLOWED_MIME_TYPES:
         return jsonify({'success': False, 'error': f'File type {content_type} is not allowed.'}), 400
 
     try:
         file_bytes = doc_file.read()
-        filename = doc_file.filename
+        filename   = doc_file.filename
 
-        # Upload to Firebase Storage under organized admin/documents path
-        upload_result = upload_to_firebase_storage(file_bytes, content_type, filename, ticket_id, 'whatsapp/admin/documents')
+        upload_result = upload_to_firebase_storage(
+            file_bytes, content_type, filename, ticket_id, 'whatsapp/admin/documents'
+        )
         if not upload_result['success']:
             return jsonify({'success': False, 'error': upload_result['error']}), 500
 
         public_url = upload_result['download_url']
+        conv_id    = _get_conversation_id(normalized_phone)
+        temp_id    = str(uuid.uuid4())
 
-        # Store message with 'sending' status
-        temp_id = str(uuid.uuid4())
-        _store_outgoing_media_message(
-            ticket_id, normalized_phone, caption or f'[Document: {filename}]', temp_id,
-            message_type='document', media_url=public_url,
-            mime_type=content_type, file_name=filename,
-            file_size=upload_result['file_size'], caption=caption,
-            status='sending',
-            storage_path=upload_result.get('storage_path')
+        # Call outgoing flow to determine if document should be sent or converted to template
+        result, was_template_sent, actual_message = _send_outgoing_flow(
+            ticket_id, normalized_phone, caption or f'[Document: {filename}]',
+            msg_type='document', media_url=public_url, filename=filename, caption=caption
         )
-        result = send_document_message(normalized_phone, public_url, filename, caption)
+
+        if was_template_sent:
+            _store_outgoing_message(
+                ticket_id, normalized_phone, actual_message, temp_id,
+                status='sending', conversation_id=conv_id,
+                message_type='template',
+            )
+        else:
+            _store_outgoing_message(
+                ticket_id, normalized_phone, caption or f'[Document: {filename}]', temp_id,
+                message_type='document', media_url=public_url,
+                mime_type=content_type, file_name=filename,
+                file_size=upload_result['file_size'], caption=caption,
+                status='sending', storage_path=upload_result.get('storage_path'),
+                conversation_id=conv_id,
+            )
 
         if result['success']:
-            whatsapp_msg_id = result.get('messageId')
+            wa_msg_id = result.get('messageId')
+            updates = {
+                'status':         'sent',
+                'deliveryStatus': 'sent',
+                'updatedAt':      admin_firestore.SERVER_TIMESTAMP,
+            }
+            if wa_msg_id:
+                updates['whatsappMessageId'] = wa_msg_id
+                updates['metaMessageId'] = wa_msg_id
+            if was_template_sent:
+                updates['originalAdminMessage'] = caption or f'[Document: {filename}]'
+                updates['originalMediaUrl'] = public_url
+
             vendbeesdb.collection('tickets').document(ticket_id) \
-                .collection('chats').document(temp_id).update({
-                    'status': 'sent',
-                    'whatsappMessageId': whatsapp_msg_id,
-                })
-            if whatsapp_msg_id:
-                _store_message_mapping(whatsapp_msg_id, ticket_id, temp_id)
-            _update_conversation_mapping(normalized_phone, ticket_id, temp_id, 'admin')
-            print(f"[WHATSAPP] Document sent to {normalized_phone} for ticket {ticket_id}",
-                  file=sys.stderr, flush=True)
-            return jsonify({'success': True, 'messageId': whatsapp_msg_id}), 200
+                .collection('chats').document(temp_id).update(updates)
+
+            if wa_msg_id:
+                _store_message_mapping(wa_msg_id, ticket_id, temp_id, conv_id)
+
+            _upsert_conversation(
+                normalized_phone, ticket_id, temp_id, 'admin',
+                last_message=actual_message,
+                last_message_type='template' if was_template_sent else 'document',
+                increment_unread=False, is_template=was_template_sent
+            )
+            return jsonify({'success': True, 'messageId': wa_msg_id}), 200
         else:
             vendbeesdb.collection('tickets').document(ticket_id) \
-                .collection('chats').document(temp_id).update({'status': 'failed'})
+                .collection('chats').document(temp_id).update({
+                    'status': 'failed',
+                    'deliveryStatus': 'failed',
+                    'failedReason': result.get('error', ''),
+                    'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+                })
             return jsonify({'success': False, 'error': result.get('error', 'Failed to send document.')}), 502
 
-    except Exception as e:
-        print(f"[WHATSAPP] send-document error: {e}", file=sys.stderr, flush=True)
-        traceback.print_exc(file=sys.stderr)
-        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
+    except Exception as exc:
+        print(f"[WA] send-document error: {exc}", file=sys.stderr)
+        return jsonify({'success': False, 'error': f'Server error: {str(exc)}'}), 500
 
 
 @whatsapp_bp.route('/api/whatsapp/upload-media', methods=['POST'])
 def upload_media():
     """
-    Upload a media file to Firebase Storage (no WhatsApp send).
-    Request (multipart/form-data): ticketId, file
+    Upload a media file to Firebase Storage (does not send via WhatsApp).
+    Multipart: ticketId, file
     Response: { success, downloadUrl, fileName, fileSize, mimeType }
     """
     ticket_id = request.form.get('ticketId')
@@ -990,35 +1360,35 @@ def upload_media():
 
     try:
         file_bytes = media_file.read()
-        filename = media_file.filename
+        filename   = media_file.filename
 
-        upload_result = upload_to_firebase_storage(file_bytes, content_type, filename, ticket_id)
+        upload_result = upload_to_firebase_storage(
+            file_bytes, content_type, filename, ticket_id, 'whatsapp/admin/misc'
+        )
         if not upload_result['success']:
             return jsonify({'success': False, 'error': upload_result['error']}), 500
 
         return jsonify({
-            'success': True,
+            'success':     True,
             'downloadUrl': upload_result['download_url'],
-            'fileName': filename,
-            'fileSize': upload_result['file_size'],
-            'mimeType': content_type,
+            'fileName':    filename,
+            'fileSize':    upload_result['file_size'],
+            'mimeType':    content_type,
         }), 200
 
-    except Exception as e:
-        print(f"[WHATSAPP] upload-media error: {e}", file=sys.stderr, flush=True)
-        traceback.print_exc(file=sys.stderr)
-        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
+    except Exception as exc:
+        print(f"[WA] upload-media error: {exc}", file=sys.stderr)
+        return jsonify({'success': False, 'error': f'Server error: {str(exc)}'}), 500
 
 
-# --------------------------------------------------
+# =============================================================================
 # INTERNAL NOTES ENDPOINT
-# --------------------------------------------------
+# =============================================================================
 
 @whatsapp_bp.route('/api/whatsapp/internal-note', methods=['POST'])
 def add_internal_note():
     """
-    Store an internal admin note in the ticket chat.
-    This is never sent to WhatsApp — it only lives in Firestore.
+    Store an internal admin note in the ticket chat (never sent to WhatsApp).
     Request:  { ticketId, note }
     Response: { success, noteId }
     """
@@ -1027,7 +1397,7 @@ def add_internal_note():
         return jsonify({'success': False, 'error': 'Request body is required.'}), 400
 
     ticket_id = data.get('ticketId')
-    note = data.get('note')
+    note      = data.get('note', '').strip()
 
     if not ticket_id:
         return jsonify({'success': False, 'error': 'ticketId is required.'}), 400
@@ -1036,25 +1406,47 @@ def add_internal_note():
 
     try:
         doc_id = str(uuid.uuid4())
+        now = admin_firestore.SERVER_TIMESTAMP
         doc_data = {
-            'messageId': doc_id,
-            'ticketId': ticket_id,
-            'sender': 'admin',
-            'senderType': 'internal',
-            'message': note,
-            'timestamp': admin_firestore.SERVER_TIMESTAMP,
-            'status': 'stored',
+            'messageId':         doc_id,
+            'ticketId':          ticket_id,
+            'conversationId':    None,
+            'senderType':        'internal',
+            'sender':            'internal',
+            'senderPhone':       None,
+            'receiver':          None,
+            'receiverPhone':     None,
+            'message':           note,
+            'text':              note,
+            'messageType':       'note',
+            'caption':           None,
+            'mediaType':         None,
+            'firebaseStoragePath': None,
+            'firebaseDownloadUrl': None,
+            'mediaUrl':          None,
+            'storagePath':       None,
+            'mimeType':          None,
+            'fileName':          None,
+            'fileSize':          None,
+            'duration':          None,
             'whatsappMessageId': None,
-            'messageType': 'note',
+            'metaMessageId':     None,
+            'metaMediaId':       None,
+            'replyToMessageId':  None,
+            'latitude':          None,
+            'longitude':         None,
+            'status':            'stored',
+            'deliveryStatus':    'stored',
+            'readStatus':        'read',
+            'failedReason':      None,
+            'createdAt':         now,
+            'updatedAt':         now,
+            'timestamp':         now,
         }
         vendbeesdb.collection('tickets').document(ticket_id) \
             .collection('chats').document(doc_id).set(doc_data)
-
-        print(f"[WHATSAPP] Internal note added for ticket {ticket_id}",
-              file=sys.stderr, flush=True)
         return jsonify({'success': True, 'noteId': doc_id}), 200
 
-    except Exception as e:
-        print(f"[WHATSAPP] internal-note error: {e}", file=sys.stderr, flush=True)
-        traceback.print_exc(file=sys.stderr)
-        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
+    except Exception as exc:
+        print(f"[WA] internal-note error: {exc}", file=sys.stderr)
+        return jsonify({'success': False, 'error': f'Server error: {str(exc)}'}), 500
