@@ -39,13 +39,15 @@ export const DataProvider = ({ children }) => {
     // Use the local Firebase backend running on port 3002 for development
     // Production uses the VITE_API_URL from environment, defaults to Cloud Run backend
     const isLocalhost = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' || 
+        window.location.hostname === 'localhost' ||
         window.location.hostname === '127.0.0.1' ||
         window.location.hostname.startsWith('192.168')
     );
-    const API_URL = isLocalhost 
-        ? 'http://localhost:3002/api'
-        : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
+    // const API_URL = isLocalhost 
+    //     ? 'http://localhost:3002/api'
+    //     : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
+
+    const API_URL = (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
     const fetchData = async () => {
         try {
             console.log('DataContext: Starting fetch from', API_URL);
@@ -178,7 +180,7 @@ export const DataProvider = ({ children }) => {
                 const unitsSold = parseInt(rp.unitsSold || 0) || 0;
                 // Calculate sale rate: (unitsSold / unitsPurchased) * 100, or 0 if no units purchased
                 const calculatedRate = unitsPurchased > 0 ? Math.round((unitsSold / unitsPurchased) * 100) : 0;
-                
+
                 return {
                     recentProductId: rp.recentProductId,
                     productId: rp.productId,
@@ -303,7 +305,7 @@ export const DataProvider = ({ children }) => {
                     }
                     return String(val).trim();
                 };
-                
+
                 return {
                     Batch: getCleanValue('Batch', 'Batch_Number'),
                     Date: String(s.Date || s.Created_Date || '').trim(),
@@ -338,7 +340,7 @@ export const DataProvider = ({ children }) => {
                 // OR if it has Batch/Stock_ID (for compatibility with old format)
                 return s.product_id || s.Batch || s.Stock_ID;
             });
-            
+
             if (stocks.length > 0) {
                 console.log('✔ Loaded stocks from Stocks sheet:', stocks.length, 'rows');
                 stocks.slice(0, 10).forEach((s, idx) => {
@@ -566,8 +568,8 @@ export const DataProvider = ({ children }) => {
             const res = await fetch(`${API_URL}/warehouse/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    product_id: productId, 
+                body: JSON.stringify({
+                    product_id: productId,
                     product_name: productName,
                     units_received: unitsReceived,
                     units_per_case: unitsPerCase,
@@ -646,7 +648,7 @@ export const DataProvider = ({ children }) => {
             const res = await fetch(`${API_URL}/stocks/create-from-warehouse`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     stock_name: stockName,
                     machine_id: machineId,
                     products: products
@@ -668,7 +670,7 @@ export const DataProvider = ({ children }) => {
             const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
             const res = await fetch(`${API_URL}/create-multi-po`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': authToken ? `Bearer ${authToken}` : ''
                 },
@@ -864,7 +866,7 @@ export const DataProvider = ({ children }) => {
         try {
             // Get current stocks data
             const currentStocks = data.stocks || [];
-            
+
             // For each stock batch, check if total units are zero and status is still Active
             for (const stock of currentStocks) {
                 if (stock.Total_Units === 0 && stock.Status === 'Active') {
@@ -882,13 +884,13 @@ export const DataProvider = ({ children }) => {
     };
 
     return (
-        <DataContext.Provider value={{ 
-            ...data, 
-            loading, 
-            error, 
-            sellProduct, 
-            refillProduct, 
-            updateStock, 
+        <DataContext.Provider value={{
+            ...data,
+            loading,
+            error,
+            sellProduct,
+            refillProduct,
+            updateStock,
             addToWarehouse,
             transferFromWarehouse,
             updateWarehouseItem,
@@ -906,7 +908,7 @@ export const DataProvider = ({ children }) => {
             getStockProducts,
             updateStockStatus,
             checkAndUpdateStockStatuses,
-            refreshData 
+            refreshData
         }}>
             {children}
         </DataContext.Provider>
