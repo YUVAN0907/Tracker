@@ -7,7 +7,7 @@ import {
 import { db } from '../firebase';
 import { 
   collection, query, orderBy, limit, onSnapshot, 
-  getDocs, startAfter
+  getDocs, startAfter, doc, getDoc
 } from 'firebase/firestore';
 import Picker from '@emoji-mart/react';
 import data from '@emoji-mart/data';
@@ -63,10 +63,36 @@ const WhatsAppConversationCenter = ({ complaint, onClose, onMinimize }) => {
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
 
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+
   const ticketId = complaint?.id;
-  const studentPhone = complaint?.student?.phone || complaint?.mobileNumber;
+  const rawPhone = complaint?.student?.phone || complaint?.mobileNumber;
+  const studentPhone = whatsappPhone || rawPhone;
   const studentName = complaint?.student?.name || complaint?.fullName || 'Student';
   const ticketDisplayId = complaint?.ticket_id || complaint?.ticketId || 'N/A';
+
+  useEffect(() => {
+    if (!rawPhone || rawPhone === 'N/A') {
+      setWhatsappPhone('N/A');
+      return;
+    }
+    const fetchStudent = async () => {
+      try {
+        const userRef = doc(db, 'students', rawPhone.replace(/\D/g, '').slice(-10));
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setWhatsappPhone(data.whatsappNumber || data.mobileNumber || rawPhone);
+        } else {
+          setWhatsappPhone(rawPhone);
+        }
+      } catch (err) {
+        console.error("Error fetching student details for conversation center:", err);
+        setWhatsappPhone(rawPhone);
+      }
+    };
+    fetchStudent();
+  }, [rawPhone]);
 
   // Quick reply list
   const QUICK_REPLIES = [

@@ -123,7 +123,7 @@ service cloud.firestore {
     //        Client-side writes are blocked — all updates go through Flask.
     match /whatsappConversations/{conversationId} {
       allow read:  if request.auth != null;
-      allow write: if false;  // Flask backend writes via Admin SDK (bypasses rules)
+      allow write: if request.auth != null;
     }
 
     // WhatsApp message ID → ticket/chat mapping for idempotency & status tracking

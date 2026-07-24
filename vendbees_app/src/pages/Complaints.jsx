@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import Header from '../components/Header';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { 
     MessageSquare, Clock, CheckCircle2, AlertCircle, Search, Filter, 
     Download, ExternalLink, User, Phone, Hash, Calendar, ChevronRight, X, 
@@ -14,6 +15,7 @@ import html2pdf from 'html2pdf.js';
 import { normalizeTicket, normalizeFeedback, toSafeDate, buildExportData, generateCSV, generatePDFHtml, filterByDateRange } from '../utils/complaintHelpers';
 import WhatsAppChatDrawer from '../components/WhatsAppChatDrawer';
 import { sendStatusNotification } from '../utils/whatsappApi';
+import { useWhatsAppNotifications } from '../context/WhatsAppNotificationContext';
 
 
 const STATUS_COLORS = {
@@ -289,6 +291,8 @@ const Timeline = ({ complaint }) => {
 
 // --- MAIN PAGE ---
 const Complaints = () => {
+    const location = useLocation();
+    const { markTicketRead } = useWhatsAppNotifications();
     const [tickets, setTickets] = useState([]);
     const [feedbacks, setFeedbacks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -297,10 +301,36 @@ const Complaints = () => {
     const [previewImage, setPreviewImage] = useState(null);
     const [exporting, setExporting] = useState(false);
 
+    const [selectedStudentData, setSelectedStudentData] = useState(null);
+
     useEffect(() => {
         if (!selectedComplaint) {
             setShowWhatsAppChat(false);
         }
+    }, [selectedComplaint]);
+
+    useEffect(() => {
+        if (!selectedComplaint || !selectedComplaint.student?.phone || selectedComplaint.student.phone === 'N/A') {
+            setSelectedStudentData(null);
+            return;
+        }
+
+        const fetchStudent = async () => {
+            try {
+                const userRef = doc(db, 'students', selectedComplaint.student.phone.replace(/\D/g, '').slice(-10));
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    setSelectedStudentData(userSnap.data());
+                } else {
+                    setSelectedStudentData(null);
+                }
+            } catch (err) {
+                console.error("Error fetching student details for display:", err);
+                setSelectedStudentData(null);
+            }
+        };
+
+        fetchStudent();
     }, [selectedComplaint]);
     
     // Filters
@@ -374,6 +404,29 @@ const Complaints = () => {
             unsubFeedbacks();
         };
     }, []);
+
+    // ── Auto-open complaint + chat drawer from Notifications page click ──────
+    // Reads React Router location.state: { openTicket: <firestoreDocId>, openChat: true }
+    // Waits until tickets are loaded before trying to find and select the complaint.
+    useEffect(() => {
+        if (loading) return;
+        const state = location.state;
+        if (!state?.openTicket) return;
+
+        const allLoaded = [...tickets, ...feedbacks];
+        const target = allLoaded.find((c) => c.id === state.openTicket);
+        if (target) {
+            setSelectedComplaint(target);
+            if (state.openChat) {
+                setShowWhatsAppChat(true);
+            }
+            // Mark all WhatsApp notifications for this ticket as read
+            markTicketRead(state.openTicket);
+            // Clear state so refreshing the page does not re-trigger
+            window.history.replaceState({}, '');
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, tickets, feedbacks]);
 
     const allComplaints = useMemo(() => {
         const combined = [...tickets, ...feedbacks];
@@ -854,6 +907,12 @@ const Complaints = () => {
                                             <div>
                                                 <p className="text-[10px] text-slate-400 font-black tracking-widest mb-2 uppercase">Mobile Number</p>
                                                 <p className="text-base font-bold text-slate-800">{selectedComplaint.student?.phone || 'N/A'}</p>
+                                                {selectedStudentData?.whatsappNumber && selectedStudentData.whatsappNumber !== selectedComplaint.student?.phone && (
+                                                    <div className="mt-4">
+                                                        <p className="text-[10px] text-slate-400 font-black tracking-widest mb-2 uppercase">WhatsApp Number</p>
+                                                        <p className="text-base font-bold text-slate-800">{selectedStudentData.whatsappNumber}</p>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div>
                                                 <p className="text-[10px] text-slate-400 font-black tracking-widest mb-2 uppercase">Register Number</p>

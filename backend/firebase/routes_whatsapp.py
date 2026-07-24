@@ -211,6 +211,96 @@ def _store_message_mapping(whatsapp_message_id, ticket_id, chat_doc_id, conversa
     })
 
 
+def _create_whatsapp_notification(
+    ticket_id, ticket_data, sender_phone, message_text, wa_msg_id, message_type='text'
+):
+    """
+    Create a notification document in whatsapp_notifications collection
+    when a new incoming student WhatsApp message is received.
+
+    Stores both mobileNumber (registered, the doc ID) and whatsappNumber
+    (the actual WhatsApp number used to send, which may differ).
+    Uses wa_msg_id as the document ID for idempotency.
+    """
+    if not ticket_id or not ticket_data:
+        return
+
+    # Document ID = whatsapp_message_id for idempotency (safe to call multiple times)
+    doc_id = wa_msg_id or str(uuid.uuid4())
+
+    # Resolve phone numbers
+    # sender_phone is the WhatsApp number used (may include country code)
+    sender_digits = ''.join(c for c in str(sender_phone) if c.isdigit())
+    whatsapp_number = sender_phone  # the actual WhatsApp number the student messaged from
+    mobile_number = sender_digits[-10:] if len(sender_digits) > 10 else sender_digits  # 10-digit registered number
+
+    # Look up registered mobile from student doc if different
+    try:
+        student_doc = vendbeesdb.collection('students').document(mobile_number).get()
+        if student_doc.exists:
+            sdata = student_doc.to_dict()
+            # mobileNumber is the registered number (doc key)
+            registered_mobile = sdata.get('mobileNumber') or mobile_number
+            wa_num = sdata.get('whatsappNumber')
+            if wa_num:
+                whatsapp_number = wa_num
+            mobile_number = registered_mobile
+    except Exception as e:
+        print(f"[WA] _create_whatsapp_notification: student lookup error: {e}", file=sys.stderr)
+
+    student_name = (
+        ticket_data.get('fullName') or
+        ticket_data.get('studentName') or
+        'Student'
+    )
+    ticket_display_id = (
+        ticket_data.get('ticketId') or
+        ticket_data.get('ticket_id') or
+        ticket_id
+    )
+    issue_type = (
+        ticket_data.get('issueType') or
+        ticket_data.get('issue_type') or
+        ticket_data.get('complaintType') or
+        'General'
+    )
+    complaint_status = (
+        ticket_data.get('status') or
+        ticket_data.get('complaintStatus') or
+        'Submitted'
+    )
+
+    # Truncate message preview to 100 chars
+    message_preview = (message_text or '')[:100]
+
+    notif_doc = {
+        'notificationType':  'whatsapp',
+        'ticketId':          ticket_id,
+        'ticketDisplayId':   ticket_display_id,
+        'studentName':       student_name,
+        'mobileNumber':      mobile_number,
+        'whatsappNumber':    whatsapp_number,
+        'issueType':         issue_type,
+        'complaintStatus':   complaint_status,
+        'messagePreview':    message_preview,
+        'messageType':       message_type,
+        'chatMessageId':     doc_id,
+        'read':              False,
+        'timestamp':         admin_firestore.SERVER_TIMESTAMP,
+        'createdAt':         admin_firestore.SERVER_TIMESTAMP,
+    }
+
+    try:
+        vendbeesdb.collection('whatsapp_notifications').document(doc_id).set(notif_doc)
+        print(
+            f"[WA] Created notification {doc_id} for ticket {ticket_id} "
+            f"(student={student_name}, wa={whatsapp_number})",
+            file=sys.stderr,
+        )
+    except Exception as e:
+        print(f"[WA] Failed to create whatsapp notification: {e}", file=sys.stderr)
+
+
 def _is_duplicate_event(whatsapp_message_id):
     """
     Return True if this message ID was already processed.
@@ -245,14 +335,39 @@ def _normalize_digits(phone_raw):
     return formats
 
 
+def _get_whatsapp_number_for_student(registered_phone):
+    """
+    Lookup the student by their registered mobile number (or doc ID)
+    and return their whatsappNumber. Fallback to registered_phone if not found
+    or if whatsappNumber is missing (backward compatibility).
+    """
+    if not registered_phone:
+        return registered_phone
+    
+    # Normalize to 10-digit doc ID
+    digits = ''.join(c for c in str(registered_phone) if c.isdigit())
+    mobile_10 = digits[-10:] if len(digits) >= 10 else digits
+    
+    try:
+        student_doc = vendbeesdb.collection('students').document(mobile_10).get()
+        if student_doc.exists:
+            sdata = student_doc.to_dict()
+            return sdata.get('whatsappNumber') or sdata.get('mobileNumber') or registered_phone
+    except Exception as e:
+        print(f"[WA] Error resolving whatsapp number for student {mobile_10}: {e}", file=sys.stderr)
+        
+    return registered_phone
+
+
 def _find_ticket_by_phone(phone_raw):
     """
     Find the most recent active ticket for a given phone number.
 
     Lookup order (fastest first):
       1. whatsappConversations (indexed by studentPhone)  ← production path
-      2. tickets collection by mobileNumber               ← slow fallback
-      3. tickets collection by phoneNumber                ← alternative schema
+      2. Query students by whatsappNumber to get mobileNumber(s)
+      3. tickets collection by mobileNumber               ← slow fallback
+      4. tickets collection by phoneNumber                ← alternative schema
 
     Returns (ticket_doc_id, ticket_data) or (None, None).
     """
@@ -276,13 +391,43 @@ def _find_ticket_by_phone(phone_raw):
         except Exception as exc:
             print(f"[WA] whatsappConversations lookup error for {fmt}: {exc}", file=sys.stderr)
 
+    # ── Lookup students by whatsappNumber to map to registered mobile numbers ──
+    resolved_mobiles = set()
+    for fmt in formats:
+        try:
+            students = list(
+                vendbeesdb.collection('students')
+                .where('whatsappNumber', '==', fmt)
+                .get()
+            )
+            for s in students:
+                sdata = s.to_dict()
+                mob = sdata.get('mobileNumber') or s.id
+                if mob:
+                    digits = ''.join(c for c in str(mob) if c.isdigit())
+                    if len(digits) > 10:
+                        resolved_mobiles.add(digits[-10:])
+                    else:
+                        resolved_mobiles.add(digits)
+        except Exception as exc:
+            print(f"[WA] Student query by whatsappNumber error: {exc}", file=sys.stderr)
+
+    # Combine original formats and resolved formats
+    search_mobiles = set()
+    for fmt in formats:
+        search_mobiles.add(fmt)
+    for mob in resolved_mobiles:
+        search_mobiles.add(mob)
+        if len(mob) == 10:
+            search_mobiles.add('91' + mob)
+
     # ── Slow path: direct tickets query ──
     for field in ('mobileNumber', 'phoneNumber'):
-        for fmt in formats:
+        for mob in search_mobiles:
             try:
                 tickets = list(
                     vendbeesdb.collection('tickets')
-                    .where(field, '==', fmt)
+                    .where(field, '==', mob)
                     .get()
                 )
                 if tickets:
@@ -290,7 +435,7 @@ def _find_ticket_by_phone(phone_raw):
                     target = active[0] if active else tickets[0]
                     return target.id, target.to_dict()
             except Exception as exc:
-                print(f"[WA] tickets query error (field={field}, fmt={fmt}): {exc}", file=sys.stderr)
+                print(f"[WA] tickets query error (field={field}, fmt={mob}): {exc}", file=sys.stderr)
 
     print(f"[WA] No ticket found for phone variants: {formats}", file=sys.stderr)
     return None, None
@@ -443,6 +588,13 @@ def _upsert_conversation(
     Upsert the whatsappConversations document for this phone/ticket pair.
     Document ID = UUID (never a phone number — security requirement).
     Indexed by studentPhone for fast webhook lookup.
+
+    Notification fields (used by dashboard notification system):
+      unreadForAdmin  — True when student sends, False when admin replies
+      unreadCount     — atomic-incremented per student message, reset on admin reply
+      ticketDisplayId — denormalized for notification card display (e.g. VB-TICK-...)
+      issueType       — denormalized for notification card display
+      complaintStatus — denormalized for notification card display
     """
     local_phone = ''.join(c for c in str(phone_raw) if c.isdigit())
     if len(local_phone) > 10:
@@ -451,31 +603,55 @@ def _upsert_conversation(
         local_phone_short = local_phone
 
     student_name = ''
+    issue_type = 'General'
+    complaint_status = 'Submitted'
+    ticket_display_id = ticket_id
+
     if ticket_data:
         student_name = (
             ticket_data.get('fullName') or
             ticket_data.get('studentName') or
             ''
         )
+        issue_type = (
+            ticket_data.get('issueType') or
+            ticket_data.get('issue_type') or
+            ticket_data.get('complaintType') or
+            'General'
+        )
+        complaint_status = (
+            ticket_data.get('status') or
+            ticket_data.get('complaintStatus') or
+            'Submitted'
+        )
+        ticket_display_id = (
+            ticket_data.get('ticketId') or
+            ticket_data.get('ticket_id') or
+            ticket_id
+        )
 
     payload = {
-        'ticketId':        ticket_id,
-        'studentPhone':    local_phone_short,
+        'ticketId':         ticket_id,
+        'ticketDisplayId':  ticket_display_id,
+        'studentPhone':     local_phone_short,
         'studentPhoneFull': local_phone,
-        'studentName':     student_name,
-        'lastMessage':     last_message[:500] if last_message else '',
-        'lastMessageType': last_message_type,
-        'lastMessageId':   last_doc_id,
-        'lastSender':      last_sender,
-        'lastMessageAt':   admin_firestore.SERVER_TIMESTAMP,
-        'status':          'active',
-        'updatedAt':       admin_firestore.SERVER_TIMESTAMP,
+        'studentName':      student_name,
+        'issueType':        issue_type,
+        'complaintStatus':  complaint_status,
+        'lastMessage':      last_message[:500] if last_message else '',
+        'lastMessageType':  last_message_type,
+        'lastMessageId':    last_doc_id,
+        'lastSender':       last_sender,
+        'lastMessageAt':    admin_firestore.SERVER_TIMESTAMP,
+        'status':           'active',
+        'updatedAt':        admin_firestore.SERVER_TIMESTAMP,
     }
 
     if last_sender == 'student':
         payload['lastCustomerMessageTime'] = admin_firestore.SERVER_TIMESTAMP
         payload['conversationOpen'] = True
         payload['conversationType'] = 'free_form'
+        payload['unreadForAdmin'] = True   # ← notification: new student message
     elif last_sender == 'admin':
         if is_template:
             payload['lastTemplateSent'] = admin_firestore.SERVER_TIMESTAMP
@@ -484,6 +660,7 @@ def _upsert_conversation(
         else:
             payload['conversationOpen'] = True
             payload['conversationType'] = 'free_form'
+        payload['unreadForAdmin'] = False  # ← admin replied → conversation seen
 
     try:
         existing = list(
@@ -630,7 +807,8 @@ def send_message():
     if not message:
         return jsonify({'success': False, 'error': 'message is required.'}), 400
 
-    is_valid, normalized_phone, phone_error = validate_phone(phone)
+    whatsapp_phone = _get_whatsapp_number_for_student(phone)
+    is_valid, normalized_phone, phone_error = validate_phone(whatsapp_phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
 
@@ -751,7 +929,8 @@ def send_status_notification():
     if not message:
         return jsonify({'success': False, 'error': f'No notification template for status: {status}'}), 400
 
-    is_valid, normalized_phone, phone_error = validate_phone(phone)
+    whatsapp_phone = _get_whatsapp_number_for_student(phone)
+    is_valid, normalized_phone, phone_error = validate_phone(whatsapp_phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
 
@@ -1051,6 +1230,10 @@ def _process_incoming_message(msg, value):
         if wa_msg_id and chat_doc_id:
             _store_message_mapping(wa_msg_id, ticket_id, chat_doc_id, conv_id)
 
+        # NOTE: whatsappConversations is the single source of truth for notifications.
+        # _upsert_conversation (called above) already set unreadForAdmin=True and
+        # incremented unreadCount atomically. No separate notification collection needed.
+
         print(
             f"[WA] Incoming {msg_type} from {sender_phone} → ticket {ticket_id} "
             f"(docId={chat_doc_id})",
@@ -1146,7 +1329,8 @@ def send_image():
     if not image_file or not image_file.filename:
         return jsonify({'success': False, 'error': 'image file is required.'}), 400
 
-    is_valid, normalized_phone, phone_error = validate_phone(phone)
+    whatsapp_phone = _get_whatsapp_number_for_student(phone)
+    is_valid, normalized_phone, phone_error = validate_phone(whatsapp_phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
 
@@ -1253,7 +1437,8 @@ def send_document():
     if not doc_file or not doc_file.filename:
         return jsonify({'success': False, 'error': 'document file is required.'}), 400
 
-    is_valid, normalized_phone, phone_error = validate_phone(phone)
+    whatsapp_phone = _get_whatsapp_number_for_student(phone)
+    is_valid, normalized_phone, phone_error = validate_phone(whatsapp_phone)
     if not is_valid:
         return jsonify({'success': False, 'error': phone_error}), 400
 
@@ -1450,3 +1635,100 @@ def add_internal_note():
     except Exception as exc:
         print(f"[WA] internal-note error: {exc}", file=sys.stderr)
         return jsonify({'success': False, 'error': f'Server error: {str(exc)}'}), 500
+
+
+# =============================================================================
+# BACKFILL ENDPOINT — creates whatsapp_notifications for existing incoming chats
+# =============================================================================
+
+@whatsapp_bp.route('/api/whatsapp/backfill-notifications', methods=['POST'])
+def backfill_notifications():
+    """
+    One-time backfill: scan ALL tickets/{id}/chats for incoming student messages
+    and create missing whatsapp_notifications documents.
+
+    Safe to run multiple times — uses chatMessageId (wa_msg_id) as doc ID,
+    so existing notifications are never overwritten.
+
+    Returns: { success, created, skipped, errors }
+    """
+    created = 0
+    skipped = 0
+    errors = 0
+
+    try:
+        # Fetch all existing notification IDs for deduplication
+        existing_ids = set()
+        try:
+            existing_snap = vendbeesdb.collection('whatsapp_notifications').get()
+            for d in existing_snap:
+                existing_ids.add(d.id)
+                # Also index by chatMessageId field in case doc ID differs
+                cm = d.to_dict().get('chatMessageId')
+                if cm:
+                    existing_ids.add(cm)
+        except Exception as e:
+            print(f"[WA backfill] Error fetching existing notifications: {e}", file=sys.stderr)
+
+        # Iterate all tickets
+        tickets_snap = vendbeesdb.collection('tickets').get()
+        print(f"[WA backfill] Processing {len(tickets_snap)} tickets...", file=sys.stderr)
+
+        for ticket_doc in tickets_snap:
+            ticket_id = ticket_doc.id
+            ticket_data = ticket_doc.to_dict()
+
+            try:
+                chats_snap = (
+                    vendbeesdb.collection('tickets').document(ticket_id)
+                    .collection('chats')
+                    .where('senderType', '==', 'student')
+                    .get()
+                )
+            except Exception as e:
+                print(f"[WA backfill] Error reading chats for ticket {ticket_id}: {e}", file=sys.stderr)
+                errors += 1
+                continue
+
+            for chat_doc in chats_snap:
+                chat_id = chat_doc.id
+                chat_data = chat_doc.to_dict()
+
+                # Skip if already has a notification
+                wa_msg_id = chat_data.get('whatsappMessageId') or chat_id
+                if wa_msg_id in existing_ids or chat_id in existing_ids:
+                    skipped += 1
+                    continue
+
+                # Get the sender phone from chat doc
+                sender_phone = chat_data.get('senderPhone') or ''
+                message_text = chat_data.get('message') or chat_data.get('text') or ''
+                message_type = chat_data.get('messageType') or 'text'
+
+                try:
+                    _create_whatsapp_notification(
+                        ticket_id=ticket_id,
+                        ticket_data=ticket_data,
+                        sender_phone=sender_phone,
+                        message_text=message_text,
+                        wa_msg_id=wa_msg_id,
+                        message_type=message_type,
+                    )
+                    existing_ids.add(wa_msg_id)
+                    created += 1
+                except Exception as e:
+                    print(f"[WA backfill] Error creating notif for {ticket_id}/{chat_id}: {e}", file=sys.stderr)
+                    errors += 1
+
+        print(f"[WA backfill] Done. created={created}, skipped={skipped}, errors={errors}", file=sys.stderr)
+        return jsonify({
+            'success': True,
+            'created': created,
+            'skipped': skipped,
+            'errors': errors,
+        }), 200
+
+    except Exception as exc:
+        print(f"[WA backfill] Fatal error: {exc}", file=sys.stderr)
+        return jsonify({'success': False, 'error': str(exc)}), 500
+

@@ -16,12 +16,14 @@ import Complaints from "./pages/Complaints";
 import GenerateBill from "./pages/GenerateBill";
 import { DataProvider } from "./context/DataContext";
 import { AuthProvider } from "./context/AuthContext";
+import { WhatsAppNotificationProvider } from "./context/WhatsAppNotificationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <AuthProvider>
       <DataProvider>
+        <WhatsAppNotificationProvider>
         <Router>
           <Routes>
             {/* Public Routes */}
@@ -50,6 +52,7 @@ function App() {
             </Route>
           </Routes>
         </Router>
+        </WhatsAppNotificationProvider>
       </DataProvider>
     </AuthProvider>
   );

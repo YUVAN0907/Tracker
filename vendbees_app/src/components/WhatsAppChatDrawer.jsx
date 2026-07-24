@@ -4,7 +4,7 @@ import {
     Maximize2, FileText, Download, Play, Pause, MapPin, Eye, Image as ImageIcon
 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { sendWhatsAppMessage } from '../utils/whatsappApi';
 import clsx from 'clsx';
 import WhatsAppConversationCenter from './WhatsAppConversationCenter';
@@ -22,10 +22,36 @@ const WhatsAppChatDrawer = ({ complaint, onClose }) => {
     const chatContainerRef = useRef(null);
     const audioRefs = useRef({});
 
+    const [whatsappPhone, setWhatsappPhone] = useState('');
+
     const ticketId = complaint?.id;
-    const studentPhone = complaint?.student?.phone || complaint?.mobileNumber;
+    const rawPhone = complaint?.student?.phone || complaint?.mobileNumber;
+    const studentPhone = whatsappPhone || rawPhone;
     const studentName = complaint?.student?.name || complaint?.fullName || 'Student';
     const ticketDisplayId = complaint?.ticket_id || complaint?.ticketId || 'N/A';
+
+    useEffect(() => {
+        if (!rawPhone || rawPhone === 'N/A') {
+            setWhatsappPhone('N/A');
+            return;
+        }
+        const fetchStudent = async () => {
+            try {
+                const userRef = doc(db, 'students', rawPhone.replace(/\D/g, '').slice(-10));
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+                    setWhatsappPhone(data.whatsappNumber || data.mobileNumber || rawPhone);
+                } else {
+                    setWhatsappPhone(rawPhone);
+                }
+            } catch (err) {
+                console.error("Error fetching student details for chat drawer:", err);
+                setWhatsappPhone(rawPhone);
+            }
+        };
+        fetchStudent();
+    }, [rawPhone]);
 
     // 1. Subscribe to real-time chat messages
     useEffect(() => {
