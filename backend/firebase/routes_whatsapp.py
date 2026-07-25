@@ -497,7 +497,7 @@ def _is_customer_service_window_open(phone_short):
         return False, None, None
 
 
-def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text', media_url=None, filename=None, caption=None):
+def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text', media_url=None, filename=None, caption=None, override_template_name=None, override_components=None):
     """
     Common flow that:
     1. Checks if customer service window is open.
@@ -522,9 +522,11 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
     except Exception as exc:
         print(f"[WA] Error fetching ticket in flow: {exc}", file=sys.stderr)
         
-    template_name = os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
+    template_name = override_template_name or os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
     
-    if template_name == 'hello_world':
+    if override_template_name and override_components is not None:
+        template_text = text_body
+    elif template_name == 'hello_world':
         template_text = "Hello World"
     else:
         template_text = (
@@ -535,7 +537,9 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
         )
 
     def send_template():
-        if template_name == 'hello_world':
+        if override_template_name and override_components is not None:
+            comps = override_components
+        elif template_name == 'hello_world':
             comps = None
         else:
             comps = [
@@ -583,6 +587,7 @@ def _upsert_conversation(
     last_message='', last_message_type='text',
     ticket_data=None, increment_unread=False,
     is_template=False,
+    conversation_id=None,
 ):
     """
     Upsert the whatsappConversations document for this phone/ticket pair.
@@ -925,7 +930,11 @@ def send_status_notification():
         complaint_data['complaintText'] = complaint_text_hint
 
     from notification_builder import NotificationBuilder
-    message = NotificationBuilder.build_notification(complaint_data, status)
+    meta_payload = NotificationBuilder.build_meta_template_payload(complaint_data, status)
+    message = meta_payload['full_text']
+    tpl_name = meta_payload['template_name']
+    tpl_comps = meta_payload['components']
+
     if not message:
         return jsonify({'success': False, 'error': f'No notification template for status: {status}'}), 400
 
@@ -938,7 +947,8 @@ def send_status_notification():
     temp_id = str(uuid.uuid4())
 
     result, was_template_sent, actual_message = _send_outgoing_flow(
-        ticket_id, normalized_phone, message, msg_type='text'
+        ticket_id, normalized_phone, message, msg_type='text',
+        override_template_name=tpl_name, override_components=tpl_comps
     )
 
     _store_outgoing_message(

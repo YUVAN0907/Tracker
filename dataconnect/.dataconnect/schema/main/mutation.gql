@@ -1,0 +1,2164 @@
+extend type Mutation {
+  """
+  ✨ Insert a single `AuditLog` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  auditLog_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: AuditLog_Data!
+  ): AuditLog_KeyOutput! @fdc_generated(from: "AuditLog", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `BatchAssignment` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  batchAssignment_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: BatchAssignment_Data!
+  ): BatchAssignment_KeyOutput! @fdc_generated(from: "BatchAssignment", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `BillHistory` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  billHistory_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: BillHistory_Data!
+  ): BillHistory_KeyOutput! @fdc_generated(from: "BillHistory", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `Machine` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  machine_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: Machine_Data!
+  ): Machine_KeyOutput! @fdc_generated(from: "Machine", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `MachineInventory` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  machineInventory_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: MachineInventory_Data!
+  ): MachineInventory_KeyOutput! @fdc_generated(from: "MachineInventory", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `Product` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  product_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: Product_Data!
+  ): Product_KeyOutput! @fdc_generated(from: "Product", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `PurchaseOrderHeader` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  purchaseOrderHeader_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: PurchaseOrderHeader_Data!
+  ): PurchaseOrderHeader_KeyOutput! @fdc_generated(from: "PurchaseOrderHeader", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `PurchaseOrderLine` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  purchaseOrderLine_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: PurchaseOrderLine_Data!
+  ): PurchaseOrderLine_KeyOutput! @fdc_generated(from: "PurchaseOrderLine", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `QrCodeHistory` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  qrCodeHistory_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: QrCodeHistory_Data!
+  ): QrCodeHistory_KeyOutput! @fdc_generated(from: "QrCodeHistory", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `RecentProduct` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  recentProduct_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: RecentProduct_Data!
+  ): RecentProduct_KeyOutput! @fdc_generated(from: "RecentProduct", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `RefillLog` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  refillLog_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: RefillLog_Data!
+  ): RefillLog_KeyOutput! @fdc_generated(from: "RefillLog", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `Sale` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  sale_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: Sale_Data!
+  ): Sale_KeyOutput! @fdc_generated(from: "Sale", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `StockCoverAssignment` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  stockCoverAssignment_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: StockCoverAssignment_Data!
+  ): StockCoverAssignment_KeyOutput! @fdc_generated(from: "StockCoverAssignment", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `StockCoverProductAssignment` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  stockCoverProductAssignment_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: StockCoverProductAssignment_Data!
+  ): StockCoverProductAssignment_KeyOutput! @fdc_generated(from: "StockCoverProductAssignment", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `User` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  user_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: User_Data!
+  ): User_KeyOutput! @fdc_generated(from: "User", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `UserRole` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  userRole_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: UserRole_Data!
+  ): UserRole_KeyOutput! @fdc_generated(from: "UserRole", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `Vendor` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  vendor_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: Vendor_Data!
+  ): Vendor_KeyOutput! @fdc_generated(from: "Vendor", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `VendorPurchaseItem` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  vendorPurchaseItem_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: VendorPurchaseItem_Data!
+  ): VendorPurchaseItem_KeyOutput! @fdc_generated(from: "VendorPurchaseItem", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `VendorPurchaseOrder` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  vendorPurchaseOrder_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: VendorPurchaseOrder_Data!
+  ): VendorPurchaseOrder_KeyOutput! @fdc_generated(from: "VendorPurchaseOrder", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `Warehouse` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  warehouse_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: Warehouse_Data!
+  ): Warehouse_KeyOutput! @fdc_generated(from: "Warehouse", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert a single `WarehouseStock` into the table and return its key. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  warehouseStock_insert(
+    """
+    Data object to insert into the table.
+    """
+    data: WarehouseStock_Data!
+  ): WarehouseStock_KeyOutput! @fdc_generated(from: "WarehouseStock", purpose: INSERT_SINGLE)
+  """
+  ✨ Insert `AuditLog` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  auditLog_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [AuditLog_Data!]!
+  ): [AuditLog_KeyOutput!]! @fdc_generated(from: "AuditLog", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `BatchAssignment` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  batchAssignment_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [BatchAssignment_Data!]!
+  ): [BatchAssignment_KeyOutput!]! @fdc_generated(from: "BatchAssignment", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `BillHistory` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  billHistory_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [BillHistory_Data!]!
+  ): [BillHistory_KeyOutput!]! @fdc_generated(from: "BillHistory", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `Machine` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  machine_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [Machine_Data!]!
+  ): [Machine_KeyOutput!]! @fdc_generated(from: "Machine", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `MachineInventory` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  machineInventory_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [MachineInventory_Data!]!
+  ): [MachineInventory_KeyOutput!]! @fdc_generated(from: "MachineInventory", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `Product` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  product_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [Product_Data!]!
+  ): [Product_KeyOutput!]! @fdc_generated(from: "Product", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `PurchaseOrderHeader` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  purchaseOrderHeader_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [PurchaseOrderHeader_Data!]!
+  ): [PurchaseOrderHeader_KeyOutput!]! @fdc_generated(from: "PurchaseOrderHeader", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `PurchaseOrderLine` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  purchaseOrderLine_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [PurchaseOrderLine_Data!]!
+  ): [PurchaseOrderLine_KeyOutput!]! @fdc_generated(from: "PurchaseOrderLine", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `QrCodeHistory` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  qrCodeHistory_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [QrCodeHistory_Data!]!
+  ): [QrCodeHistory_KeyOutput!]! @fdc_generated(from: "QrCodeHistory", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `RecentProduct` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  recentProduct_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [RecentProduct_Data!]!
+  ): [RecentProduct_KeyOutput!]! @fdc_generated(from: "RecentProduct", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `RefillLog` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  refillLog_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [RefillLog_Data!]!
+  ): [RefillLog_KeyOutput!]! @fdc_generated(from: "RefillLog", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `Sale` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  sale_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [Sale_Data!]!
+  ): [Sale_KeyOutput!]! @fdc_generated(from: "Sale", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `StockCoverAssignment` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  stockCoverAssignment_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [StockCoverAssignment_Data!]!
+  ): [StockCoverAssignment_KeyOutput!]! @fdc_generated(from: "StockCoverAssignment", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `StockCoverProductAssignment` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  stockCoverProductAssignment_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [StockCoverProductAssignment_Data!]!
+  ): [StockCoverProductAssignment_KeyOutput!]! @fdc_generated(from: "StockCoverProductAssignment", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `User` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  user_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [User_Data!]!
+  ): [User_KeyOutput!]! @fdc_generated(from: "User", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `UserRole` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  userRole_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [UserRole_Data!]!
+  ): [UserRole_KeyOutput!]! @fdc_generated(from: "UserRole", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `Vendor` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  vendor_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [Vendor_Data!]!
+  ): [Vendor_KeyOutput!]! @fdc_generated(from: "Vendor", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `VendorPurchaseItem` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  vendorPurchaseItem_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [VendorPurchaseItem_Data!]!
+  ): [VendorPurchaseItem_KeyOutput!]! @fdc_generated(from: "VendorPurchaseItem", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `VendorPurchaseOrder` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  vendorPurchaseOrder_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [VendorPurchaseOrder_Data!]!
+  ): [VendorPurchaseOrder_KeyOutput!]! @fdc_generated(from: "VendorPurchaseOrder", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `Warehouse` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  warehouse_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [Warehouse_Data!]!
+  ): [Warehouse_KeyOutput!]! @fdc_generated(from: "Warehouse", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert `WarehouseStock` objects into the table and return their keys. Columns not specified in `data` will receive defaults (e.g. `null`).
+  """
+  warehouseStock_insertMany(
+    """
+    List of data objects to insert into the table.
+    """
+    data: [WarehouseStock_Data!]!
+  ): [WarehouseStock_KeyOutput!]! @fdc_generated(from: "WarehouseStock", purpose: INSERT_MULTIPLE)
+  """
+  ✨ Insert or update a single `AuditLog` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `AuditLog`.
+  """
+  auditLog_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: AuditLog_Data!
+  ): AuditLog_KeyOutput! @fdc_generated(from: "AuditLog", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `BatchAssignment` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `BatchAssignment`.
+  """
+  batchAssignment_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: BatchAssignment_Data!
+  ): BatchAssignment_KeyOutput! @fdc_generated(from: "BatchAssignment", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `BillHistory` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `BillHistory`.
+  """
+  billHistory_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: BillHistory_Data!
+  ): BillHistory_KeyOutput! @fdc_generated(from: "BillHistory", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `Machine` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Machine`.
+  """
+  machine_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: Machine_Data!
+  ): Machine_KeyOutput! @fdc_generated(from: "Machine", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `MachineInventory` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `MachineInventory`.
+  """
+  machineInventory_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: MachineInventory_Data!
+  ): MachineInventory_KeyOutput! @fdc_generated(from: "MachineInventory", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `Product` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Product`.
+  """
+  product_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: Product_Data!
+  ): Product_KeyOutput! @fdc_generated(from: "Product", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `PurchaseOrderHeader` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `PurchaseOrderHeader`.
+  """
+  purchaseOrderHeader_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: PurchaseOrderHeader_Data!
+  ): PurchaseOrderHeader_KeyOutput! @fdc_generated(from: "PurchaseOrderHeader", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `PurchaseOrderLine` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `PurchaseOrderLine`.
+  """
+  purchaseOrderLine_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: PurchaseOrderLine_Data!
+  ): PurchaseOrderLine_KeyOutput! @fdc_generated(from: "PurchaseOrderLine", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `QrCodeHistory` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `QrCodeHistory`.
+  """
+  qrCodeHistory_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: QrCodeHistory_Data!
+  ): QrCodeHistory_KeyOutput! @fdc_generated(from: "QrCodeHistory", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `RecentProduct` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `RecentProduct`.
+  """
+  recentProduct_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: RecentProduct_Data!
+  ): RecentProduct_KeyOutput! @fdc_generated(from: "RecentProduct", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `RefillLog` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `RefillLog`.
+  """
+  refillLog_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: RefillLog_Data!
+  ): RefillLog_KeyOutput! @fdc_generated(from: "RefillLog", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `Sale` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Sale`.
+  """
+  sale_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: Sale_Data!
+  ): Sale_KeyOutput! @fdc_generated(from: "Sale", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `StockCoverAssignment` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `StockCoverAssignment`.
+  """
+  stockCoverAssignment_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: StockCoverAssignment_Data!
+  ): StockCoverAssignment_KeyOutput! @fdc_generated(from: "StockCoverAssignment", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `StockCoverProductAssignment` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `StockCoverProductAssignment`.
+  """
+  stockCoverProductAssignment_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: StockCoverProductAssignment_Data!
+  ): StockCoverProductAssignment_KeyOutput! @fdc_generated(from: "StockCoverProductAssignment", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `User` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `User`.
+  """
+  user_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: User_Data!
+  ): User_KeyOutput! @fdc_generated(from: "User", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `UserRole` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `UserRole`.
+  """
+  userRole_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: UserRole_Data!
+  ): UserRole_KeyOutput! @fdc_generated(from: "UserRole", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `Vendor` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Vendor`.
+  """
+  vendor_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: Vendor_Data!
+  ): Vendor_KeyOutput! @fdc_generated(from: "Vendor", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `VendorPurchaseItem` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `VendorPurchaseItem`.
+  """
+  vendorPurchaseItem_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: VendorPurchaseItem_Data!
+  ): VendorPurchaseItem_KeyOutput! @fdc_generated(from: "VendorPurchaseItem", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `VendorPurchaseOrder` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `VendorPurchaseOrder`.
+  """
+  vendorPurchaseOrder_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: VendorPurchaseOrder_Data!
+  ): VendorPurchaseOrder_KeyOutput! @fdc_generated(from: "VendorPurchaseOrder", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `Warehouse` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Warehouse`.
+  """
+  warehouse_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: Warehouse_Data!
+  ): Warehouse_KeyOutput! @fdc_generated(from: "Warehouse", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update a single `WarehouseStock` into the table, based on the primary key. Returns the key of the newly inserted or existing updated `WarehouseStock`.
+  """
+  warehouseStock_upsert(
+    """
+    Data object to insert or update if it already exists.
+    """
+    data: WarehouseStock_Data!
+  ): WarehouseStock_KeyOutput! @fdc_generated(from: "WarehouseStock", purpose: UPSERT_SINGLE)
+  """
+  ✨ Insert or update `AuditLog` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `AuditLog`.
+  """
+  auditLog_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [AuditLog_Data!]!
+  ): [AuditLog_KeyOutput!]! @fdc_generated(from: "AuditLog", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `BatchAssignment` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `BatchAssignment`.
+  """
+  batchAssignment_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [BatchAssignment_Data!]!
+  ): [BatchAssignment_KeyOutput!]! @fdc_generated(from: "BatchAssignment", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `BillHistory` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `BillHistory`.
+  """
+  billHistory_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [BillHistory_Data!]!
+  ): [BillHistory_KeyOutput!]! @fdc_generated(from: "BillHistory", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `Machine` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Machine`.
+  """
+  machine_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [Machine_Data!]!
+  ): [Machine_KeyOutput!]! @fdc_generated(from: "Machine", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `MachineInventory` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `MachineInventory`.
+  """
+  machineInventory_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [MachineInventory_Data!]!
+  ): [MachineInventory_KeyOutput!]! @fdc_generated(from: "MachineInventory", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `Product` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Product`.
+  """
+  product_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [Product_Data!]!
+  ): [Product_KeyOutput!]! @fdc_generated(from: "Product", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `PurchaseOrderHeader` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `PurchaseOrderHeader`.
+  """
+  purchaseOrderHeader_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [PurchaseOrderHeader_Data!]!
+  ): [PurchaseOrderHeader_KeyOutput!]! @fdc_generated(from: "PurchaseOrderHeader", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `PurchaseOrderLine` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `PurchaseOrderLine`.
+  """
+  purchaseOrderLine_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [PurchaseOrderLine_Data!]!
+  ): [PurchaseOrderLine_KeyOutput!]! @fdc_generated(from: "PurchaseOrderLine", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `QrCodeHistory` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `QrCodeHistory`.
+  """
+  qrCodeHistory_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [QrCodeHistory_Data!]!
+  ): [QrCodeHistory_KeyOutput!]! @fdc_generated(from: "QrCodeHistory", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `RecentProduct` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `RecentProduct`.
+  """
+  recentProduct_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [RecentProduct_Data!]!
+  ): [RecentProduct_KeyOutput!]! @fdc_generated(from: "RecentProduct", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `RefillLog` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `RefillLog`.
+  """
+  refillLog_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [RefillLog_Data!]!
+  ): [RefillLog_KeyOutput!]! @fdc_generated(from: "RefillLog", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `Sale` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Sale`.
+  """
+  sale_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [Sale_Data!]!
+  ): [Sale_KeyOutput!]! @fdc_generated(from: "Sale", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `StockCoverAssignment` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `StockCoverAssignment`.
+  """
+  stockCoverAssignment_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [StockCoverAssignment_Data!]!
+  ): [StockCoverAssignment_KeyOutput!]! @fdc_generated(from: "StockCoverAssignment", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `StockCoverProductAssignment` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `StockCoverProductAssignment`.
+  """
+  stockCoverProductAssignment_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [StockCoverProductAssignment_Data!]!
+  ): [StockCoverProductAssignment_KeyOutput!]! @fdc_generated(from: "StockCoverProductAssignment", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `User` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `User`.
+  """
+  user_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [User_Data!]!
+  ): [User_KeyOutput!]! @fdc_generated(from: "User", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `UserRole` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `UserRole`.
+  """
+  userRole_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [UserRole_Data!]!
+  ): [UserRole_KeyOutput!]! @fdc_generated(from: "UserRole", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `Vendor` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Vendor`.
+  """
+  vendor_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [Vendor_Data!]!
+  ): [Vendor_KeyOutput!]! @fdc_generated(from: "Vendor", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `VendorPurchaseItem` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `VendorPurchaseItem`.
+  """
+  vendorPurchaseItem_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [VendorPurchaseItem_Data!]!
+  ): [VendorPurchaseItem_KeyOutput!]! @fdc_generated(from: "VendorPurchaseItem", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `VendorPurchaseOrder` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `VendorPurchaseOrder`.
+  """
+  vendorPurchaseOrder_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [VendorPurchaseOrder_Data!]!
+  ): [VendorPurchaseOrder_KeyOutput!]! @fdc_generated(from: "VendorPurchaseOrder", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `Warehouse` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `Warehouse`.
+  """
+  warehouse_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [Warehouse_Data!]!
+  ): [Warehouse_KeyOutput!]! @fdc_generated(from: "Warehouse", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Insert or update `WarehouseStock` objects into the table, based on the primary key. Returns the key of the newly inserted or existing updated `WarehouseStock`.
+  """
+  warehouseStock_upsertMany(
+    """
+    List of data objects to insert or update if it already exists.
+    """
+    data: [WarehouseStock_Data!]!
+  ): [WarehouseStock_KeyOutput!]! @fdc_generated(from: "WarehouseStock", purpose: UPSERT_MULTIPLE)
+  """
+  ✨ Update a single `AuditLog` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `AuditLog` or `null` if not found.
+  """
+  auditLog_update(
+    """
+    The key used to identify the object.
+    """
+    key: AuditLog_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: AuditLog_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: AuditLog_Data!
+  ): AuditLog_KeyOutput @fdc_generated(from: "AuditLog", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `BatchAssignment` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `BatchAssignment` or `null` if not found.
+  """
+  batchAssignment_update(
+    """
+    The key used to identify the object.
+    """
+    key: BatchAssignment_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: BatchAssignment_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: BatchAssignment_Data!
+  ): BatchAssignment_KeyOutput @fdc_generated(from: "BatchAssignment", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `BillHistory` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `BillHistory` or `null` if not found.
+  """
+  billHistory_update(
+    """
+    The key used to identify the object.
+    """
+    key: BillHistory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: BillHistory_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: BillHistory_Data!
+  ): BillHistory_KeyOutput @fdc_generated(from: "BillHistory", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `Machine` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `Machine` or `null` if not found.
+  """
+  machine_update(
+    """
+    The key used to identify the object.
+    """
+    key: Machine_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Machine_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: Machine_Data!
+  ): Machine_KeyOutput @fdc_generated(from: "Machine", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `MachineInventory` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `MachineInventory` or `null` if not found.
+  """
+  machineInventory_update(
+    """
+    The key used to identify the object.
+    """
+    key: MachineInventory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: MachineInventory_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: MachineInventory_Data!
+  ): MachineInventory_KeyOutput @fdc_generated(from: "MachineInventory", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `Product` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `Product` or `null` if not found.
+  """
+  product_update(
+    """
+    The key used to identify the object.
+    """
+    key: Product_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Product_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: Product_Data!
+  ): Product_KeyOutput @fdc_generated(from: "Product", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `PurchaseOrderHeader` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `PurchaseOrderHeader` or `null` if not found.
+  """
+  purchaseOrderHeader_update(
+    """
+    The key used to identify the object.
+    """
+    key: PurchaseOrderHeader_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: PurchaseOrderHeader_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: PurchaseOrderHeader_Data!
+  ): PurchaseOrderHeader_KeyOutput @fdc_generated(from: "PurchaseOrderHeader", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `PurchaseOrderLine` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `PurchaseOrderLine` or `null` if not found.
+  """
+  purchaseOrderLine_update(
+    """
+    The key used to identify the object.
+    """
+    key: PurchaseOrderLine_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: PurchaseOrderLine_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: PurchaseOrderLine_Data!
+  ): PurchaseOrderLine_KeyOutput @fdc_generated(from: "PurchaseOrderLine", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `QrCodeHistory` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `QrCodeHistory` or `null` if not found.
+  """
+  qrCodeHistory_update(
+    """
+    The key used to identify the object.
+    """
+    key: QrCodeHistory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: QrCodeHistory_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: QrCodeHistory_Data!
+  ): QrCodeHistory_KeyOutput @fdc_generated(from: "QrCodeHistory", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `RecentProduct` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `RecentProduct` or `null` if not found.
+  """
+  recentProduct_update(
+    """
+    The key used to identify the object.
+    """
+    key: RecentProduct_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: RecentProduct_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: RecentProduct_Data!
+  ): RecentProduct_KeyOutput @fdc_generated(from: "RecentProduct", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `RefillLog` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `RefillLog` or `null` if not found.
+  """
+  refillLog_update(
+    """
+    The key used to identify the object.
+    """
+    key: RefillLog_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: RefillLog_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: RefillLog_Data!
+  ): RefillLog_KeyOutput @fdc_generated(from: "RefillLog", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `Sale` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `Sale` or `null` if not found.
+  """
+  sale_update(
+    """
+    The key used to identify the object.
+    """
+    key: Sale_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Sale_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: Sale_Data!
+  ): Sale_KeyOutput @fdc_generated(from: "Sale", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `StockCoverAssignment` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `StockCoverAssignment` or `null` if not found.
+  """
+  stockCoverAssignment_update(
+    """
+    The unique ID of the object.
+    """
+    id: UUID
+
+    """
+    The key used to identify the object.
+    """
+    key: StockCoverAssignment_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: StockCoverAssignment_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: StockCoverAssignment_Data!
+  ): StockCoverAssignment_KeyOutput @fdc_generated(from: "StockCoverAssignment", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `StockCoverProductAssignment` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `StockCoverProductAssignment` or `null` if not found.
+  """
+  stockCoverProductAssignment_update(
+    """
+    The unique ID of the object.
+    """
+    id: UUID
+
+    """
+    The key used to identify the object.
+    """
+    key: StockCoverProductAssignment_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: StockCoverProductAssignment_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: StockCoverProductAssignment_Data!
+  ): StockCoverProductAssignment_KeyOutput @fdc_generated(from: "StockCoverProductAssignment", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `User` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `User` or `null` if not found.
+  """
+  user_update(
+    """
+    The key used to identify the object.
+    """
+    key: User_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: User_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: User_Data!
+  ): User_KeyOutput @fdc_generated(from: "User", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `UserRole` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `UserRole` or `null` if not found.
+  """
+  userRole_update(
+    """
+    The key used to identify the object.
+    """
+    key: UserRole_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: UserRole_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: UserRole_Data!
+  ): UserRole_KeyOutput @fdc_generated(from: "UserRole", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `Vendor` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `Vendor` or `null` if not found.
+  """
+  vendor_update(
+    """
+    The key used to identify the object.
+    """
+    key: Vendor_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Vendor_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: Vendor_Data!
+  ): Vendor_KeyOutput @fdc_generated(from: "Vendor", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `VendorPurchaseItem` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `VendorPurchaseItem` or `null` if not found.
+  """
+  vendorPurchaseItem_update(
+    """
+    The key used to identify the object.
+    """
+    key: VendorPurchaseItem_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: VendorPurchaseItem_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: VendorPurchaseItem_Data!
+  ): VendorPurchaseItem_KeyOutput @fdc_generated(from: "VendorPurchaseItem", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `VendorPurchaseOrder` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `VendorPurchaseOrder` or `null` if not found.
+  """
+  vendorPurchaseOrder_update(
+    """
+    The key used to identify the object.
+    """
+    key: VendorPurchaseOrder_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: VendorPurchaseOrder_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: VendorPurchaseOrder_Data!
+  ): VendorPurchaseOrder_KeyOutput @fdc_generated(from: "VendorPurchaseOrder", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `Warehouse` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `Warehouse` or `null` if not found.
+  """
+  warehouse_update(
+    """
+    The key used to identify the object.
+    """
+    key: Warehouse_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Warehouse_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: Warehouse_Data!
+  ): Warehouse_KeyOutput @fdc_generated(from: "Warehouse", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update a single `WarehouseStock` based on `id`, `key` or `first`, setting columns specified in `data`. Returns the key of the updated `WarehouseStock` or `null` if not found.
+  """
+  warehouseStock_update(
+    """
+    The key used to identify the object.
+    """
+    key: WarehouseStock_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: WarehouseStock_FirstRow
+
+    """
+    Data object containing fields to be updated.
+    """
+    data: WarehouseStock_Data!
+  ): WarehouseStock_KeyOutput @fdc_generated(from: "WarehouseStock", purpose: UPDATE_SINGLE)
+  """
+  ✨ Update `AuditLog` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  auditLog_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: AuditLog_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: AuditLog_Data!
+  ): Int! @fdc_generated(from: "AuditLog", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `BatchAssignment` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  batchAssignment_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: BatchAssignment_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: BatchAssignment_Data!
+  ): Int! @fdc_generated(from: "BatchAssignment", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `BillHistory` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  billHistory_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: BillHistory_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: BillHistory_Data!
+  ): Int! @fdc_generated(from: "BillHistory", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `Machine` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  machine_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: Machine_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: Machine_Data!
+  ): Int! @fdc_generated(from: "Machine", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `MachineInventory` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  machineInventory_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: MachineInventory_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: MachineInventory_Data!
+  ): Int! @fdc_generated(from: "MachineInventory", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `Product` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  product_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: Product_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: Product_Data!
+  ): Int! @fdc_generated(from: "Product", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `PurchaseOrderHeader` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  purchaseOrderHeader_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: PurchaseOrderHeader_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: PurchaseOrderHeader_Data!
+  ): Int! @fdc_generated(from: "PurchaseOrderHeader", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `PurchaseOrderLine` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  purchaseOrderLine_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: PurchaseOrderLine_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: PurchaseOrderLine_Data!
+  ): Int! @fdc_generated(from: "PurchaseOrderLine", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `QrCodeHistory` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  qrCodeHistory_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: QrCodeHistory_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: QrCodeHistory_Data!
+  ): Int! @fdc_generated(from: "QrCodeHistory", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `RecentProduct` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  recentProduct_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: RecentProduct_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: RecentProduct_Data!
+  ): Int! @fdc_generated(from: "RecentProduct", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `RefillLog` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  refillLog_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: RefillLog_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: RefillLog_Data!
+  ): Int! @fdc_generated(from: "RefillLog", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `Sale` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  sale_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: Sale_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: Sale_Data!
+  ): Int! @fdc_generated(from: "Sale", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `StockCoverAssignment` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  stockCoverAssignment_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: StockCoverAssignment_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: StockCoverAssignment_Data!
+  ): Int! @fdc_generated(from: "StockCoverAssignment", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `StockCoverProductAssignment` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  stockCoverProductAssignment_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: StockCoverProductAssignment_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: StockCoverProductAssignment_Data!
+  ): Int! @fdc_generated(from: "StockCoverProductAssignment", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `User` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  user_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: User_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: User_Data!
+  ): Int! @fdc_generated(from: "User", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `UserRole` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  userRole_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: UserRole_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: UserRole_Data!
+  ): Int! @fdc_generated(from: "UserRole", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `Vendor` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  vendor_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: Vendor_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: Vendor_Data!
+  ): Int! @fdc_generated(from: "Vendor", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `VendorPurchaseItem` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  vendorPurchaseItem_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: VendorPurchaseItem_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: VendorPurchaseItem_Data!
+  ): Int! @fdc_generated(from: "VendorPurchaseItem", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `VendorPurchaseOrder` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  vendorPurchaseOrder_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: VendorPurchaseOrder_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: VendorPurchaseOrder_Data!
+  ): Int! @fdc_generated(from: "VendorPurchaseOrder", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `Warehouse` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  warehouse_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: Warehouse_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: Warehouse_Data!
+  ): Int! @fdc_generated(from: "Warehouse", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Update `WarehouseStock` objects matching `where` conditions (or `all`, if true) according to `data`. Returns the number of rows updated.
+  """
+  warehouseStock_updateMany(
+    """
+    Filter condition to specify which rows to update.
+    """
+    where: WarehouseStock_Filter
+
+    """
+    Set to true to update all rows.
+    """
+    all: Boolean = false
+
+    """
+    Data object containing fields to update.
+    """
+    data: WarehouseStock_Data!
+  ): Int! @fdc_generated(from: "WarehouseStock", purpose: UPDATE_MULTIPLE)
+  """
+  ✨ Delete a single `AuditLog` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  auditLog_delete(
+    """
+    The key used to identify the object.
+    """
+    key: AuditLog_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: AuditLog_FirstRow
+  ): AuditLog_KeyOutput @fdc_generated(from: "AuditLog", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `BatchAssignment` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  batchAssignment_delete(
+    """
+    The key used to identify the object.
+    """
+    key: BatchAssignment_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: BatchAssignment_FirstRow
+  ): BatchAssignment_KeyOutput @fdc_generated(from: "BatchAssignment", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `BillHistory` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  billHistory_delete(
+    """
+    The key used to identify the object.
+    """
+    key: BillHistory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: BillHistory_FirstRow
+  ): BillHistory_KeyOutput @fdc_generated(from: "BillHistory", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `Machine` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  machine_delete(
+    """
+    The key used to identify the object.
+    """
+    key: Machine_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Machine_FirstRow
+  ): Machine_KeyOutput @fdc_generated(from: "Machine", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `MachineInventory` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  machineInventory_delete(
+    """
+    The key used to identify the object.
+    """
+    key: MachineInventory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: MachineInventory_FirstRow
+  ): MachineInventory_KeyOutput @fdc_generated(from: "MachineInventory", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `Product` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  product_delete(
+    """
+    The key used to identify the object.
+    """
+    key: Product_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Product_FirstRow
+  ): Product_KeyOutput @fdc_generated(from: "Product", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `PurchaseOrderHeader` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  purchaseOrderHeader_delete(
+    """
+    The key used to identify the object.
+    """
+    key: PurchaseOrderHeader_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: PurchaseOrderHeader_FirstRow
+  ): PurchaseOrderHeader_KeyOutput @fdc_generated(from: "PurchaseOrderHeader", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `PurchaseOrderLine` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  purchaseOrderLine_delete(
+    """
+    The key used to identify the object.
+    """
+    key: PurchaseOrderLine_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: PurchaseOrderLine_FirstRow
+  ): PurchaseOrderLine_KeyOutput @fdc_generated(from: "PurchaseOrderLine", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `QrCodeHistory` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  qrCodeHistory_delete(
+    """
+    The key used to identify the object.
+    """
+    key: QrCodeHistory_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: QrCodeHistory_FirstRow
+  ): QrCodeHistory_KeyOutput @fdc_generated(from: "QrCodeHistory", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `RecentProduct` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  recentProduct_delete(
+    """
+    The key used to identify the object.
+    """
+    key: RecentProduct_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: RecentProduct_FirstRow
+  ): RecentProduct_KeyOutput @fdc_generated(from: "RecentProduct", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `RefillLog` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  refillLog_delete(
+    """
+    The key used to identify the object.
+    """
+    key: RefillLog_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: RefillLog_FirstRow
+  ): RefillLog_KeyOutput @fdc_generated(from: "RefillLog", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `Sale` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  sale_delete(
+    """
+    The key used to identify the object.
+    """
+    key: Sale_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Sale_FirstRow
+  ): Sale_KeyOutput @fdc_generated(from: "Sale", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `StockCoverAssignment` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  stockCoverAssignment_delete(
+    """
+    The unique ID of the object.
+    """
+    id: UUID
+
+    """
+    The key used to identify the object.
+    """
+    key: StockCoverAssignment_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: StockCoverAssignment_FirstRow
+  ): StockCoverAssignment_KeyOutput @fdc_generated(from: "StockCoverAssignment", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `StockCoverProductAssignment` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  stockCoverProductAssignment_delete(
+    """
+    The unique ID of the object.
+    """
+    id: UUID
+
+    """
+    The key used to identify the object.
+    """
+    key: StockCoverProductAssignment_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: StockCoverProductAssignment_FirstRow
+  ): StockCoverProductAssignment_KeyOutput @fdc_generated(from: "StockCoverProductAssignment", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `User` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  user_delete(
+    """
+    The key used to identify the object.
+    """
+    key: User_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: User_FirstRow
+  ): User_KeyOutput @fdc_generated(from: "User", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `UserRole` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  userRole_delete(
+    """
+    The key used to identify the object.
+    """
+    key: UserRole_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: UserRole_FirstRow
+  ): UserRole_KeyOutput @fdc_generated(from: "UserRole", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `Vendor` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  vendor_delete(
+    """
+    The key used to identify the object.
+    """
+    key: Vendor_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Vendor_FirstRow
+  ): Vendor_KeyOutput @fdc_generated(from: "Vendor", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `VendorPurchaseItem` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  vendorPurchaseItem_delete(
+    """
+    The key used to identify the object.
+    """
+    key: VendorPurchaseItem_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: VendorPurchaseItem_FirstRow
+  ): VendorPurchaseItem_KeyOutput @fdc_generated(from: "VendorPurchaseItem", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `VendorPurchaseOrder` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  vendorPurchaseOrder_delete(
+    """
+    The key used to identify the object.
+    """
+    key: VendorPurchaseOrder_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: VendorPurchaseOrder_FirstRow
+  ): VendorPurchaseOrder_KeyOutput @fdc_generated(from: "VendorPurchaseOrder", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `Warehouse` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  warehouse_delete(
+    """
+    The key used to identify the object.
+    """
+    key: Warehouse_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: Warehouse_FirstRow
+  ): Warehouse_KeyOutput @fdc_generated(from: "Warehouse", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete a single `WarehouseStock` based on `id`, `key` or `first` and return its key (or `null` if not found).
+  """
+  warehouseStock_delete(
+    """
+    The key used to identify the object.
+    """
+    key: WarehouseStock_Key
+
+    """
+    Fetch the first row based on the filters and ordering.
+    """
+    first: WarehouseStock_FirstRow
+  ): WarehouseStock_KeyOutput @fdc_generated(from: "WarehouseStock", purpose: DELETE_SINGLE)
+  """
+  ✨ Delete `AuditLog` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  auditLog_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: AuditLog_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "AuditLog", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `BatchAssignment` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  batchAssignment_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: BatchAssignment_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "BatchAssignment", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `BillHistory` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  billHistory_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: BillHistory_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "BillHistory", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `Machine` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  machine_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: Machine_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "Machine", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `MachineInventory` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  machineInventory_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: MachineInventory_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "MachineInventory", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `Product` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  product_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: Product_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "Product", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `PurchaseOrderHeader` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  purchaseOrderHeader_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: PurchaseOrderHeader_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "PurchaseOrderHeader", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `PurchaseOrderLine` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  purchaseOrderLine_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: PurchaseOrderLine_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "PurchaseOrderLine", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `QrCodeHistory` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  qrCodeHistory_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: QrCodeHistory_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "QrCodeHistory", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `RecentProduct` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  recentProduct_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: RecentProduct_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "RecentProduct", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `RefillLog` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  refillLog_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: RefillLog_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "RefillLog", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `Sale` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  sale_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: Sale_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "Sale", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `StockCoverAssignment` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  stockCoverAssignment_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: StockCoverAssignment_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "StockCoverAssignment", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `StockCoverProductAssignment` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  stockCoverProductAssignment_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: StockCoverProductAssignment_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "StockCoverProductAssignment", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `User` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  user_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: User_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "User", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `UserRole` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  userRole_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: UserRole_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "UserRole", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `Vendor` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  vendor_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: Vendor_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "Vendor", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `VendorPurchaseItem` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  vendorPurchaseItem_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: VendorPurchaseItem_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "VendorPurchaseItem", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `VendorPurchaseOrder` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  vendorPurchaseOrder_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: VendorPurchaseOrder_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "VendorPurchaseOrder", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `Warehouse` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  warehouse_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: Warehouse_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "Warehouse", purpose: DELETE_MULTIPLE)
+  """
+  ✨ Delete `WarehouseStock` objects matching `where` conditions (or `all`, if true). Returns the number of rows deleted.
+  """
+  warehouseStock_deleteMany(
+    """
+    Filter condition to specify which rows to delete.
+    """
+    where: WarehouseStock_Filter
+
+    """
+    Set to true to delete all rows.
+    """
+    all: Boolean = false
+  ): Int! @fdc_generated(from: "WarehouseStock", purpose: DELETE_MULTIPLE)
+}

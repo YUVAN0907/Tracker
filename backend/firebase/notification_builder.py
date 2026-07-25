@@ -16,13 +16,6 @@ _CLOSING = "Thank you,\nVendBees Support"
 
 # ── Machine Down ────────────────────────────────────────────────────────────
 _MACHINE_DOWN = {
-    'Submitted': (
-        "Hello {studentName},\n\n"
-        "Your complaint ({ticketId}) for Machine {machineId} — Machine Down — has been received.\n\n"
-        "Issue: {complaintDescription}\n\n"
-        "Our technical team will inspect the machine shortly and update you here.\n\n"
-        + _CLOSING
-    ),
     'In Review': (
         "Hello {studentName},\n\n"
         "We are currently inspecting Machine {machineId} for your reported issue ({ticketId}).\n\n"
@@ -44,24 +37,10 @@ _MACHINE_DOWN = {
         "Please try using the machine again. If the issue persists, simply reply to this WhatsApp message and we will reopen your complaint immediately.\n\n"
         + _CLOSING
     ),
-    'Refunded': (
-        "Hello {studentName},\n\n"
-        "Your refund request for Machine {machineId} (complaint {ticketId}) has been approved.\n\n"
-        "{statusSpecificMessage}\n\n"
-        "If you have any further concerns, simply reply to this WhatsApp conversation.\n\n"
-        + _CLOSING
-    ),
 }
 
 # ── Product Issue ────────────────────────────────────────────────────────────
 _PRODUCT_ISSUE = {
-    'Submitted': (
-        "Hello {studentName},\n\n"
-        "Your complaint ({ticketId}) regarding a product issue at Machine {machineId} has been received.\n\n"
-        "Issue: {complaintDescription}\n\n"
-        "We will review the product and machine configuration and update you shortly.\n\n"
-        + _CLOSING
-    ),
     'In Review': (
         "Hello {studentName},\n\n"
         "We are reviewing the product issue you reported ({ticketId}) for Machine {machineId}.\n\n"
@@ -79,7 +58,7 @@ _PRODUCT_ISSUE = {
         "Hello {studentName},\n\n"
         "Your product complaint ({ticketId}) for Machine {machineId} has been RESOLVED.\n\n"
         "{statusSpecificMessage}\n\n"
-        "The product and machine have been inspected. If you experience the same issue again, reply to this message and we will address it immediately.\n\n"
+        "The product and the machine have been inspected. If you experience the same issue again, reply to this message and we will address it immediately.\n\n"
         + _CLOSING
     ),
     'Refunded': (
@@ -93,13 +72,6 @@ _PRODUCT_ISSUE = {
 
 # ── Payment Issue ────────────────────────────────────────────────────────────
 _PAYMENT_ISSUE = {
-    'Submitted': (
-        "Hello {studentName},\n\n"
-        "Your payment complaint ({ticketId}) for Machine {machineId} has been received.\n\n"
-        "Issue: {complaintDescription}\n\n"
-        "We will review your transaction and process your refund if eligible. Updates will be sent here.\n\n"
-        + _CLOSING
-    ),
     'In Review': (
         "Hello {studentName},\n\n"
         "We are reviewing your payment complaint ({ticketId}) for Machine {machineId}.\n\n"
@@ -113,136 +85,11 @@ _PAYMENT_ISSUE = {
         "Please share your transaction reference number or screenshot by replying to this message to help us process your refund faster.\n\n"
         + _CLOSING
     ),
-    'Resolved': (
-        "Hello {studentName},\n\n"
-        "Your payment complaint ({ticketId}) for Machine {machineId} has been RESOLVED.\n\n"
-        "{statusSpecificMessage}\n\n"
-        "If you have not received your refund or have further payment concerns, reply to this message immediately.\n\n"
-        + _CLOSING
-    ),
     'Refunded': (
         "Hello {studentName},\n\n"
         "Your payment refund for complaint ({ticketId}) has been processed successfully.\n\n"
         "{statusSpecificMessage}\n\n"
         "The amount has been credited. If you do not see the credit, please reply to this message.\n\n"
-        + _CLOSING
-    ),
-}
-
-# ── Refund Issue ─────────────────────────────────────────────────────────────
-_REFUND_ISSUE = {
-    'Submitted': (
-        "Hello {studentName},\n\n"
-        "Your refund complaint ({ticketId}) for Machine {machineId} has been received.\n\n"
-        "Issue: {complaintDescription}\n\n"
-        "Our team will review the refund eligibility and process it accordingly.\n\n"
-        + _CLOSING
-    ),
-    'In Review': (
-        "Hello {studentName},\n\n"
-        "We are reviewing your refund request ({ticketId}) for Machine {machineId}.\n\n"
-        "Our accounts team is processing your case. We will update you shortly.\n\n"
-        + _CLOSING
-    ),
-    'Pending': (
-        "Hello {studentName},\n\n"
-        "Your refund request ({ticketId}) is pending additional information.\n\n"
-        "Please reply to this message with your student ID or transaction reference to help us expedite the process.\n\n"
-        + _CLOSING
-    ),
-    'Resolved': (
-        "Hello {studentName},\n\n"
-        "Your refund complaint ({ticketId}) for Machine {machineId} has been RESOLVED.\n\n"
-        "{statusSpecificMessage}\n\n"
-        "If you have not received the refund amount, please reply to this message.\n\n"
-        + _CLOSING
-    ),
-    'Refunded': (
-        "Hello {studentName},\n\n"
-        "Your refund for complaint ({ticketId}) has been successfully processed.\n\n"
-        "{statusSpecificMessage}\n\n"
-        "Thank you for your patience. If you have further concerns, reply to this message.\n\n"
-        + _CLOSING
-    ),
-}
-
-# ── Suggestion / Feedback ────────────────────────────────────────────────────
-_SUGGESTION = {
-    'Submitted': (
-        "Hello {studentName},\n\n"
-        "Thank you for your suggestion! (Reference: {ticketId})\n\n"
-        "Your feedback: {complaintDescription}\n\n"
-        "We value your input and will review it with our team.\n\n"
-        + _CLOSING
-    ),
-    'In Review': (
-        "Hello {studentName},\n\n"
-        "Your suggestion ({ticketId}) is currently being reviewed by our team.\n\n"
-        "Your feedback: {complaintDescription}\n\n"
-        "We appreciate you taking the time to share this with us.\n\n"
-        + _CLOSING
-    ),
-    'Pending': (
-        "Hello {studentName},\n\n"
-        "Your suggestion ({ticketId}) is pending further review.\n\n"
-        "We will notify you once a decision has been made.\n\n"
-        + _CLOSING
-    ),
-    'Approved': (
-        "Hello {studentName},\n\n"
-        "Great news! Your suggestion ({ticketId}) has been APPROVED by our team.\n\n"
-        "Your feedback: {complaintDescription}\n\n"
-        "We will work on implementing your idea. Thank you for helping us improve VendBees!\n\n"
-        + _CLOSING
-    ),
-    'Resolved': (
-        "Hello {studentName},\n\n"
-        "Your suggestion ({ticketId}) has been marked as resolved.\n\n"
-        "Thank you for your valuable feedback. It helps us improve the VendBees experience.\n\n"
-        + _CLOSING
-    ),
-    'Refunded': (
-        "Hello {studentName},\n\n"
-        "Your feedback reference ({ticketId}) has been updated.\n\n"
-        "Thank you for engaging with VendBees Support.\n\n"
-        + _CLOSING
-    ),
-}
-
-# ── General / Default ────────────────────────────────────────────────────────
-_GENERAL = {
-    'Submitted': (
-        "Hello {studentName},\n\n"
-        "Your complaint ({ticketId}) for Machine {machineId} has been submitted successfully.\n\n"
-        "Issue: {complaintDescription}\n\n"
-        "We will review it shortly and keep you updated here.\n\n"
-        + _CLOSING
-    ),
-    'In Review': (
-        "Hello {studentName},\n\n"
-        "Your complaint ({ticketId}) for Machine {machineId} is now IN REVIEW.\n\n"
-        "Issue: {complaintDescription}\n\n"
-        "Our support team is actively working on resolving the issue. We will notify you of any updates.\n\n"
-        + _CLOSING
-    ),
-    'Pending': (
-        "Hello {studentName},\n\n"
-        "Your complaint ({ticketId}) for Machine {machineId} is pending additional information.\n\n"
-        "Please reply to this message if you have further details to share.\n\n"
-        + _CLOSING
-    ),
-    'Resolved': (
-        "Hello {studentName},\n\n"
-        "Your complaint ({ticketId}) for Machine {machineId} has been marked as RESOLVED.\n\n"
-        "{statusSpecificMessage}\n\n"
-        "If the issue persists, simply reply to this WhatsApp message and we will reopen your complaint immediately.\n\n"
-        + _CLOSING
-    ),
-    'Refunded': (
-        "Hello {studentName},\n\n"
-        "Your refund for complaint ({ticketId}) has been processed successfully.\n\n"
-        "{statusSpecificMessage}\n\n"
-        "If you have any further concerns, simply reply to this WhatsApp conversation.\n\n"
         + _CLOSING
     ),
 }
@@ -264,16 +111,6 @@ _ISSUE_TEMPLATES = {
     'payment':              _PAYMENT_ISSUE,
     'transaction issue':    _PAYMENT_ISSUE,
     'money deducted':       _PAYMENT_ISSUE,
-    # Refund Issue variations
-    'refund issue':         _REFUND_ISSUE,
-    'refund':               _REFUND_ISSUE,
-    # Suggestion / Feedback
-    'suggestion':           _SUGGESTION,
-    'feedback':             _SUGGESTION,
-    # General / catch-all
-    'general':              _GENERAL,
-    'general complaint':    _GENERAL,
-    'other':                _GENERAL,
 }
 
 
@@ -281,31 +118,12 @@ class NotificationBuilder:
     """
     Service class responsible for compiling, templating, and generating
     formatted WhatsApp messages based on a Complaint Object.
-
-    Selects message template using (issue_type, status) matrix so every
-    issue type receives a unique, context-aware notification.
     """
 
     @staticmethod
-    def build_notification(complaint_data, status=None, custom_ai_message=None):
-        """
-        Builds and returns a formatted WhatsApp message from a complaint dict.
+    def _extract_variables(complaint_data, status=None):
+        current_status = status or complaint_data.get('status', 'In Review')
 
-        :param complaint_data: dict containing ticket/complaint information
-        :param status: optional status to override the one in complaint_data
-        :param custom_ai_message: optional pre-formatted string (e.g. from an AI model)
-        :return: str containing the formatted message, or None if no template found
-        """
-        # If an AI-generated summary is provided, return it directly
-        if custom_ai_message:
-            return custom_ai_message.strip()
-
-        if not complaint_data:
-            return "Notification update: Your complaint status has been updated. - VendBees Support"
-
-        current_status = status or complaint_data.get('status', 'Submitted')
-
-        # ── Extract complaint variables ──────────────────────────────────
         student_name = (
             complaint_data.get('fullName') or
             complaint_data.get('studentName') or
@@ -316,7 +134,6 @@ class NotificationBuilder:
         ticket_id = (
             complaint_data.get('ticket_id') or   # display ID preferred (VB-TICK-xxx)
             complaint_data.get('ticketId') or
-            complaint_data.get('ticket_id') or
             'N/A'
         )
 
@@ -342,7 +159,6 @@ class NotificationBuilder:
             'No description provided.'
         )
 
-        # ── Build status-specific dynamic text ──────────────────────────
         status_specific_message = ''
         if current_status == 'Resolved':
             resolution = (
@@ -351,7 +167,6 @@ class NotificationBuilder:
                 'Our support team has completed the investigation and resolved the issue.'
             )
             status_specific_message = resolution
-
         elif current_status == 'Refunded':
             refund_amount = (
                 complaint_data.get('refundAmount') or
@@ -363,16 +178,36 @@ class NotificationBuilder:
             else:
                 status_specific_message = 'Your refund has been processed successfully.'
 
+        return {
+            'student_name': student_name,
+            'ticket_id': ticket_id,
+            'machine_id': machine_id,
+            'issue_type': issue_type,
+            'complaint_description': complaint_description,
+            'current_status': current_status,
+            'status_specific_message': status_specific_message,
+        }
+
+    @staticmethod
+    def build_notification(complaint_data, status=None, custom_ai_message=None):
+        if custom_ai_message:
+            return custom_ai_message.strip()
+
+        if not complaint_data:
+            return "Notification update: Your complaint status has been updated. - VendBees Support"
+
+        vars = NotificationBuilder._extract_variables(complaint_data, status)
+        current_status = vars['current_status']
+        issue_type = vars['issue_type']
+
         # ── Select template by (issue_type, status) ─────────────────────
         issue_key = issue_type.strip().lower()
-        template_dict = _ISSUE_TEMPLATES.get(issue_key, _GENERAL)
+        template_dict = _ISSUE_TEMPLATES.get(issue_key, _MACHINE_DOWN)
         template = template_dict.get(current_status)
 
-        # Fallback: try General templates if issue-specific one is missing
         if not template:
-            template = _GENERAL.get(current_status)
+            template = _MACHINE_DOWN.get(current_status)
 
-        # Last resort: universal fallback
         if not template:
             template = (
                 "Hello {studentName},\n\n"
@@ -381,20 +216,106 @@ class NotificationBuilder:
                 + _CLOSING
             )
 
-        # ── Format and return ────────────────────────────────────────────
         try:
             return template.format(
-                studentName=student_name,
-                ticketId=ticket_id,
-                machineId=machine_id,
-                complaintDescription=complaint_description,
+                studentName=vars['student_name'],
+                ticketId=vars['ticket_id'],
+                machineId=vars['machine_id'],
+                complaintDescription=vars['complaint_description'],
                 status=current_status,
-                statusSpecificMessage=status_specific_message,
+                statusSpecificMessage=vars['status_specific_message'],
             )
         except Exception:
-            # Emergency fallback
             return (
-                f"Hello {student_name},\n\n"
-                f"Your complaint ({ticket_id}) status is now {current_status}.\n\n"
+                f"Hello {vars['student_name']},\n\n"
+                f"Your complaint ({vars['ticket_id']}) status is now {current_status}.\n\n"
                 f"Thank you,\nVendBees Support"
             )
+
+    @staticmethod
+    def build_meta_template_payload(complaint_data, status=None):
+        """
+        Generates Meta WhatsApp Business Cloud API category-specific template name and components list
+        for button-driven notifications.
+
+        Returns dict:
+            {
+                'template_name': str (e.g. 'vb_machinedown_inreview'),
+                'components': list of dicts,
+                'full_text': str
+            }
+        """
+        vars = NotificationBuilder._extract_variables(complaint_data, status)
+        curr_status = vars['current_status']
+        full_text = NotificationBuilder.build_notification(complaint_data, status=curr_status)
+
+        # Normalize issue category
+        issue_key = vars['issue_type'].strip().lower()
+        if 'product' in issue_key or 'item' in issue_key:
+            cat_slug = 'productissue'
+        elif 'payment' in issue_key or 'transaction' in issue_key or 'money' in issue_key:
+            cat_slug = 'paymentissue'
+        else:
+            cat_slug = 'machinedown'
+
+        status_slug = curr_status.lower().replace(' ', '')
+        template_name = f"vb_{cat_slug}_{status_slug}"
+
+        student_name = str(vars['student_name'])
+        ticket_id = str(vars['ticket_id'])
+        machine_id = str(vars['machine_id'])
+        complaint_desc = str(vars['complaint_description'])
+        status_msg = str(vars['status_specific_message'] or 'Thank you for contacting VendBees Support.')
+
+        # Positional parameters matching each specific Meta Template body
+        params = []
+        if cat_slug == 'machinedown':
+            if curr_status == 'In Review':
+                # Hello {{1}}, We are currently inspecting Machine {{2}} for your reported issue ({{3}}). Issue: {{4}}
+                params = [student_name, machine_id, ticket_id, complaint_desc]
+            elif curr_status == 'Pending':
+                # Hello {{1}}, Your complaint ({{2}}) for Machine {{3}} is pending further investigation.
+                params = [student_name, ticket_id, machine_id]
+            elif curr_status == 'Resolved':
+                # Hello {{1}}, Great news! Machine {{2}} has been repaired... complaint ({{3}})... {{4}}
+                params = [student_name, machine_id, ticket_id, status_msg]
+
+        elif cat_slug == 'productissue':
+            if curr_status == 'In Review':
+                # Hello {{1}}, We are reviewing the product issue you reported ({{2}}) for Machine {{3}}. Issue: {{4}}
+                params = [student_name, ticket_id, machine_id, complaint_desc]
+            elif curr_status == 'Pending':
+                # Hello {{1}}, Your product complaint ({{2}}) for Machine {{3}} is pending review.
+                params = [student_name, ticket_id, machine_id]
+            elif curr_status == 'Resolved':
+                # Hello {{1}}, Your product complaint ({{2}}) for Machine {{3}} has been RESOLVED. {{4}}
+                params = [student_name, ticket_id, machine_id, status_msg]
+            elif curr_status == 'Refunded':
+                # Hello {{1}}, Your refund for the product issue (complaint {{2}}) has been approved. {{3}}
+                params = [student_name, ticket_id, status_msg]
+
+        elif cat_slug == 'paymentissue':
+            if curr_status == 'In Review':
+                # Hello {{1}}, We are reviewing your payment complaint ({{2}}) for Machine {{3}}. Issue: {{4}}
+                params = [student_name, ticket_id, machine_id, complaint_desc]
+            elif curr_status == 'Pending':
+                # Hello {{1}}, Your payment complaint ({{2}}) is pending additional verification.
+                params = [student_name, ticket_id]
+            elif curr_status == 'Refunded':
+                # Hello {{1}}, Your payment refund for complaint ({{2}}) has been processed successfully. {{3}}
+                params = [student_name, ticket_id, status_msg]
+
+        # General fallback if parameters empty
+        if not params:
+            params = [student_name, ticket_id, machine_id]
+
+        components = [{
+            "type": "body",
+            "parameters": [{"type": "text", "text": val} for val in params]
+        }]
+
+        return {
+            'template_name': template_name,
+            'components': components,
+            'full_text': full_text
+        }
