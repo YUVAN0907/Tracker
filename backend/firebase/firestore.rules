@@ -1,138 +1,65 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =========================================================================
-    // DEFAULT: deny everything unless explicitly permitted below
-    // =========================================================================
-    match /{document=**} {
-      allow read, write: if false;
+    match /refillers/{refillerId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == refillerId;
     }
 
-    // =========================================================================
-    // INVENTORY & OPERATIONS COLLECTIONS
-    // =========================================================================
-
-    // Products collection
-    match /Products/{productId} {
+    match /machines/{machineId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /students/{document=**} {
+      allow read, write: if true;
+    }
+    
+    match /tickets/{document=**} {
+      allow read, write: if true;
+    }
+    
+    match /feedbacks/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Refiller Notifications
+    match /refiller_notifications/{docId} {
+      allow read, write: if request.auth != null && resource.data.refillerId == request.auth.uid;
+    }
+    
+    // Refill logs
+    match /refill_logs/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Admin & idle notifications
+    match /admin_notifications/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Assignments
+    match /assignments/{assignmentId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /settings/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if false;
+    }
+    
+    match /refiller_activities/{document=**} {
+      allow read, write: if request.auth != null;
     }
 
-    // Machines collection
-    match /Machines/{machineId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    // WhatsApp Real-time Conversations & Message Mapping
+    match /whatsappConversations/{document=**} {
+      allow read, write: if request.auth != null;
     }
 
-    // Stock (Current_Stock) collection
-    match /Stock/{stockId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Sales collection
-    match /Sales/{saleId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Purchases (Vendor_Purchase) collection
-    match /Purchases/{purchaseId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Refills collection
-    match /Refills/{refillId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Vendors collection
-    match /Vendors/{vendorId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Warehouse collection
-    match /Warehouse/{warehouseId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Purchased_Products collection
-    match /Purchased_Products/{ppId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Stocks (batch stocks) collection
-    match /Stocks/{stockEntryId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Stock_Products collection
-    match /Stock_Products/{spId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Stock_Assignments collection
-    match /Stock_Assignments/{saId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // OUR_PO collection
-    match /OUR_PO/{poId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // =========================================================================
-    // COMPLAINT & WHATSAPP COLLECTIONS
-    // =========================================================================
-
-    // Tickets — core complaint documents
-    // Authenticated admins can read/write; students submit via backend only.
-    match /tickets/{ticketId} {
-      allow read:  if request.auth != null;
-      allow write: if request.auth != null;
-
-      // WhatsApp chat sub-collection (tickets/{ticketId}/chats/{chatDocId})
-      // Readable/writable only by authenticated admins.
-      // Students never write here directly — only via the Flask webhook.
-      match /chats/{chatDocId} {
-        allow read:  if request.auth != null;
-        allow write: if request.auth != null;
-      }
-    }
-
-    // Feedbacks — student suggestions / feedback documents
-    match /feedbacks/{feedbackId} {
-      allow read:  if request.auth != null;
-      allow write: if request.auth != null;
-    }
-
-    // WhatsApp conversation index — one document per phone/ticket pair
-    // Document IDs are UUIDs (never phone numbers). Indexed by studentPhone.
-    // Read: authenticated admins only.
-    // Write: backend service account only (webhook handler writes these).
-    //        Client-side writes are blocked — all updates go through Flask.
-    match /whatsappConversations/{conversationId} {
-      allow read:  if request.auth != null;
-      allow write: if request.auth != null;
-    }
-
-    // WhatsApp message ID → ticket/chat mapping for idempotency & status tracking
-    // Never accessed from the frontend — admin SDK writes bypass these rules.
-    // Explicitly locked to prevent any direct client access.
     match /whatsapp_message_map/{messageId} {
-      allow read:  if false;  // internal use only (admin SDK)
-      allow write: if false;  // internal use only (admin SDK)
+      allow read, write: if request.auth != null;
     }
-
   }
 }

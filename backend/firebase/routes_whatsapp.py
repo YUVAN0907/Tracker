@@ -513,28 +513,33 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
     
     student_name = 'Student'
     ticket_display_id = ticket_id
+    tdata = {}
     try:
-        ticket_doc = vendbeesdb.collection('tickets').document(ticket_id).get()
-        if ticket_doc.exists:
-            tdata = ticket_doc.to_dict()
-            student_name = tdata.get('fullName') or tdata.get('studentName') or 'Student'
-            ticket_display_id = tdata.get('ticketId') or tdata.get('ticket_id') or ticket_id
+        if ticket_id:
+            ticket_doc = vendbeesdb.collection('tickets').document(ticket_id).get()
+            if ticket_doc.exists:
+                tdata = ticket_doc.to_dict()
+                student_name = tdata.get('fullName') or tdata.get('studentName') or 'Student'
+                ticket_display_id = tdata.get('ticketId') or tdata.get('ticket_id') or ticket_id
     except Exception as exc:
         print(f"[WA] Error fetching ticket in flow: {exc}", file=sys.stderr)
+
+    # Dynamic Category + Status Template lookup if override wasn't explicitly supplied
+    if not override_template_name and tdata:
+        try:
+            from notification_builder import NotificationBuilder
+            curr_status = tdata.get('status', 'In Review')
+            meta_payload = NotificationBuilder.build_meta_template_payload(tdata, curr_status)
+            override_template_name = meta_payload['template_name']
+            override_components = meta_payload['components']
+            template_text = meta_payload['full_text']
+        except Exception as exc:
+            print(f"[WA] Error generating category template in flow: {exc}", file=sys.stderr)
+            template_text = text_body
+    else:
+        template_text = text_body
         
     template_name = override_template_name or os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
-    
-    if override_template_name and override_components is not None:
-        template_text = text_body
-    elif template_name == 'hello_world':
-        template_text = "Hello World"
-    else:
-        template_text = (
-            f"Hello {student_name},\n\n"
-            f"We have an update regarding your complaint {ticket_display_id}.\n\n"
-            f"Please reply to this message to continue chatting with our support team.\n\n"
-            f"Regards,\nVendBees Support"
-        )
 
     def send_template():
         if override_template_name and override_components is not None:
