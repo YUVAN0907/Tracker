@@ -4,12 +4,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /refillers/{refillerId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == refillerId;
+      allow read, write: if true;
     }
 
     match /machines/{machineId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
     
     match /students/{document=**} {
@@ -26,40 +25,44 @@ service cloud.firestore {
     
     // Refiller Notifications
     match /refiller_notifications/{docId} {
-      allow read, write: if request.auth != null && resource.data.refillerId == request.auth.uid;
+      allow read, write: if true;
     }
     
     // Refill logs
     match /refill_logs/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
     
     // Admin & idle notifications
     match /admin_notifications/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
     
     // Assignments
     match /assignments/{assignmentId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
     
     match /settings/{docId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if true;
     }
     
     match /refiller_activities/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
 
-    // WhatsApp Real-time Conversations & Message Mapping
+    // WhatsApp Real-time Conversations & Message Mapping & Notifications
     match /whatsappConversations/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
 
-    match /whatsapp_message_map/{messageId} {
-      allow read, write: if request.auth != null;
+    match /whatsapp_message_map/{document=**} {
+      allow read, write: if true;
+    }
+
+    match /whatsapp_notifications/{document=**} {
+      allow read, write: if true;
     }
   }
 }
