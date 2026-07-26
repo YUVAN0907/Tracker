@@ -150,6 +150,12 @@ class NotificationBuilder:
             'General'
         )
 
+        # Normalize status for payment issues: 'Resolved' -> 'Refunded'
+        issue_key = issue_type.strip().lower()
+        is_payment = ('payment' in issue_key or 'transaction' in issue_key or 'money' in issue_key)
+        if is_payment and current_status == 'Resolved':
+            current_status = 'Refunded'
+
         complaint_description = (
             complaint_data.get('complaintText') or
             complaint_data.get('issue_detail') or

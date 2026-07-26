@@ -6,6 +6,7 @@ import {
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { sendWhatsAppMessage } from '../utils/whatsappApi';
+import { useWhatsAppNotifications } from '../context/WhatsAppNotificationContext';
 import clsx from 'clsx';
 import WhatsAppConversationCenter from './WhatsAppConversationCenter';
 
@@ -29,6 +30,13 @@ const WhatsAppChatDrawer = ({ complaint, onClose }) => {
     const studentPhone = whatsappPhone || rawPhone;
     const studentName = complaint?.student?.name || complaint?.fullName || 'Student';
     const ticketDisplayId = complaint?.ticket_id || complaint?.ticketId || 'N/A';
+
+    // ── Clear WhatsApp unread notification when this drawer opens ──────────────
+    const { markTicketRead } = useWhatsAppNotifications();
+    useEffect(() => {
+        if (ticketId) markTicketRead(ticketId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ticketId]);
 
     useEffect(() => {
         if (!rawPhone || rawPhone === 'N/A') {

@@ -65,8 +65,11 @@ export const WhatsAppNotificationProvider = ({ children }) => {
                 const convs = snapshot.docs.map((d) => {
                     const data = d.data();
                     
-                    // Unread logic: explicit unreadForAdmin, or fallback for legacy docs where lastSender was student with unreadCount > 0
-                    const isUnread = data.unreadForAdmin === true || (data.unreadForAdmin === undefined && data.lastSender === 'student' && (data.unreadCount > 0));
+                    // Unread logic: explicit unreadForAdmin (boolean or string), OR lastSender is student with unreadCount > 0, OR lastSender is student and unreadForAdmin is not explicitly false
+                    const isUnread = data.unreadForAdmin === true ||
+                        data.unreadForAdmin === 'true' ||
+                        data.unreadForAdmin === 'True' ||
+                        (data.lastSender === 'student' && (data.unreadCount > 0 || data.unreadForAdmin !== false));
 
                     // Date parsing
                     let jsDate = new Date();
@@ -145,7 +148,7 @@ export const WhatsAppNotificationProvider = ({ children }) => {
     const markTicketRead = useCallback(async (ticketId) => {
         if (!ticketId) return;
         const toRead = whatsappNotifications.filter(
-            (n) => n.ticketId === ticketId && !n.read,
+            (n) => (n.ticketId === ticketId || n.ticketDisplayId === ticketId) && !n.read,
         );
         await Promise.all(toRead.map((n) => markWhatsAppRead(n.id)));
     }, [whatsappNotifications, markWhatsAppRead]);

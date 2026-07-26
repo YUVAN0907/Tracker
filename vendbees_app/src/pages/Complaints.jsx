@@ -349,6 +349,30 @@ const Complaints = () => {
     const [confirmationModal, setConfirmationModal] = useState({ show: false, status: '', title: '', message: '', ticketId: '' });
     const exportMenuRef = useRef(null);
 
+    const downloadImage = async (e, url, filename) => {
+        if (e) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename || 'download.jpg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error("Direct download failed:", error);
+            // Fallback: Open original URL in a new tab
+            window.open(url, '_blank');
+        }
+    };
+
     useEffect(() => {
         let unsubTickets = () => {};
         let unsubFeedbacks = () => {};
@@ -988,17 +1012,13 @@ const Complaints = () => {
                                                             >
                                                                 <ZoomIn className="text-white drop-shadow-md" size={22} strokeWidth={2} />
                                                             </button>
-                                                            <a
-                                                                href={url}
-                                                                download={`proof_${selectedComplaint.ticket_id || i+1}_image${i+1}.jpg`}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="p-2.5 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"
+                                                            <button
+                                                                onClick={(e) => downloadImage(e, url, `proof_${selectedComplaint.ticket_id || selectedComplaint.id || i+1}_image${i+1}.jpg`)}
+                                                                className="p-2.5 bg-white/20 hover:bg-white/30 rounded-xl transition-colors cursor-pointer"
                                                                 title="Download proof image"
                                                             >
                                                                 <ArrowDownToLine className="text-white drop-shadow-md" size={22} strokeWidth={2} />
-                                                            </a>
+                                                            </button>
                                                         </div>
                                                         <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm">
                                                             Proof {i+1}
@@ -1023,6 +1043,9 @@ const Complaints = () => {
                                                 {['Submitted', 'In Review', 'Pending', 'Resolved', 'Refunded'].map((status) => {
                                                     // Hide Refunded for non-payment issues unless it's already refunded
                                                     if (status === 'Refunded' && selectedComplaint.issue_type !== 'Payment Issue' && selectedComplaint.status !== 'Refunded') return null;
+                                                    
+                                                    // Hide Resolved for payment issues unless already resolved
+                                                    if (status === 'Resolved' && selectedComplaint.issue_type === 'Payment Issue' && selectedComplaint.status !== 'Resolved') return null;
                                                     
                                                     const isActive = selectedComplaint.status === status || (selectedComplaint.status === 'Reviewing' && status === 'In Review');
                                                     
@@ -1176,8 +1199,14 @@ const Complaints = () => {
                     />
                     <div className="absolute bottom-10 flex gap-4">
                         <button 
+                            onClick={(e) => { e.stopPropagation(); downloadImage(e, previewImage, `proof_${selectedComplaint?.ticket_id || selectedComplaint?.id || 'preview'}_image.jpg`); }}
+                            className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl backdrop-blur-md font-bold flex items-center gap-3 transition-all border border-white/10 hover:scale-105 shadow-xl cursor-pointer"
+                        >
+                            <Download size={20} /> Download Image
+                        </button>
+                        <button 
                             onClick={(e) => { e.stopPropagation(); window.open(previewImage, '_blank'); }}
-                            className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl backdrop-blur-md font-bold flex items-center gap-3 transition-all border border-white/10 hover:scale-105 shadow-xl"
+                            className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl backdrop-blur-md font-bold flex items-center gap-3 transition-all border border-white/10 hover:scale-105 shadow-xl cursor-pointer"
                         >
                             <ExternalLink size={20} /> Open Original in New Tab
                         </button>
