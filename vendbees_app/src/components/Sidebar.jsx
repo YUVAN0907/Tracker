@@ -2,12 +2,12 @@ import React from 'react';
 import { LayoutDashboard, Monitor, Package, Archive, Box, Warehouse, Bell, LogOut, Users, FileText } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useWhatsAppNotifications } from '../context/WhatsAppNotificationContext';
+
 
 const Sidebar = () => {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
-    const { unreadWhatsAppCount } = useWhatsAppNotifications();
+
 
     const navItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -57,12 +57,6 @@ const Sidebar = () => {
                     >
                         <item.icon size={20} className="stroke-[1.5]" />
                         <span className="flex-1">{item.name}</span>
-                        {item.path === '/complaints' && unreadWhatsAppCount > 0 && (
-                            <span
-                                className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"
-                                title={`${unreadWhatsAppCount} unread WhatsApp message${unreadWhatsAppCount !== 1 ? 's' : ''}`}
-                            />
-                        )}
                     </NavLink>
                 ))}
 

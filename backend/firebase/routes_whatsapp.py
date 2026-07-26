@@ -1,5 +1,5 @@
 """
-WhatsApp API Routes — Production Hardened
+WhatsApp API Routes -- Production Hardened
 Flask Blueprint for WhatsApp Cloud API integration.
 
 Features:
@@ -11,7 +11,7 @@ Features:
   - Support: text, image, audio, voice, video, document,
              sticker, location, contacts, reaction, interactive
   - Outgoing: text, image, document
-  - Status tracking: sending → sent → delivered → read → failed
+  - Status tracking: sending  sent  delivered  read  failed
   - All credentials from environment variables only
 """
 
@@ -50,7 +50,7 @@ vendbeesdb = admin_firestore.client(database_id='vendbeesdb')
 # Ordered status progression (higher index = more advanced)
 _STATUS_ORDER = {'sending': 0, 'sent': 1, 'delivered': 2, 'read': 3, 'failed': -1}
 
-# Meta webhook status names → internal status names
+# Meta webhook status names  internal status names
 _META_STATUS_MAP = {
     'sent': 'sent',
     'delivered': 'delivered',
@@ -140,7 +140,7 @@ def _store_outgoing_message(
     file_name=None, file_size=None, caption=None,
     storage_path=None, conversation_id=None,
 ):
-    """Store an outgoing (admin → student) message in tickets/{ticketId}/chats/{docId}."""
+    """Store an outgoing (admin  student) message in tickets/{ticketId}/chats/{docId}."""
     doc_data = _build_chat_doc(
         message_id=doc_id,
         ticket_id=ticket_id,
@@ -171,7 +171,7 @@ def _store_incoming_message(
     latitude=None, longitude=None, reply_to_message_id=None,
     meta_media_id=None, storage_path=None,
 ):
-    """Store an incoming (student → admin) message in tickets/{ticketId}/chats/{docId}."""
+    """Store an incoming (student  admin) message in tickets/{ticketId}/chats/{docId}."""
     doc_id = whatsapp_message_id or str(uuid.uuid4())
     doc_data = _build_chat_doc(
         message_id=doc_id,
@@ -202,7 +202,7 @@ def _store_incoming_message(
 
 
 def _store_message_mapping(whatsapp_message_id, ticket_id, chat_doc_id, conversation_id=None):
-    """Store whatsappMessageId → (ticketId, chatDocId, conversationId) for webhook status lookups."""
+    """Store whatsappMessageId  (ticketId, chatDocId, conversationId) for webhook status lookups."""
     vendbeesdb.collection('whatsapp_message_map').document(whatsapp_message_id).set({
         'ticketId':       ticket_id,
         'chatDocId':      chat_doc_id,
@@ -364,16 +364,16 @@ def _find_ticket_by_phone(phone_raw):
     Find the most recent active ticket for a given phone number.
 
     Lookup order (fastest first):
-      1. whatsappConversations (indexed by studentPhone)  ← production path
+      1. whatsappConversations (indexed by studentPhone)  <- production path
       2. Query students by whatsappNumber to get mobileNumber(s)
-      3. tickets collection by mobileNumber               ← slow fallback
-      4. tickets collection by phoneNumber                ← alternative schema
+      3. tickets collection by mobileNumber               <- slow fallback
+      4. tickets collection by phoneNumber                <- alternative schema
 
     Returns (ticket_doc_id, ticket_data) or (None, None).
     """
     formats = _normalize_digits(phone_raw)
 
-    # ── Fast path: whatsappConversations (UUID doc IDs, indexed by studentPhone) ──
+    #  Fast path: whatsappConversations (UUID doc IDs, indexed by studentPhone) 
     for fmt in formats:
         try:
             convs = list(
@@ -391,7 +391,7 @@ def _find_ticket_by_phone(phone_raw):
         except Exception as exc:
             print(f"[WA] whatsappConversations lookup error for {fmt}: {exc}", file=sys.stderr)
 
-    # ── Lookup students by whatsappNumber to map to registered mobile numbers ──
+    #  Lookup students by whatsappNumber to map to registered mobile numbers 
     resolved_mobiles = set()
     for fmt in formats:
         try:
@@ -421,7 +421,7 @@ def _find_ticket_by_phone(phone_raw):
         if len(mob) == 10:
             search_mobiles.add('91' + mob)
 
-    # ── Slow path: direct tickets query ──
+    #  Slow path: direct tickets query 
     for field in ('mobileNumber', 'phoneNumber'):
         for mob in search_mobiles:
             try:
@@ -596,15 +596,15 @@ def _upsert_conversation(
 ):
     """
     Upsert the whatsappConversations document for this phone/ticket pair.
-    Document ID = UUID (never a phone number — security requirement).
+    Document ID = UUID (never a phone number -- security requirement).
     Indexed by studentPhone for fast webhook lookup.
 
     Notification fields (used by dashboard notification system):
-      unreadForAdmin  — True when student sends, False when admin replies
-      unreadCount     — atomic-incremented per student message, reset on admin reply
-      ticketDisplayId — denormalized for notification card display (e.g. VB-TICK-...)
-      issueType       — denormalized for notification card display
-      complaintStatus — denormalized for notification card display
+      unreadForAdmin  -- True when student sends, False when admin replies
+      unreadCount     -- atomic-incremented per student message, reset on admin reply
+      ticketDisplayId -- denormalized for notification card display (e.g. VB-TICK-...)
+      issueType       -- denormalized for notification card display
+      complaintStatus -- denormalized for notification card display
     """
     local_phone = ''.join(c for c in str(phone_raw) if c.isdigit())
     if len(local_phone) > 10:
@@ -661,7 +661,7 @@ def _upsert_conversation(
         payload['lastCustomerMessageTime'] = admin_firestore.SERVER_TIMESTAMP
         payload['conversationOpen'] = True
         payload['conversationType'] = 'free_form'
-        payload['unreadForAdmin'] = True   # ← notification: new student message
+        payload['unreadForAdmin'] = True   # <- notification: new student message
     elif last_sender == 'admin':
         if is_template:
             payload['lastTemplateSent'] = admin_firestore.SERVER_TIMESTAMP
@@ -670,7 +670,7 @@ def _upsert_conversation(
         else:
             payload['conversationOpen'] = True
             payload['conversationType'] = 'free_form'
-        payload['unreadForAdmin'] = False  # ← admin replied → conversation seen
+        payload['unreadForAdmin'] = False  # <- admin replied  conversation seen
 
     try:
         existing = list(
@@ -682,7 +682,7 @@ def _upsert_conversation(
         if existing:
             conv_ref = vendbeesdb.collection('whatsappConversations').document(existing[0].id)
             if increment_unread:
-                # Atomic increment — avoids race conditions on concurrent webhook events
+                # Atomic increment -- avoids race conditions on concurrent webhook events
                 payload['unreadCount'] = admin_firestore.Increment(1)
             else:
                 payload['unreadCount'] = 0
@@ -725,7 +725,7 @@ def _get_conversation_id(phone_raw):
 def _update_message_status(whatsapp_message_id, new_status, failed_reason=None):
     """
     Update delivery status of a tracked outgoing message.
-    Only advances the status forward (sent → delivered → read).
+    Only advances the status forward (sent  delivered  read).
     Marks as failed regardless of current status.
     """
     try:
@@ -778,7 +778,7 @@ def _verify_webhook_signature(request_body: bytes, signature_header: str, app_se
     Expected format: 'sha256=<hex_digest>'
     """
     if not app_secret:
-        # Not configured — skip verification with a warning
+        # Not configured -- skip verification with a warning
         print("[WA] WARNING: WHATSAPP_APP_SECRET not set. Skipping signature verification.", file=sys.stderr)
         return True
     if not signature_header or not signature_header.startswith('sha256='):
@@ -792,7 +792,7 @@ def _verify_webhook_signature(request_body: bytes, signature_header: str, app_se
 
 
 # =============================================================================
-# API ENDPOINTS — OUTGOING MESSAGES
+# API ENDPOINTS -- OUTGOING MESSAGES
 # =============================================================================
 
 @whatsapp_bp.route('/api/whatsapp/send', methods=['POST'])
@@ -1035,7 +1035,7 @@ def handle_webhook():
 
     Always returns 200 to prevent Meta retry storm.
     """
-    # ── 1. Signature verification ──────────────────────────────────────────
+    #  1. Signature verification 
     _, _, _, _, _, _ = reload_whatsapp_config()  # loads env
     import os
     app_secret = os.environ.get('WHATSAPP_APP_SECRET', '')
@@ -1046,7 +1046,7 @@ def handle_webhook():
         print("[WA] Webhook rejected - invalid signature.", file=sys.stderr)
         return 'Forbidden', 403
 
-    # ── 2. Parse payload ───────────────────────────────────────────────────
+    #  2. Parse payload 
     payload = request.get_json(force=True, silent=True)
     if not payload:
         return 'OK', 200
@@ -1081,12 +1081,12 @@ def _process_incoming_message(msg, value):
     wa_msg_id       = msg.get('id', '')
     msg_type        = msg.get('type', 'text')
 
-    # ── Idempotency check ──────────────────────────────────────────────────
+    #  Idempotency check 
     if _is_duplicate_event(wa_msg_id):
         print(f"[WA] Duplicate event skipped: {wa_msg_id}", file=sys.stderr)
         return
 
-    # ── Ticket lookup ──────────────────────────────────────────────────────
+    #  Ticket lookup 
     ticket_id, ticket_data = _find_ticket_by_phone(sender_phone)
 
     # Defaults
@@ -1104,7 +1104,7 @@ def _process_incoming_message(msg, value):
 
     reply_to_msg_id = msg.get('context', {}).get('id')
 
-    # ── Per-type extraction ────────────────────────────────────────────────
+    #  Per-type extraction 
 
     if msg_type == 'text':
         message_text = msg.get('text', {}).get('body', '')
@@ -1176,7 +1176,7 @@ def _process_incoming_message(msg, value):
         parts     = [p for p in [loc_name, loc_addr] if p]
         message_text = f"[Location: {latitude}, {longitude}]"
         if parts:
-            message_text += f" — {', '.join(parts)}"
+            message_text += f" -- {', '.join(parts)}"
 
     elif msg_type == 'contacts':
         contacts_list = msg.get('contacts', [])
@@ -1205,7 +1205,7 @@ def _process_incoming_message(msg, value):
     else:
         message_text = f'[{msg_type} message]'
 
-    # ── Store if ticket found ──────────────────────────────────────────────
+    #  Store if ticket found 
     if ticket_id:
         student_name = (
             ticket_data.get('fullName') or
@@ -1250,7 +1250,7 @@ def _process_incoming_message(msg, value):
         # incremented unreadCount atomically. No separate notification collection needed.
 
         print(
-            f"[WA] Incoming {msg_type} from {sender_phone} → ticket {ticket_id} "
+            f"[WA] Incoming {msg_type} from {sender_phone}  ticket {ticket_id} "
             f"(docId={chat_doc_id})",
             file=sys.stderr,
         )
@@ -1314,7 +1314,7 @@ def _process_status_update(status_event):
     failed_reason = None
     if errors:
         err = errors[0]
-        failed_reason = f"[{err.get('code')}] {err.get('title', '')} — {err.get('message', '')}"
+        failed_reason = f"[{err.get('code')}] {err.get('title', '')} -- {err.get('message', '')}"
 
     mapped = _META_STATUS_MAP.get(status)
     if mapped and wa_msg_id:
@@ -1653,7 +1653,7 @@ def add_internal_note():
 
 
 # =============================================================================
-# BACKFILL ENDPOINT — creates whatsapp_notifications for existing incoming chats
+# BACKFILL ENDPOINT -- creates whatsapp_notifications for existing incoming chats
 # =============================================================================
 
 @whatsapp_bp.route('/api/whatsapp/backfill-notifications', methods=['POST'])
@@ -1662,7 +1662,7 @@ def backfill_notifications():
     One-time backfill: scan ALL tickets/{id}/chats for incoming student messages
     and create missing whatsapp_notifications documents.
 
-    Safe to run multiple times — uses chatMessageId (wa_msg_id) as doc ID,
+    Safe to run multiple times -- uses chatMessageId (wa_msg_id) as doc ID,
     so existing notifications are never overwritten.
 
     Returns: { success, created, skipped, errors }
