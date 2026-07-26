@@ -856,7 +856,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
     const today = new Date().toISOString().split('T')[0];
     // Use local backend for normalized delivery recording (falls back to production if not available)
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-        ? 'http://localhost:3002/api'
+        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
         : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // poData contains: { po_id, vendor_id, po_date, items: [{Product_ID, Product_Name, No_of_Cases, Units_Per_Case, PO_Price}] }
@@ -2349,7 +2349,7 @@ const Inventory = () => {
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
 
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? 'http://localhost:3002/api'
+        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
         : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // Fetch vendor purchases when tab changes

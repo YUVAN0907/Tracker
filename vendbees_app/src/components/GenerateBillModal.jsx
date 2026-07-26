@@ -315,7 +315,7 @@ const GenerateBillModal = ({ isOpen, onClose, onSuccess }) => {
             });
             
             // Save bill to database via API
-            const response = await fetch('http://localhost:3002/api/bills/', {
+            const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/bills/', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,

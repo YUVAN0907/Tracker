@@ -31,7 +31,7 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3002/api/auth/users', {
+      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -67,7 +67,7 @@ export default function UserManagement() {
     }
 
     try {
-      const response = await fetch('http://localhost:3002/api/auth/register', {
+      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/register', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -101,7 +101,7 @@ export default function UserManagement() {
     setSuccess('');
 
     try {
-      const response = await fetch(`http://localhost:3002/api/auth/users/${userId}`, {
+      const response = await fetch(`https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -135,7 +135,7 @@ export default function UserManagement() {
     setSuccess('');
 
     try {
-      const response = await fetch(`http://localhost:3002/api/auth/users/${userId}`, {
+      const response = await fetch(`https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/users/${userId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

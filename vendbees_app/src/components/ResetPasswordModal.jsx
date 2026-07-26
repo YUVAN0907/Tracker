@@ -59,7 +59,7 @@ export default function ResetPasswordModal({ user, onClose, onSuccess }) {
       setLoading(true);
       
       // First verify admin's password by attempting a change-password call with same password
-      const verifyResponse = await fetch('http://localhost:3002/api/auth/change-password', {
+      const verifyResponse = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/change-password', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -78,7 +78,7 @@ export default function ResetPasswordModal({ user, onClose, onSuccess }) {
       }
 
       // If verification successful, proceed with resetting user password
-      const resetResponse = await fetch(`http://localhost:3002/api/auth/reset-password/${user.userId}`, {
+      const resetResponse = await fetch(`https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/reset-password/${user.userId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -49,7 +49,7 @@ const AddFromPurchaseForm = ({ onSave, onCancel, saving }) => {
         // Fetch available purchased products from backend
         const fetchProducts = async () => {
             try {
-                const response = await fetch('http://localhost:3002/api/warehouse/purchase-products');
+                const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/warehouse/purchase-products');
                 if (response.ok) {
                     const data = await response.json();
                     setPurchasedProducts(data);

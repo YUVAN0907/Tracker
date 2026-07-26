@@ -37,7 +37,7 @@ const MachineOut = () => {
         window.location.hostname.startsWith('192.168')
     );
     const API_URL = isLocalhost 
-        ? 'http://localhost:3002/api'
+        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
         : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
 
     if (loading) return null;

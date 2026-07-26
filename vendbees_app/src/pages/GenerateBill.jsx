@@ -29,7 +29,7 @@ const GenerateBill = () => {
             
             try {
                 setLoadingStats(true);
-                const response = await fetch('http://localhost:3002/api/bills/history', {
+                const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/bills/history', {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'

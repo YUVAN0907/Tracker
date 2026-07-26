@@ -59,7 +59,7 @@ const CreateBatchPage = () => {
     });
     
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? 'http://localhost:3002/api'
+        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
         : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'; // Use local backend for development, production backend otherwise
 
     // Load suggestions on mount

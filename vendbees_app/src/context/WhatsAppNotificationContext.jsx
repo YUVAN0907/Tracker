@@ -25,6 +25,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { useAuth } from './AuthContext';
 import { db } from '../firebase';
 import {
     collection, query, onSnapshot,
@@ -46,10 +47,16 @@ const WhatsAppNotificationContext = createContext({
 
 export const WhatsAppNotificationProvider = ({ children }) => {
     const [whatsappNotifications, setWhatsappNotifications] = useState([]);
+    const { isAuthenticated } = useAuth();
 
     // Real-time listener on whatsappConversations (the existing collection).
     // Querying without orderBy avoids index requirements or document exclusions if missing fields.
     useEffect(() => {
+        if (!isAuthenticated) {
+            setWhatsappNotifications([]);
+            return;
+        }
+
         const q = query(collection(db, 'whatsappConversations'));
 
         const unsubscribe = onSnapshot(
@@ -114,7 +121,7 @@ export const WhatsAppNotificationProvider = ({ children }) => {
         );
 
         return () => unsubscribe();
-    }, []);
+    }, [isAuthenticated]);
 
     // Unread = conversations where read === false
     const unreadWhatsAppCount = whatsappNotifications.filter((n) => !n.read).length;

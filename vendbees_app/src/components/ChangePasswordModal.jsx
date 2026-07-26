@@ -61,7 +61,7 @@ export default function ChangePasswordModal({ onClose }) {
 
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3002/api/auth/change-password', {
+      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/change-password', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

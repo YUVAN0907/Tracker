@@ -27,7 +27,7 @@ export default function BillHistory() {
   const fetchBills = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3002/api/bills/history', {
+      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/bills/history', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -147,7 +147,7 @@ export default function BillHistory() {
       console.log('[Download] PDF generated successfully');
       
       // Update download count on server
-      const response = await fetch(`http://localhost:3002/api/bills/${bill.billId}/download`, {
+      const response = await fetch(`https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/bills/${bill.billId}/download`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -175,7 +175,7 @@ export default function BillHistory() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3002/api/bills/${billId}`, {
+      const response = await fetch(`https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/bills/${billId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

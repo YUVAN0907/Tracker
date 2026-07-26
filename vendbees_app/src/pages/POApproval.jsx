@@ -35,7 +35,7 @@ const POApproval = () => {
   const waitingPOs = useMemo(() => groupedPOs.filter(po => po.Status === 'Waiting for Approval' || po.Status === 'Rejected'), [groupedPOs]);
 
   const apiBase = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'http://localhost:3002/api'
+    ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
     : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
   const handleAction = async (poId, action, reason = '') => {
