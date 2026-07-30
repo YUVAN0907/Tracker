@@ -1041,11 +1041,11 @@ const Complaints = () => {
                                             </div>
                                             <div className="p-8 flex flex-col gap-3">
                                                 {['Submitted', 'In Review', 'Pending', 'Resolved', 'Refunded'].map((status) => {
-                                                    // Hide Refunded for non-payment issues unless it's already refunded
-                                                    if (status === 'Refunded' && selectedComplaint.issue_type !== 'Payment Issue' && selectedComplaint.status !== 'Refunded') return null;
+                                                    // Hide Refunded for non-payment/product issues unless it's already refunded
+                                                    if (status === 'Refunded' && !['Payment Issue', 'Product Issue'].includes(selectedComplaint.issue_type) && selectedComplaint.status !== 'Refunded') return null;
                                                     
-                                                    // Hide Resolved for payment issues unless already resolved
-                                                    if (status === 'Resolved' && selectedComplaint.issue_type === 'Payment Issue' && selectedComplaint.status !== 'Resolved') return null;
+                                                    // Hide Resolved for payment and product issues unless already resolved
+                                                    if (status === 'Resolved' && ['Payment Issue', 'Product Issue'].includes(selectedComplaint.issue_type) && selectedComplaint.status !== 'Resolved') return null;
                                                     
                                                     const isActive = selectedComplaint.status === status || (selectedComplaint.status === 'Reviewing' && status === 'In Review');
                                                     

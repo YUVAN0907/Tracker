@@ -150,10 +150,10 @@ class NotificationBuilder:
             'General'
         )
 
-        # Normalize status for payment issues: 'Resolved' -> 'Refunded'
+        # Normalize status for payment and product issues: 'Resolved' -> 'Refunded'
         issue_key = issue_type.strip().lower()
-        is_payment = ('payment' in issue_key or 'transaction' in issue_key or 'money' in issue_key)
-        if is_payment and current_status == 'Resolved':
+        is_payment_or_product = ('payment' in issue_key or 'transaction' in issue_key or 'money' in issue_key or 'product' in issue_key or 'item' in issue_key)
+        if is_payment_or_product and current_status == 'Resolved':
             current_status = 'Refunded'
 
         complaint_description = (
@@ -264,8 +264,15 @@ class NotificationBuilder:
         else:
             cat_slug = 'machinedown'
 
-        status_slug = curr_status.lower().replace(' ', '')
-        template_name = f"vb_{cat_slug}_{status_slug}"
+        # Map internal slugs to Meta template prefixes
+        meta_cat = {
+            'productissue': 'product_issue',
+            'paymentissue': 'payment_issue',
+            'machinedown': 'machinedown'
+        }[cat_slug]
+
+        meta_status = curr_status.lower().replace(' ', '_')
+        template_name = f"{meta_cat}_{meta_status}"
 
         student_name = str(vars['student_name'])
         ticket_id = str(vars['ticket_id'])
@@ -294,8 +301,9 @@ class NotificationBuilder:
                 # Hello {{1}}, Your product complaint ({{2}}) for Machine {{3}} is pending review.
                 params = [student_name, ticket_id, machine_id]
             elif curr_status == 'Resolved':
-                # Hello {{1}}, Your product complaint ({{2}}) for Machine {{3}} has been RESOLVED. {{4}}
-                params = [student_name, ticket_id, machine_id, status_msg]
+                # Hello {{1}}, Your product complaint ({{2}}) for Machine {{3}} has been RESOLVED. 
+                # Meta only has 3 parameters for this template!
+                params = [student_name, ticket_id, machine_id]
             elif curr_status == 'Refunded':
                 # Hello {{1}}, Your refund for the product issue (complaint {{2}}) has been approved. {{3}}
                 params = [student_name, ticket_id, status_msg]
@@ -311,13 +319,29 @@ class NotificationBuilder:
                 # Hello {{1}}, Your payment refund for complaint ({{2}}) has been processed successfully. {{3}}
                 params = [student_name, ticket_id, status_msg]
 
+        # Valid Meta templates configured
+        VALID_TEMPLATES = {
+            'machinedown_in_review', 'machinedown_pending', 'machinedown_resolved',
+            'product_issue_in_review', 'product_issue_pending', 'product_issue_refunded',
+            'payment_issue_in_review', 'payment_issue_pending', 'payment_issue_refunded'
+        }
+
+        # Fallback to complaint_update if template does not exist (e.g. for "Submitted")
+        if template_name not in VALID_TEMPLATES:
+            template_name = 'complaint_update'
+            params = [student_name, ticket_id]
+
         # General fallback if parameters empty
         if not params:
             params = [student_name, ticket_id, machine_id]
 
+        # Sanitize parameters: Meta strictly rejects newlines and limits length to 1024
+        def _clean_param(val):
+            return str(val).replace('\n', ' ').replace('\r', '')[:1000]
+            
         components = [{
             "type": "body",
-            "parameters": [{"type": "text", "text": val} for val in params]
+            "parameters": [{"type": "text", "text": _clean_param(val)} for val in params]
         }]
 
         return {
