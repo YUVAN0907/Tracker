@@ -318,7 +318,7 @@ type BillHistory @table(key: "billId") {
 
 type QrCodeHistory @table(key: "qrId") {
   qrId: UUID! @default(expr: "uuidV4()")
-  userId: String                 # User who generated the QR codes
+  batchDateKey: String! @unique  # Unique identifier for QR set, based on batch number + assigned date
   machineIds: [String!]!         # Array of machine IDs for which QR codes were generated
   qrData: String!                # JSON data containing QR code information (machine details, URLs, etc.)
   pdfGenerated: Boolean! @default(value: false)
@@ -329,9 +329,6 @@ type QrCodeHistory @table(key: "qrId") {
   # Metadata
   createdAt: Timestamp!
   updatedAt: Timestamp!
-  
-  # Optional relation to user (for development, user may not exist yet)
-  user: User @ref(fields: "userId")
 }
 
 # ==============================

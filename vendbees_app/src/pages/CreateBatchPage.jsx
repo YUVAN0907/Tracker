@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useData } from '../context/DataContext';
 import { Plus, X, ChevronDown, ArrowLeft, Trash2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import clsx from 'clsx';
 
 const CreateBatchPage = () => {
     const navigate = useNavigate();
     const { machines = [], products = [], purchased_products = [], stocks = [], warehouse = [], warehouseStocks = [], refreshData } = useData();
+    const { user } = useAuth();
     
     // Dynamically initialize based on machine count (7 machines)
     const numMachines = machines && machines.length > 0 ? machines.length : 7;
@@ -1261,6 +1263,7 @@ const CreateBatchPage = () => {
         try {
             // ✅ ATOMIC: Include sources in batch creation request for atomic warehouse decrease
             const batchData = {
+                userId: user?.userId || user?.user_id || undefined,
                 batch_number: batchNumber,
                 machine_ids: selectedMachines.filter(m => m.trim()),
                 created_date: createdDate,

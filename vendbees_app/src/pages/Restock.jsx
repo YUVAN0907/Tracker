@@ -21,11 +21,8 @@ const Restock = () => {
     const [activeTab, setActiveTab] = useState('alerts');
     const [notification, setNotification] = useState(null);
     
-    // QR Code generation state
-    const [selectedMachines, setSelectedMachines] = useState([]);
+    // QR Code history state (auto-generated on batch creation)
     const [qrHistory, setQrHistory] = useState([]);
-    const [generatingQr, setGeneratingQr] = useState(false);
-    const [qrNotes, setQrNotes] = useState('');
     
     // ✅ NEW: Filter state for Stock Batches tab
     const [batchFilter, setBatchFilter] = useState('');
@@ -56,6 +53,49 @@ const Restock = () => {
         ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
         : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
 
+    const parseQrHistoryPayload = (item) => {
+        if (!item) return { batch: null, createdAt: null, machines: [] };
+
+        if (typeof item.qrData === 'string') {
+            try {
+                return JSON.parse(item.qrData);
+            } catch (error) {
+                console.warn('Failed to parse QR history payload:', error);
+                return {};
+            }
+        }
+
+        return item.qrData || {};
+    };
+
+    const getQrHistoryLabel = (item) => {
+        const payload = parseQrHistoryPayload(item);
+        const batchValue = payload.batch ?? null;
+        const batchDateKey = item?.batchDateKey || null;
+        const createdAt = payload.createdAt || item?.createdAt;
+
+        let batchLabel = 'QR Set';
+        if (typeof batchValue === 'number') {
+            batchLabel = `Batch ${batchValue}`;
+        } else if (typeof batchValue === 'string' && batchValue.trim()) {
+            batchLabel = batchValue.trim();
+        } else if (typeof batchDateKey === 'string' && batchDateKey.includes('BATCH:')) {
+            const match = batchDateKey.match(/BATCH:(\d+)/);
+            if (match) {
+                batchLabel = `Batch ${match[1]}`;
+            } else {
+                batchLabel = batchDateKey;
+            }
+        }
+
+        if (createdAt) {
+            const dateLabel = new Date(createdAt).toLocaleString();
+            return `${batchLabel} • ${dateLabel}`;
+        }
+
+        return batchLabel;
+    };
+
     // Log when stocks data changes
     useEffect(() => {
         if (stocks && stocks.length > 0) {
@@ -81,9 +121,11 @@ const Restock = () => {
             const QRCodeLib = await import('qrcode');
             const zip = new JSZip();
 
+            const payload = parseQrHistoryPayload(qrItem);
+
             // Determine machine records
-            const machineRecords = qrItem.qrData?.machines?.length
-                ? qrItem.qrData.machines
+            const machineRecords = payload.machines?.length
+                ? payload.machines
                 : (qrItem.machineIds || []).map(id => ({ machineId: id, location: '' }));
 
             if (machineRecords.length === 0) {
@@ -92,11 +134,16 @@ const Restock = () => {
             }
 
             for (const machine of machineRecords) {
-                const machineId = machine.machineId || machine.machineId || '';
+                const machineId = machine.machineId || machine.machine || '';
                 const machineLocation = machine.location || machine.Location || '';
-                
-                // Encode both Machine ID and Location in the QR code
-                const qrData = `${machineId}|${machineLocation}`;
+                const payload = parseQrHistoryPayload(qrItem);
+                const createdDate = payload.createdAt || qrItem.createdAt || '';
+                const createdDatePart = createdDate ? createdDate.split('T')[0] : '';
+                const qrData = machine.qrCode || machine.qrData || (
+                    payload.batch || qrItem.batchDateKey
+                        ? `BATCH:${payload.batch || qrItem.batchDateKey || ''}|${createdDatePart}|MACHINE:${machineId}`
+                        : `${machineId}|${machineLocation}`
+                );
                 
                 const pngDataUrl = await QRCodeLib.toDataURL(qrData, {
                     width: 400,
@@ -202,62 +249,13 @@ const Restock = () => {
     };
 
     // QR Code functions
-    const handleMachineSelect = (machineId) => {
-        setSelectedMachines(prev => 
-            prev.includes(machineId) 
-                ? prev.filter(id => id !== machineId)
-                : [...prev, machineId]
-        );
-    };
-
-    const handleGenerateQrCodes = async () => {
-        if (selectedMachines.length === 0) {
-            setNotification({ type: 'error', message: 'Please select at least one machine' });
-            return;
-        }
-
-        if (!user || !user.userId) {
-            setNotification({ type: 'error', message: 'You must be logged in to generate QR codes' });
-            return;
-        }
-
-        setGeneratingQr(true);
-        try {
-            const response = await fetch(`${API_URL}/qr/generate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: user.userId,
-                    machineIds: selectedMachines,
-                    notes: qrNotes
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setNotification({ type: 'success', message: `Generated QR codes for ${selectedMachines.length} machines` });
-                setSelectedMachines([]);
-                setQrNotes('');
-                loadQrHistory(); // Refresh history
-            } else {
-                const error = await response.json();
-                setNotification({ type: 'error', message: `Failed to generate QR codes: ${error.message || 'Unknown error'}` });
-            }
-        } catch (error) {
-            console.error('Error generating QR codes:', error);
-            setNotification({ type: 'error', message: `Error: ${error.message}` });
-        } finally {
-            setGeneratingQr(false);
-        }
-    };
+    // Manual QR generation removed — QR codes are generated automatically on batch creation
 
     const loadQrHistory = async () => {
-        if (!user || !user.userId) {
-            return;
-        }
-
         try {
-            const response = await fetch(`${API_URL}/qr/history?userId=${user.userId}`, {
+            const userId = user?.userId || user?.user_id || '';
+            const url = userId ? `${API_URL}/qr/history?userId=${encodeURIComponent(userId)}` : `${API_URL}/qr/history`;
+            const response = await fetch(url, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -356,41 +354,13 @@ const Restock = () => {
         }
     };
 
+    // Generate QR PDF for a qr history item
     const generateQrPdf = async (qrItem) => {
-        // Create a temporary div for PDF generation
-        const pdfContainer = document.createElement('div');
-        pdfContainer.style.width = '210mm'; // A4 width
-        pdfContainer.style.minHeight = '297mm'; // A4 height
-        pdfContainer.style.padding = '20mm';
-        pdfContainer.style.boxSizing = 'border-box';
-        pdfContainer.style.fontFamily = 'Arial, sans-serif';
-        pdfContainer.style.backgroundColor = 'white';
-
-        // Add header
-        const header = document.createElement('div');
-        header.style.textAlign = 'center';
-        header.style.marginBottom = '30px';
-        header.style.borderBottom = '2px solid #333';
-        header.style.paddingBottom = '20px';
-
-        const title = document.createElement('h1');
-        title.textContent = 'Machine QR Codes';
-        title.style.color = '#333';
-        title.style.fontSize = '24px';
-        title.style.margin = '0 0 10px 0';
-
-        const subtitle = document.createElement('p');
-        subtitle.textContent = `Generated on ${new Date(qrItem.createdAt).toLocaleString()}`;
-        subtitle.style.color = '#666';
-        subtitle.style.fontSize = '14px';
-        subtitle.style.margin = '0';
-
-        header.appendChild(title);
-        header.appendChild(subtitle);
-        pdfContainer.appendChild(header);
-
-        // Add QR codes grid
         const gridContainer = document.createElement('div');
+        gridContainer.style.display = 'grid';
+        gridContainer.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        gridContainer.style.gap = '20px';
+        gridContainer.style.marginTop = '20px';
         gridContainer.style.display = 'grid';
         gridContainer.style.gridTemplateColumns = 'repeat(2, 1fr)';
         gridContainer.style.gap = '20px';
@@ -536,9 +506,9 @@ const Restock = () => {
         document.body.removeChild(pdfContainer);
     };
 
-    // Load QR history when QR tab is active and user is available
+    // Load QR history when QR tab is active
     useEffect(() => {
-        if (activeTab === 'qr' && user && user.userId) {
+        if (activeTab === 'qr') {
             loadQrHistory();
         }
     }, [activeTab, user]);
@@ -1011,64 +981,12 @@ const Restock = () => {
                 {/* QR Code Generation Tab */}
                 {activeTab === 'qr' && (
                     <div className="space-y-6">
-                        {/* QR Code Generation Section */}
                         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
-                            <div className="flex items-center gap-3 mb-6">
-                                <QrCode size={24} className="text-blue-600" />
-                                <h3 className="text-lg font-semibold text-slate-800">Generate QR Codes</h3>
+                            <div className="flex items-center gap-3 mb-4">
+                                <QrCode size={20} className="text-blue-600" />
+                                <h3 className="text-sm font-semibold text-slate-800">QR Codes</h3>
                             </div>
-
-                            {/* Machine Selection */}
-                            <div className="mb-6">
-                                <h4 className="text-sm font-medium text-slate-700 mb-3">Select Machines</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-60 overflow-y-auto">
-                                    {machines && machines.length > 0 ? machines.map(machine => (
-                                        <label key={machine.Machine_ID} className="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedMachines.includes(machine.Machine_ID)}
-                                                onChange={() => handleMachineSelect(machine.Machine_ID)}
-                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="font-medium text-slate-800 truncate">{machine.Machine_ID}</div>
-                                                <div className="text-xs text-slate-500 truncate">{machine.Location}</div>
-                                            </div>
-                                        </label>
-                                    )) : (
-                                        <div className="col-span-full text-center py-8 text-slate-500">
-                                            No machines available
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Notes */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Notes (Optional)</label>
-                                <textarea
-                                    value={qrNotes}
-                                    onChange={(e) => setQrNotes(e.target.value)}
-                                    placeholder="Add notes for this QR code generation..."
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 resize-none"
-                                    rows={3}
-                                />
-                            </div>
-
-                            {/* Generate Button */}
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleGenerateQrCodes}
-                                    disabled={generatingQr || selectedMachines.length === 0}
-                                    className={clsx("px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2", 
-                                        generatingQr || selectedMachines.length === 0
-                                            ? "bg-slate-200 text-slate-500 cursor-not-allowed"
-                                            : "bg-blue-600 text-white hover:bg-blue-700")}
-                                >
-                                    {generatingQr ? 'Generating...' : 'Generate QR Codes'}
-                                    <QrCode size={16} />
-                                </button>
-                            </div>
+                            <p className="text-sm text-slate-600">QR codes are now generated automatically when batches are created. Each batch entry will appear here with its machines for download.</p>
                         </div>
 
                         {/* QR Code History Section */}
@@ -1082,56 +1000,67 @@ const Restock = () => {
                                 <div className="text-center py-12 text-slate-500">
                                     <QrCode size={48} className="mx-auto mb-4 text-slate-300" />
                                     <p className="font-medium">No QR codes generated yet</p>
-                                    <p className="text-sm mt-1">Generate your first QR codes above</p>
+                                    <p className="text-sm mt-1">Create a batch from the Restock page and it will appear here automatically.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    {qrHistory.map((item, idx) => (
-                                        <div key={item.qrId || idx} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <div className="font-medium text-slate-800">QR Code Set #{item.qrId?.slice(-8)}</div>
-                                                    <div className="text-sm text-slate-500 mt-1">
-                                                        {new Date(item.createdAt).toLocaleString()}
+                                    {qrHistory.map((item, idx) => {
+                                        const payload = parseQrHistoryPayload(item);
+                                        const machineRecords = payload.machines?.length
+                                            ? payload.machines
+                                            : (item.machineIds || []).map(machineId => ({ machineId }));
+
+                                        return (
+                                            <div key={item.qrId || idx} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div>
+                                                        <div className="font-medium text-slate-800">
+                                                            {getQrHistoryLabel(item)}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-sm font-medium text-slate-700">{machineRecords.length} machines</div>
+                                                        <div className="text-xs text-slate-500">Downloaded {item.pdfDownloadCount || 0} times</div>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="text-sm font-medium text-slate-700">{item.machineIds?.length || 0} machines</div>
-                                                    <div className="text-xs text-slate-500">Downloaded {item.pdfDownloadCount || 0} times</div>
+                                                
+                                                {item.notes && (
+                                                    <div className="text-sm text-slate-600 mb-3 bg-slate-50 p-2 rounded">
+                                                        {item.notes}
+                                                    </div>
+                                                )}
+                                                
+                                                <div className="flex flex-wrap gap-1 mb-3">
+                                                    {machineRecords.map((machine, machineIndex) => {
+                                                        const machineId = machine.machineId || machine.machine || '';
+                                                        if (!machineId) return null;
+
+                                                        return (
+                                                            <span key={`${machineId}-${machineIndex}`} className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                                                {machineId}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                                
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleDeleteQr(item.qrId)}
+                                                        className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                    <button
+                                                        onClick={() => downloadQrPngZip(item)}
+                                                        className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <Download size={14} />
+                                                        Download PNG ZIP
+                                                    </button>
                                                 </div>
                                             </div>
-                                            
-                                            {item.notes && (
-                                                <div className="text-sm text-slate-600 mb-3 bg-slate-50 p-2 rounded">
-                                                    {item.notes}
-                                                </div>
-                                            )}
-                                            
-                                            <div className="flex flex-wrap gap-1 mb-3">
-                                                {item.machineIds?.map(machineId => (
-                                                    <span key={machineId} className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
-                                                        {machineId}
-                                                    </span>
-                                                )) || []}
-                                            </div>
-                                            
-                                            <div className="flex justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleDeleteQr(item.qrId)}
-                                                    className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
-                                                >
-                                                    Delete
-                                                </button>
-                                                <button
-                                                    onClick={() => downloadQrPngZip(item)}
-                                                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                                                >
-                                                    <Download size={14} />
-                                                    Download PNG ZIP
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

@@ -3,6 +3,8 @@ from dataconnect_db import execute_graphql
 import logging
 import uuid
 import json
+import sys
+import traceback
 from datetime import datetime
 import qrcode
 from fpdf import FPDF
@@ -54,10 +56,10 @@ def download_machine_qr_pdf(machine_id):
 
 # Mutation to create QR code history record
 CREATE_QR_HISTORY_MUTATION = """
-mutation CreateQrCodeHistory($qrId: UUID!, $userId: String, $machineIds: [String!]!, $qrData: String!, $notes: String, $createdAt: Timestamp!, $updatedAt: Timestamp!) {
+mutation CreateQrCodeHistory($qrId: UUID!, $batchDateKey: String!, $machineIds: [String!]!, $qrData: String!, $notes: String, $createdAt: Timestamp!, $updatedAt: Timestamp!) {
   qrCodeHistory_insert(data: {
     qrId: $qrId,
-    userId: $userId,
+    batchDateKey: $batchDateKey,
     machineIds: $machineIds,
     qrData: $qrData,
     notes: $notes,
@@ -69,12 +71,10 @@ mutation CreateQrCodeHistory($qrId: UUID!, $userId: String, $machineIds: [String
 
 # Query to get QR code history
 GET_QR_HISTORY_QUERY = """
-query GetQrCodeHistory($userId: String) {
-  qrCodeHistories(
-    where: {userId: {eq: $userId}}
-    orderBy: [{createdAt: DESC}]
-  ) {
+query GetQrCodeHistory {
+  qrCodeHistories(orderBy: [{createdAt: DESC}]) {
     qrId
+    batchDateKey
     machineIds
     qrData
     pdfGenerated
@@ -124,82 +124,10 @@ def generate_qr_codes():
       "notes": "Optional notes"
     }
     """
-    try:
-        data = request.json
-        user_id = data.get('userId')
-        machine_ids = data.get('machineIds', [])
-        notes = data.get('notes', '')
-        
-        if not user_id:
-            user_id = "default_user"  # For development
-        
-        if not machine_ids or len(machine_ids) == 0:
-            return jsonify({'error': 'At least one machine ID is required'}), 400
-        notes = data.get('notes', '')
+    # Manual QR generation has been disabled — QR codes are generated automatically during batch creation
+    return jsonify({'error': 'Manual QR generation disabled. QR codes are auto-generated during batch creation.'}), 405
 
-        if not user_id:
-            return jsonify({'error': 'userId is required'}), 400
-
-        if not machine_ids or len(machine_ids) == 0:
-            return jsonify({'error': 'At least one machineId is required'}), 400
-
-        # Validate user exists (optional for now - create if doesn't exist)
-        user_result = execute_graphql(GET_USER_QUERY, {'userId': user_id})
-        if 'errors' in user_result:
-            logger.warning(f"Could not validate user {user_id}: {user_result['errors']}")
-            # Continue anyway for development
-        elif not user_result.get('user'):
-            logger.warning(f"User {user_id} does not exist in database")
-            # Continue anyway for development
-
-        # Generate unique QR ID
-        qr_id = str(uuid.uuid4())
-
-        # Create QR data (machine details with URLs)
-        qr_data = {
-            'qrId': qr_id,
-            'machines': []
-        }
-
-        # Use machineIds as is, assume they are valid
-        for machine_id in machine_ids:
-            qr_data['machines'].append({
-                'machineId': machine_id,
-                'location': '',  # Could look up if needed
-                'status': '',
-                'qrUrl': f"https://vendbees.com/machine/{machine_id}",
-                'qrCode': f"MACHINE:{machine_id}"
-            })
-
-        # Save to database
-        qr_data_json = json.dumps(qr_data)
-
-        result = execute_graphql(CREATE_QR_HISTORY_MUTATION, {
-            'qrId': qr_id,
-            'userId': user_id,
-            'machineIds': machine_ids,
-            'qrData': qr_data_json,
-            'notes': notes,
-            'createdAt': datetime.utcnow().isoformat() + 'Z',
-            'updatedAt': datetime.utcnow().isoformat() + 'Z'
-        })
-
-        if 'errors' in result:
-            logger.error(f"Failed to create QR history: {result['errors']}")
-            return jsonify({'error': 'Failed to save QR history', 'details': result['errors']}), 500
-
-        logger.info(f"Generated QR codes for machines: {machine_ids}")
-
-        return jsonify({
-            'success': True,
-            'qrId': qr_id,
-            'qrData': qr_data,
-            'message': f'Generated QR codes for {len(machine_ids)} machines'
-        }), 200
-
-    except Exception as e:
-        logger.error(f"Error generating QR codes: {str(e)}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+    # manual generation disabled; nothing further to do
 
 @qr_bp.route('/api/qr/history', methods=['GET'])
 def get_qr_history():
@@ -210,10 +138,7 @@ def get_qr_history():
     try:
         user_id = request.args.get('userId')
 
-        if not user_id:
-            return jsonify({'error': 'userId query parameter is required'}), 400
-
-        result = execute_graphql(GET_QR_HISTORY_QUERY, {'userId': user_id})
+        result = execute_graphql(GET_QR_HISTORY_QUERY, {})
 
         if 'errors' in result:
             logger.error(f"Failed to get QR history: {result['errors']}")
@@ -221,12 +146,6 @@ def get_qr_history():
 
         history = result.get('qrCodeHistories', [])
 
-        # Parse JSON data for each record
-        for record in history:
-            try:
-                record['qrData'] = json.loads(record['qrData'])
-            except:
-                record['qrData'] = {}
 
         return jsonify({
             'success': True,
@@ -236,6 +155,81 @@ def get_qr_history():
     except Exception as e:
         logger.error(f"Error retrieving QR history: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@qr_bp.route('/api/qr/generate-from-batch', methods=['POST'])
+def generate_qr_from_batch():
+  """
+  Generate QR history record from an existing batch number.
+  Request JSON: { "batch": 1, "userId": "user_id" }
+  """
+  try:
+    data = request.json or {}
+    batch = data.get('batch')
+    user_id = None
+
+    if not batch:
+      return jsonify({'error': 'batch is required'}), 400
+
+    # Query stockCoverAssignments for machine IDs in this batch
+    get_machines_query = """
+    query GetMachinesForBatch($batch: Int!) {
+      stockCoverAssignments(where: {batch: {eq: $batch}}) {
+        machineId
+      }
+    }
+    """
+
+    print(f"[DEBUG] generate_qr_from_batch received data: {data}", file=sys.stderr, flush=True)
+    machines_result = execute_graphql(get_machines_query, {'batch': int(batch)})
+    print(f"[DEBUG] machines_result: {machines_result}", file=sys.stderr, flush=True)
+    if 'errors' in machines_result:
+      logger.error(f"Failed to query machines for batch {batch}: {machines_result['errors']}")
+      return jsonify({'error': 'Failed to query machines for batch', 'details': machines_result['errors']}), 500
+
+    scas = machines_result.get('stockCoverAssignments', [])
+    machine_ids = list({ (s.get('machineId') or '').strip() for s in scas if s.get('machineId') })
+
+    if not machine_ids:
+      return jsonify({'error': 'No machines found for batch'}), 404
+
+    created_date = datetime.utcnow().date().isoformat()
+    qr_id = str(uuid.uuid4())
+    qr_data = {
+      'qrId': qr_id,
+      'batch': batch,
+      'createdAt': datetime.utcnow().isoformat() + 'Z',
+      'machines': []
+    }
+    for mid in machine_ids:
+      qr_data['machines'].append({
+        'machineId': mid,
+        'qrUrl': f"https://vendbees.com/machine/{mid}",
+        'qrCode': f"BATCH:{batch}|{created_date}|MACHINE:{mid}"
+      })
+
+    batch_date_key = f"BATCH:{batch}|DATE:{created_date}"
+    result = execute_graphql(CREATE_QR_HISTORY_MUTATION, {
+      'qrId': qr_id,
+      'batchDateKey': batch_date_key,
+      'machineIds': machine_ids,
+      'qrData': json.dumps(qr_data),
+      'notes': f'Generated from batch {batch}',
+      'createdAt': datetime.utcnow().isoformat() + 'Z',
+      'updatedAt': datetime.utcnow().isoformat() + 'Z'
+    })
+    print(f"[DEBUG] CREATE_QR_HISTORY result: {result}", file=sys.stderr, flush=True)
+
+    if 'errors' in result:
+      logger.error(f"Failed to create QR history from batch {batch}: {result['errors']}")
+      return jsonify({'error': 'Failed to create QR history', 'details': result['errors']}), 500
+
+    return jsonify({'success': True, 'qrId': qr_id, 'machineIds': machine_ids}), 200
+
+  except Exception as e:
+    tb = traceback.format_exc()
+    logger.error(f"Error in generate_qr_from_batch: {str(e)}\n{tb}")
+    return jsonify({'error': str(e), 'traceback': tb}), 500
 
 @qr_bp.route('/api/qr/download/<qr_id>', methods=['POST'])
 def update_qr_download(qr_id):

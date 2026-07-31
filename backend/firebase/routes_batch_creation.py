@@ -8,6 +8,10 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 from dataconnect_db import execute_graphql, format_timestamp
 import logging
+import uuid
+import json
+
+from qr_utils import create_batch_qr_history
 
 batch_creation_bp = Blueprint('batch_creation', __name__)
 logger = logging.getLogger(__name__)
@@ -64,6 +68,21 @@ mutation InsertStockCoverProductAssignment(
     units: $units,
     caseLabel: $caseLabel
   })
+}
+"""
+
+# Mutation to create QR code history record (used to automatically record QR sets for a batch)
+CREATE_QR_HISTORY_MUTATION = """
+mutation CreateQrCodeHistory($qrId: UUID!, $batchDateKey: String!, $machineIds: [String!]!, $qrData: String!, $notes: String, $createdAt: Timestamp!, $updatedAt: Timestamp!) {
+    qrCodeHistory_insert(data: {
+        qrId: $qrId,
+        batchDateKey: $batchDateKey,
+        machineIds: $machineIds,
+        qrData: $qrData,
+        notes: $notes,
+        createdAt: $createdAt,
+        updatedAt: $updatedAt
+    })
 }
 """
 
@@ -395,6 +414,29 @@ def normalize_batch_assignment():
                     })
                     logger.error(f"Error processing product: {str(e)}", exc_info=True)
         
+        # === Auto-generate QR history for this batch ===
+        try:
+            user_id = data.get('userId') if isinstance(data, dict) else None
+            machine_ids = []
+            if isinstance(data, dict) and isinstance(data.get('machine_ids'), list):
+                machine_ids.extend([str(mid).strip() for mid in data.get('machine_ids') if str(mid).strip()])
+            for sca in stock_cover_assignments:
+                mid = sca.get('machine') if isinstance(sca, dict) else None
+                if mid:
+                    machine_ids.append(str(mid).strip())
+
+            machine_ids = list(dict.fromkeys(machine_ids))
+            logger.info(f"📌 Auto QR history generation for batch {batch_number}: machine_ids={machine_ids}")
+
+            if machine_ids:
+                qr_result = create_batch_qr_history(batch_number, assigned_date, machine_ids, user_id)
+                if qr_result and 'errors' in qr_result:
+                    logger.warning(f"Auto QR history creation failed for batch {batch_number}: {qr_result['errors']}")
+            else:
+                logger.warning(f"No machine IDs found for auto QR history for batch {batch_number}")
+        except Exception as e:
+            logger.error(f"Error creating QR history for batch {batch_number}: {str(e)}", exc_info=True)
+
         # Prepare response
         response = {
             'success': len(failed_records) == 0,

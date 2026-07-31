@@ -5,6 +5,10 @@ import logging
 import json
 import sys
 import traceback
+import uuid
+
+from qr_utils import create_batch_qr_history
+
 
 stocks_batch_bp = Blueprint('stocks_batch', __name__)
 logger = logging.getLogger(__name__)
@@ -206,6 +210,42 @@ mutation InsertStockCoverAssignment(
 }
 """
 
+UPSERT_MACHINE_MUTATION = """
+mutation UpsertMachine($machineId: String!, $location: String, $status: String) {
+  machine_upsert(
+    data: {
+      machineId: $machineId,
+      location: $location,
+      status: $status
+    }
+  )
+}
+"""
+
+UPSERT_VENDOR_MUTATION = """
+mutation UpsertVendor($vendorId: String!, $vendorName: String) {
+  vendor_upsert(
+    data: {
+      vendorId: $vendorId,
+      vendorName: $vendorName
+    }
+  )
+}
+"""
+
+UPSERT_PRODUCT_MUTATION = """
+mutation UpsertProduct($productId: String!, $productName: String, $vendorId: String!, $units: Int) {
+  product_upsert(
+    data: {
+      productId: $productId,
+      productName: $productName,
+      vendorId: $vendorId,
+      units: $units
+    }
+  )
+}
+"""
+
 # Insert into StockCoverProductAssignment (products within stock-covers)
 # Note: id is the key field
 INSERT_STOCK_COVER_PRODUCT_ASSIGNMENT_MUTATION = """
@@ -220,6 +260,21 @@ mutation InsertStockCoverProductAssignment(
     productId: $productId,
     units: $units,
     caseLabel: $caseLabel
+  })
+}
+"""
+
+# Mutation to create QR code history record (for automatic QR creation when batch is created)
+CREATE_QR_HISTORY_MUTATION = """
+mutation CreateQrCodeHistory($qrId: UUID!, $batchDateKey: String!, $machineIds: [String!]!, $qrData: String!, $notes: String, $createdAt: Timestamp!, $updatedAt: Timestamp!) {
+  qrCodeHistory_insert(data: {
+    qrId: $qrId,
+    batchDateKey: $batchDateKey,
+    machineIds: $machineIds,
+    qrData: $qrData,
+    notes: $notes,
+    createdAt: $createdAt,
+    updatedAt: $updatedAt
   })
 }
 """
@@ -406,13 +461,18 @@ def create_batch_full():
         })
         
         if 'errors' in batch_result:
-            logger.error(f"❌ Failed to create BatchAssignment: {batch_result['errors']}")
-            return jsonify({'error': 'Failed to create batch assignment'}), 500
+            error_text = str(batch_result['errors'])
+            if 'unique constraint' in error_text.lower() or 'pkey' in error_text.lower():
+                logger.warning(f"⚠️ BatchAssignment already exists for batch {batch_number}; continuing with stock assignments")
+            else:
+                logger.error(f"❌ Failed to create BatchAssignment: {batch_result['errors']}")
+                return jsonify({'error': 'Failed to create batch assignment'}), 500
         
-        logger.info(f"✅ Created BatchAssignment: Batch {batch_number}")
+        logger.info(f"✅ BatchAssignment ready for batch {batch_number}")
         
         # ✅ STEP 2 & 3: Process each stock-cover-product assignment
         # Iterate over stocks (S1, S2, S3, ... S7)
+        machine_ids_for_qr = []
         for stock_label, stock_data in stocks_dict.items():
             if not isinstance(stock_data, dict):
                 continue
@@ -421,6 +481,19 @@ def create_batch_full():
             if not machine_id:
                 logger.warning(f"⚠️ Stock {stock_label} has no machine assigned, skipping")
                 continue
+
+            machine_ids_for_qr.append(machine_id)
+
+            try:
+                machine_upsert_result = execute_graphql(UPSERT_MACHINE_MUTATION, {
+                    "machineId": machine_id,
+                    "location": stock_data.get('location') or stock_data.get('machine_location') or None,
+                    "status": "Active"
+                })
+                if 'errors' in machine_upsert_result:
+                    logger.warning(f"⚠️ Could not upsert machine {machine_id}: {machine_upsert_result['errors']}")
+            except Exception as e:
+                logger.warning(f"⚠️ Machine upsert failed for {machine_id}: {e}")
             
             covers = stock_data.get('covers', {})
             
@@ -490,6 +563,24 @@ def create_batch_full():
                     
                     # Track product usage for source tracking
                     product_usage[product_id] = product_usage.get(product_id, 0) + units
+
+                    # Ensure the referenced Product row exists so the foreign key is satisfied.
+                    try:
+                        vendor_id = str(product.get("vendor_id") or product.get("vendorId") or "DEFAULT_VENDOR").strip() or "DEFAULT_VENDOR"
+                        product_name = str(product.get("product_name") or product.get("productName") or product_id).strip() or product_id
+
+                        execute_graphql(UPSERT_VENDOR_MUTATION, {
+                            "vendorId": vendor_id,
+                            "vendorName": vendor_id
+                        })
+                        execute_graphql(UPSERT_PRODUCT_MUTATION, {
+                            "productId": product_id,
+                            "productName": product_name,
+                            "vendorId": vendor_id,
+                            "units": units
+                        })
+                    except Exception as product_setup_error:
+                        logger.warning(f"      ⚠️ Product setup failed for {product_id}: {product_setup_error}")
                     
                     # Insert into StockCoverProductAssignment
                     logger.info(f"    📦 Creating StockCoverProductAssignment: Product {product_id}, Units {units}")
@@ -590,6 +681,30 @@ def create_batch_full():
             print(f"[DEBUG] Source deductions: {len(source_decrease_results['processed'])} processed, {len(source_decrease_results['failed'])} failed")
         
         # Prepare response
+        # === Auto-generate QR history for this batch (if machines present) ===
+        try:
+          user_id = data.get('userId') or data.get('user_id')
+          machine_ids = []
+          if isinstance(data.get('machine_ids'), list):
+            machine_ids.extend([str(mid).strip() for mid in data.get('machine_ids') if str(mid).strip()])
+          machine_ids.extend([str(mid).strip() for mid in machine_ids_for_qr if str(mid).strip()])
+
+          # Deduplicate machine IDs and preserve order
+          machine_ids = list(dict.fromkeys(machine_ids))
+          logger.info(f"📌 Auto QR history generation for batch {batch_number}: machine_ids={machine_ids}")
+
+          qr_status = {'attempted': False, 'machine_ids': machine_ids, 'result': None}
+          if machine_ids:
+            qr_status['attempted'] = True
+            qr_result = create_batch_qr_history(batch_number, created_date, machine_ids, user_id)
+            qr_status['result'] = qr_result
+            if qr_result and 'errors' in qr_result:
+              logger.warning(f"Auto QR history creation failed for batch {batch_number}: {qr_result['errors']}")
+          else:
+            logger.warning(f"No machine IDs found for auto QR history for batch {batch_number}")
+        except Exception as e:
+          logger.error(f"Error creating QR history for batch {batch_number}: {str(e)}", exc_info=True)
+          qr_status = {'attempted': True, 'machine_ids': machine_ids, 'result': {'errors': [str(e)]}}
         response = {
             'success': True,
             'message': f'Batch {batch_number} created successfully with normalized three-table structure',
@@ -597,6 +712,7 @@ def create_batch_full():
             'total_created': len(created_records),
             'created_records': created_records,
             'source_decreases': source_decrease_results,  # ✅ NEW: Include source decrease info
+            'qr_status': qr_status,
             'storage': {
                 'batchAssignment': 'Created',
                 'stockCoverAssignments': len(stock_cover_cache),
