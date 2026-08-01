@@ -6,7 +6,7 @@ VendBees is a full-stack inventory management platform built to manage product c
 
 The system combines a React + Vite front-end with a Python Flask backend powered by Firebase Data Connect / GraphQL and Firestore. It supports real-time dashboards, intelligent warehouse allocation, vendor purchase workflows, machine refill analytics, invoice generation, and QR code document generation.
 
-## Resume-ready Description
+## Description
 
 Developed a comprehensive inventory management system using React/Vite, Firebase Data Connect GraphQL, Firestore, and Python Flask. Implemented unified inventory visibility across products, warehouses, vending machines, and vendor purchase orders. Designed intelligent stock normalization, KPI dashboards, QR-based machine identification, and invoice generation to improve operational reliability and supply-chain transparency.
 
