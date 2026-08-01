@@ -5,6 +5,7 @@ Uses Data Connect (GraphQL) for database operations
 """
 
 import bcrypt
+import json
 import jwt
 import os
 import uuid
@@ -21,6 +22,38 @@ JWT_EXPIRY_HOURS = int(os.environ.get("JWT_EXPIRY_HOURS", 24))
 
 class AuthService:
     """Authentication service for user login and token management"""
+
+    @staticmethod
+    def normalize_permissions(raw_permissions) -> list:
+        """Convert permission data from GraphQL/API into a normalized list."""
+        if isinstance(raw_permissions, list):
+            return [p for p in raw_permissions if isinstance(p, str) and p.strip()]
+
+        if isinstance(raw_permissions, str):
+            value = raw_permissions.strip()
+            if not value:
+                return []
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [p for p in parsed if isinstance(p, str) and p.strip()]
+            except Exception:
+                pass
+            return [item.strip() for item in value.split(',') if item.strip()]
+
+        return []
+
+    @staticmethod
+    def serialize_permissions(permissions) -> str:
+        """Serialize permissions to a JSON string for storage."""
+        if permissions is None:
+            return json.dumps([])
+        if isinstance(permissions, str):
+            return permissions
+        if isinstance(permissions, list):
+            cleaned = [p for p in permissions if isinstance(p, str) and p.strip()]
+            return json.dumps(cleaned)
+        return json.dumps([])
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -76,6 +109,7 @@ class AuthService:
                 passwordHash
                 role
                 status
+                permissions
               }
             }
             """
@@ -162,7 +196,8 @@ class AuthService:
                     'userId': user_data.get('userId'),
                     'email': user_data.get('email'),
                     'fullName': user_data.get('fullName'),
-                    'role': user_data.get('role')
+                    'role': user_data.get('role'),
+                    'permissions': AuthService.normalize_permissions(user_data.get('permissions'))
                 },
                 'status': 200
             }
@@ -175,7 +210,7 @@ class AuthService:
             }
 
     @staticmethod
-    def register(email: str, password: str, full_name: str, created_by: str, role: str = 'user') -> dict:
+    def register(email: str, password: str, full_name: str, created_by: str, role: str = 'user', permissions=None) -> dict:
         """Register a new user (admin only)"""
         try:
             email_lower = email.lower()
@@ -222,6 +257,7 @@ class AuthService:
               $passwordHash: String!
               $role: String!
               $status: String!
+              $permissions: String
               $createdAt: Timestamp!
               $createdBy: String!
               $updatedAt: Timestamp!
@@ -233,6 +269,7 @@ class AuthService:
                 passwordHash: $passwordHash
                 role: $role
                 status: $status
+                permissions: $permissions
                 createdAt: $createdAt
                 createdBy: $createdBy
                 updatedAt: $updatedAt
@@ -250,6 +287,7 @@ class AuthService:
                 "passwordHash": password_hash,
                 "role": role,
                 "status": "active",
+                "permissions": AuthService.serialize_permissions(permissions),
                 "createdAt": now,
                 "createdBy": created_by,
                 "updatedAt": now

@@ -10,6 +10,7 @@ INSERT_PO_HEADER_MUTATION = """
 mutation InsertPOHeader(
     $poId: String!,
     $vendorId: String!,
+    $createdBy: String,
     $createdDate: Timestamp!,
     $totalAmount: Float!,
     $status: String!
@@ -17,6 +18,7 @@ mutation InsertPOHeader(
     purchaseOrderHeader_insert(data: {
         poId: $poId,
         vendorId: $vendorId,
+        createdBy: $createdBy,
         createdDate: $createdDate,
         totalAmount: $totalAmount,
         status: $status
@@ -64,6 +66,12 @@ mutation DeletePOLine($lineId: String!) {
 }
 """
 
+UPDATE_PO_HEADER_MUTATION = """
+mutation UpdatePOHeader($poId: String!, $status: String!, $totalAmount: Float!, $rejectionReason: String) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status, totalAmount: $totalAmount, rejectionReason: $rejectionReason })
+}
+"""
+
 DELETE_PO_HEADER_MUTATION = """
 mutation DeletePOHeader($poId: String!) {
   purchaseOrderHeader_delete(key: { poId: $poId })
@@ -74,6 +82,7 @@ def build_get_po_items_query(include_rejection: bool = False):
         header_fields = [
                 "poId",
                 "vendorId",
+                "createdBy",
                 "createdDate",
                 "totalAmount",
                 "status",
@@ -106,6 +115,7 @@ def build_get_all_pos_query(include_rejection: bool = False):
         header_fields = [
                 "poId",
                 "vendorId",
+                "createdBy",
                 "createdDate",
                 "totalAmount",
                 "status",
@@ -234,6 +244,7 @@ def create_single_po():
         header_vars = {
             "poId": po_id,
             "vendorId": vendor_id,
+            "createdBy": request.user_id,
             "createdDate": created_date,
             "totalAmount": total_amount,
             "status": "Waiting for Approval"
@@ -290,7 +301,8 @@ def create_multi_po():
             if po_id not in po_groups:
                 po_groups[po_id] = {
                     'vendor_id': vendor_id,
-                    'total_amount': 0,
+                    'created_by': request.user_id,
+                    'total_amount': 0.0,
                     'items': []
                 }
 
@@ -310,6 +322,7 @@ def create_multi_po():
             header_vars = {
                 "poId": po_id,
                 "vendorId": po_data['vendor_id'],
+                "createdBy": po_data['created_by'],
                 "createdDate": created_date,
                 "totalAmount": po_data['total_amount'],
                 "status": "Waiting for Approval"
@@ -466,6 +479,144 @@ def reject_po(po_id):
 
         execute_graphql(mutation, vars)
         return jsonify({'message': f'PO {po_id} rejected successfully.', 'po_id': po_id, 'reason': reason})
+
+    except Exception as e:
+        print(f"Error rejecting PO {po_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@po_bp.route('/api/rework-po/<po_id>', methods=['POST'])
+@manager_required
+def rework_po(po_id):
+    """Mark a PO as Rework and send a rework reason to the creator"""
+    try:
+        request_data = request.json or {}
+        reason = str(request_data.get('reason', '')).strip()
+
+        if not reason:
+            return jsonify({'error': 'Rework reason is required'}), 400
+
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        include_rejection = 'rejectionReason' in header_fields
+        po_items_query = build_get_po_items_query(include_rejection)
+        res = execute_graphql(po_items_query, {"poId": po_id})
+        po_lines = res.get('purchaseOrderLines', [])
+
+        if not po_lines:
+            return jsonify({'error': 'PO not found'}), 404
+
+        po_header = po_lines[0].get('purchaseOrderHeader', {})
+        current_status = po_header.get('status', 'Pending Approval')
+        created_by = po_header.get('createdBy')
+
+        if created_by and created_by == request.user_id:
+            return jsonify({'error': 'You cannot verify your own PO.'}), 403
+
+        if current_status == 'Approved':
+            return jsonify({'error': f'PO {po_id} has already been approved and cannot be sent for rework.'}), 400
+        if current_status == 'Rejected':
+            return jsonify({'error': f'PO {po_id} has been rejected and cannot be sent for rework.'}), 400
+
+        if 'rejectionReason' in header_fields:
+            mutation = """mutation ReworkPO($poId: String!, $status: String!, $rejectionReason: String!) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status, rejectionReason: $rejectionReason })
+}
+"""
+            vars = {"poId": po_id, "status": "Rework", "rejectionReason": reason}
+        else:
+            mutation = """mutation ReworkPO($poId: String!, $status: String!) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status })
+}
+"""
+            vars = {"poId": po_id, "status": "Rework"}
+
+        execute_graphql(mutation, vars)
+        return jsonify({'message': f'PO {po_id} marked for rework successfully.', 'po_id': po_id, 'reason': reason})
+
+    except Exception as e:
+        print(f"Error sending PO {po_id} for rework: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@po_bp.route('/api/update-po/<po_id>', methods=['POST'])
+@token_required
+def update_po(po_id):
+    """Update a PO in Rework status and return it to approval"""
+    try:
+        request_data = request.json or {}
+        items = request_data.get('items', [])
+
+        if not items or not isinstance(items, list):
+            return jsonify({'error': 'Updated line items are required'}), 400
+
+        header_fields = get_type_fields('PurchaseOrderHeader')
+        include_rejection = 'rejectionReason' in header_fields
+        po_items_query = build_get_po_items_query(include_rejection)
+        res = execute_graphql(po_items_query, {"poId": po_id})
+        po_lines = res.get('purchaseOrderLines', [])
+
+        if not po_lines:
+            return jsonify({'error': 'PO not found'}), 404
+
+        po_header = po_lines[0].get('purchaseOrderHeader', {})
+        current_status = po_header.get('status', 'Pending Approval')
+        created_by = po_header.get('createdBy')
+
+        if current_status != 'Rework':
+            return jsonify({'error': 'Only POs in Rework status can be edited.'}), 400
+
+        if created_by and request.user_id != created_by and request.user_role not in ['manager', 'admin']:
+            return jsonify({'error': 'Only the PO creator can update this PO.'}), 403
+
+        # Delete all existing line items for this PO
+        for line in po_lines:
+            execute_graphql(DELETE_PO_LINE_MUTATION, {"lineId": line.get('lineId')})
+
+        # Insert new line items and build updated total amount
+        total_amount = 0.0
+        for idx, item in enumerate(items, start=1):
+            product_id = str(item.get('product_id', '')).strip()
+            no_of_cases = int(item.get('no_of_cases', 0))
+            units_per_case = int(item.get('units_per_case', 1))
+            po_price = float(item.get('po_price', 0))
+
+            if not product_id or no_of_cases <= 0 or units_per_case <= 0:
+                return jsonify({'error': 'Each line item must have a valid product, case count, and units per case.'}), 400
+
+            line_total = no_of_cases * units_per_case
+            total_amount += line_total * po_price
+            line_id = f"{po_id}-{idx}"
+            line_vars = {
+                "lineId": line_id,
+                "poId": po_id,
+                "productId": product_id,
+                "noOfCases": no_of_cases,
+                "unitsPerCase": units_per_case,
+                "poPrice": po_price,
+                "lineTotal": float(line_total)
+            }
+            execute_graphql(INSERT_PO_LINE_MUTATION, line_vars)
+
+        # Update header status to Waiting for Approval and clear any prior reason
+        if 'rejectionReason' in header_fields:
+            mutation = """mutation UpdatePOHeader($poId: String!, $status: String!, $totalAmount: Float!, $rejectionReason: String) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status, totalAmount: $totalAmount, rejectionReason: $rejectionReason })
+}
+"""
+            vars = {"poId": po_id, "status": "Waiting for Approval", "totalAmount": float(total_amount), "rejectionReason": ""}
+        else:
+            mutation = """mutation UpdatePOHeader($poId: String!, $status: String!, $totalAmount: Float!) {
+  purchaseOrderHeader_update(key: { poId: $poId }, data: { status: $status, totalAmount: $totalAmount })
+}
+"""
+            vars = {"poId": po_id, "status": "Waiting for Approval", "totalAmount": float(total_amount)}
+
+        execute_graphql(mutation, vars)
+        return jsonify({'message': f'PO {po_id} updated and sent back for approval.', 'po_id': po_id})
+
+    except Exception as e:
+        print(f"Error updating PO {po_id}: {e}")
+        return jsonify({'error': str(e)}), 500
 
     except Exception as e:
         print(f"Error rejecting PO {po_id}: {e}")

@@ -250,8 +250,8 @@ const ProductForm = ({ product, onSave, onCancel, categories, saving, existingPr
 };
 
 // PO Creation Form with Warehouse Recommendations
-const POForm = ({ products, recentProducts = [], vendors, warehouse, onSave, onCancel, saving }) => {
-    const [form, setForm] = useState({
+const POForm = ({ products, recentProducts = [], vendors, warehouse, onSave, onCancel, saving, initialValues = null, submitLabel = 'Create PO' }) => {
+    const defaultForm = {
         product_id: '',
         vendor_id: '',
         cases: '',
@@ -259,7 +259,21 @@ const POForm = ({ products, recentProducts = [], vendors, warehouse, onSave, onC
         po_price: '',
         notes: '',
         product_source: 'master' // 'master' or 'recent'
+    };
+
+    const [form, setForm] = useState({
+        ...defaultForm,
+        ...initialValues
     });
+
+    useEffect(() => {
+        if (initialValues) {
+            setForm({
+                ...defaultForm,
+                ...initialValues
+            });
+        }
+    }, [initialValues]);
 
     // Combine products from both sources, filtering by selected vendor
     const combinedProducts = useMemo(() => {
@@ -495,19 +509,50 @@ const POForm = ({ products, recentProducts = [], vendors, warehouse, onSave, onC
 };
 
 // Multi-Product PO Form - Groups products by vendor, creates separate PO per vendor
-const MultiPOForm = ({ products, recentProducts = [], vendors, warehouse, onSave, onCancel, saving }) => {
+const MultiPOForm = ({ products, recentProducts = [], vendors, warehouse, onSave, onCancel, saving, initialVendor = '', initialItems = null }) => {
     // Global vendor selection - filter products by this vendor
-    const [selectedVendor, setSelectedVendor] = useState('');
+    const [selectedVendor, setSelectedVendor] = useState(initialVendor || '');
 
-    const [items, setItems] = useState([{
-        id: 1,
-        product_id: '',
-        product_key: '', // 'master-{id}' or 'recent-{id}'
-        product_name: '',
-        no_of_cases: '',
-        units_per_case: '',
-        po_price_per_unit: ''
-    }]);
+    const [items, setItems] = useState(() => {
+        if (initialItems && Array.isArray(initialItems) && initialItems.length > 0) {
+            return initialItems.map(it => ({
+                id: it.id || Date.now(),
+                product_id: it.product_id || it.product_key || '',
+                product_name: it.product_name || '',
+                no_of_cases: it.no_of_cases || it.cases || '',
+                units_per_case: it.units_per_case || it.units_per_case || '',
+                po_price_per_unit: it.po_price_per_unit || it.po_price || ''
+            }));
+        }
+
+        return [{
+            id: Date.now(),
+            product_id: '',
+            product_key: '', // 'master-{id}' or 'recent-{id}'
+            product_name: '',
+            no_of_cases: '',
+            units_per_case: '',
+            po_price_per_unit: ''
+        }];
+    });
+
+    // If initialVendor or initialItems change after mount, sync them
+    useEffect(() => {
+        if (initialVendor) setSelectedVendor(initialVendor);
+    }, [initialVendor]);
+
+    useEffect(() => {
+        if (initialItems && Array.isArray(initialItems) && initialItems.length > 0) {
+            setItems(initialItems.map(it => ({
+                id: it.id || Date.now(),
+                product_id: it.product_id || it.product_key || '',
+                product_name: it.product_name || '',
+                no_of_cases: it.no_of_cases || it.cases || '',
+                units_per_case: it.units_per_case || it.units_per_case || '',
+                po_price_per_unit: it.po_price_per_unit || it.po_price || ''
+            })));
+        }
+    }, [initialItems]);
 
     // Combine products from both sources for filtering by vendor
     const filteredProducts = useMemo(() => {
@@ -854,9 +899,8 @@ const MultiPOForm = ({ products, recentProducts = [], vendors, warehouse, onSave
 // Comprehensive Delivery Recording Form (for recording stock-in from vendor) - All products in PO + Custom products
 const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [], warehouses = [] }) => {
     const today = new Date().toISOString().split('T')[0];
-    // Use local backend for normalized delivery recording (falls back to production if not available)
-    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
+    const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+        ? 'http://localhost:3002/api'
         : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // poData contains: { po_id, vendor_id, po_date, items: [{Product_ID, Product_Name, No_of_Cases, Units_Per_Case, PO_Price}] }
@@ -2312,6 +2356,7 @@ const NewVendorPurchaseForm = ({ products, vendors, onSave, onCancel, saving }) 
 const Inventory = () => {
     const { user, token } = useAuth();
     const { products, purchases, vendors, recentProducts, warehouse, warehouses, ourPOs, vendorDeliveries, vendorPurchasesList, loading, refreshData, addToWarehouse, createMultiPO, recordDelivery, fetchVendorPurchases } = useData();
+    const hasPermission = (permission) => user?.role === 'admin' || (Array.isArray(user?.permissions) && user.permissions.includes(permission));
     const [activeTab, setActiveTab] = useState('Product Master');
     const [poSubTab, setPoSubTab] = useState('Your PO'); // Sub-tab for Purchase Orders
     const [productSubTab, setProductSubTab] = useState('Regular'); // ✅ NEW: Sub-tab for Products (Regular vs Recent)
@@ -2334,6 +2379,11 @@ const Inventory = () => {
     const [deleteVendor, setDeleteVendor] = useState(null);  // ✅ NEW: Delete vendor state
     const [editProduct, setEditProduct] = useState(null);  // ✅ NEW: Edit product state
     const [deleteProduct, setDeleteProduct] = useState(null);  // ✅ NEW: Delete product state
+    const [showEditPOModal, setShowEditPOModal] = useState(false);
+    const [editPOId, setEditPOId] = useState('');
+    const [editPOVendorId, setEditPOVendorId] = useState('');
+    const [editPOItems, setEditPOItems] = useState([]);
+    const [editPOFormData, setEditPOFormData] = useState(null);
     const [showAddRecentProductModal, setShowAddRecentProductModal] = useState(false);  // Add Recent Product
     const [editRecentProduct, setEditRecentProduct] = useState(null);  // Edit Recent Product
     const [deleteRecentProduct, setDeleteRecentProduct] = useState(null);  // Delete Recent Product
@@ -2346,10 +2396,11 @@ const Inventory = () => {
     const [statusFilter, setStatusFilter] = useState('All');
     const [poDataForDelivery, setPoDataForDelivery] = useState(null);
     const [loadingPOItems, setLoadingPOItems] = useState(false);
+    const [loadingEditPO, setLoadingEditPO] = useState(false);
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
 
-    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
+    const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+        ? 'http://localhost:3002/api'
         : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // Fetch vendor purchases when tab changes
@@ -2511,6 +2562,194 @@ const Inventory = () => {
             alert(`Error deleting PO: ${err?.message || err}`);
         } finally {
             setDeletingPOId(null);
+        }
+    };
+
+    const openEditPO = async (poId) => {
+        if (!token) {
+            alert('You must be logged in to edit a PO.');
+            return;
+        }
+
+        setLoadingEditPO(true);
+        try {
+            const response = await fetch(`${API_URL}/po-items/${encodeURIComponent(poId)}`);
+            const text = await response.text();
+            const result = text ? JSON.parse(text) : {};
+
+            if (!response.ok) {
+                const message = result.error || result.message || text || `${response.status} ${response.statusText}`;
+                alert(`Failed to load PO for editing: ${message}`);
+                return;
+            }
+
+            const items = (result.items || []).map((item, idx) => ({
+                id: idx + 1,
+                product_id: item.Product_ID || item.productId || '',
+                product_name: item.Product_Name || item.productName || '',
+                no_of_cases: item.No_of_Cases || item.noOfCases || 0,
+                units_per_case: item.Units_Per_Case || item.unitsPerCase || 1,
+                po_price_per_unit: item.PO_Price || item.poPrice || item.po_price || 0
+            }));
+
+            // Build product keys (master-<id> or recent-<id>) so MultiPOForm can pre-select
+            const mappedItems = items.map(it => {
+                const masterProduct = allProducts.find(p => p.Product_ID === it.product_id);
+                if (masterProduct) return {
+                    ...it,
+                    product_id: `master-${masterProduct.Product_ID}`,
+                    product_name: masterProduct.Name || it.product_name
+                };
+
+                const recentProduct = recentProducts.find(r => r.productId === it.product_id);
+                if (recentProduct) return {
+                    ...it,
+                    product_id: `recent-${recentProduct.recentProductId}`,
+                    product_name: recentProduct.productName || it.product_name
+                };
+
+                return it;
+            });
+
+            setEditPOId(poId);
+            setEditPOVendorId(result.vendor_id || result.vendorId || '');
+            setEditPOItems(mappedItems);
+            // Keep legacy single-item form data for backward compatibility (not used anymore)
+            setEditPOFormData(null);
+            // Open the existing Create Multi-Product PO modal prefilled for editing
+            setShowMultiPOModal(true);
+        } catch (err) {
+            console.error('Error loading PO for edit:', err);
+            alert(`Error: ${err?.message || err}`);
+        } finally {
+            setLoadingEditPO(false);
+        }
+    };
+
+    const updateEditPOItem = (id, field, value) => {
+        setEditPOItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    };
+
+    const addEditPOItemRow = () => {
+        setEditPOItems(prev => [...prev, { id: Date.now(), product_id: '', product_name: '', no_of_cases: '', units_per_case: '', po_price: '' }]);
+    };
+
+    const removeEditPOItemRow = (id) => {
+        if (editPOItems.length > 1) {
+            setEditPOItems(prev => prev.filter(item => item.id !== id));
+        }
+    };
+
+    const handleUpdatePOForm = async (payload) => {
+        if (!token) {
+            alert('You must be logged in to update a PO.');
+            return;
+        }
+
+        const item = {
+            product_id: payload.product_id,
+            no_of_cases: Number(payload.cases) || 0,
+            units_per_case: Number(payload.units_per_case) || 1,
+            po_price: Number(payload.po_price) || 0
+        };
+
+        if (!item.product_id || item.no_of_cases <= 0 || item.units_per_case <= 0) {
+            alert('Please fill all edited PO fields and ensure case counts and units per case are valid.');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const response = await fetch(`${API_URL}/update-po/${encodeURIComponent(editPOId)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ items: [item] })
+            });
+            const text = await response.text();
+            const result = text ? JSON.parse(text) : {};
+
+            if (!response.ok) {
+                const message = result.error || result.message || text || `${response.status} ${response.statusText}`;
+                alert(`Failed to update PO: ${message}`);
+                return;
+            }
+
+            alert(result.message || `PO ${editPOId} updated successfully.`);
+            setShowEditPOModal(false);
+            setEditPOId('');
+            setEditPOFormData(null);
+            if (refreshData) refreshData();
+        } catch (err) {
+            console.error('Error updating PO:', err);
+            alert(`Error: ${err?.message || err}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Update PO with multiple items (used by Edit -> reuse MultiPOForm)
+    const handleUpdatePOItems = async (itemsPayload) => {
+        if (!token) {
+            alert('You must be logged in to update a PO.');
+            return;
+        }
+
+        if (!editPOId) {
+            alert('No PO selected for update.');
+            return;
+        }
+
+        // Map frontend items to API format
+        const apiItems = itemsPayload.map(item => {
+            // item.product_id is a key like 'master-<id>' or 'recent-<id>'
+            let productId = item.product_id;
+            if (productId && productId.startsWith('master-')) productId = productId.replace('master-', '');
+            else if (productId && productId.startsWith('recent-')) {
+                const rp = recentProducts.find(r => `recent-${r.recentProductId}` === item.product_id);
+                productId = rp?.productId || productId;
+            }
+
+            return {
+                product_id: productId,
+                no_of_cases: Number(item.no_of_cases) || Number(item.cases) || 0,
+                units_per_case: Number(item.units_per_case) || Number(item.units_per_case) || 1,
+                po_price: Number(item.po_price_per_unit || item.po_price) || 0
+            };
+        });
+
+        setSaving(true);
+        try {
+            const response = await fetch(`${API_URL}/update-po/${encodeURIComponent(editPOId)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
+                body: JSON.stringify({ items: apiItems })
+            });
+            const text = await response.text();
+            const result = text ? JSON.parse(text) : {};
+
+            if (!response.ok) {
+                const message = result.error || result.message || text || `${response.status} ${response.statusText}`;
+                alert(`Failed to update PO: ${message}`);
+                return;
+            }
+
+            alert(result.message || `PO ${editPOId} updated successfully.`);
+            setShowEditPOModal(false);
+            setEditPOId('');
+            setEditPOItems([]);
+            setEditPOVendorId('');
+            if (refreshData) refreshData();
+        } catch (err) {
+            console.error('Error updating PO:', err);
+            alert(`Error: ${err?.message || err}`);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -3019,7 +3258,7 @@ const Inventory = () => {
                                 </select>
                             )}
                         </div>
-                        {activeTab === 'Vendor Master' && (
+                        {activeTab === 'Vendor Master' && hasPermission('add_vendor') && (
                             <button
                                 onClick={() => setShowAddVendorModal(true)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"
@@ -3027,9 +3266,9 @@ const Inventory = () => {
                                 <Plus size={16} /> Add Vendor
                             </button>
                         )}
-                        {activeTab === 'Purchase Orders' && poSubTab === 'Your PO' && (
+                        {activeTab === 'Purchase Orders' && poSubTab === 'Your PO' && hasPermission('create_po') && (
                             <button
-                                onClick={() => setShowMultiPOModal(true)}
+                                onClick={() => { setEditPOId(''); setEditPOVendorId(''); setEditPOItems([]); setShowMultiPOModal(true); }}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"
                             >
                                 <Plus size={16} /> Create PO
@@ -3220,18 +3459,22 @@ const Inventory = () => {
                                             <td className="px-6 py-4 text-slate-600">{p.Units_Per_Case || 1}</td>
                                             <td className="px-6 py-4">
                                                 <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => setEditProduct(p)}
-                                                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setDeleteProduct(p)}
-                                                        className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                                    >
-                                                        Delete
-                                                    </button>
+                                                    {hasPermission('edit_product') && (
+                                                        <button
+                                                            onClick={() => setEditProduct(p)}
+                                                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                    {hasPermission('delete_product') && (
+                                                        <button
+                                                            onClick={() => setDeleteProduct(p)}
+                                                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -3321,7 +3564,15 @@ const Inventory = () => {
                                                                 >
                                                                     {deletingPOId === row._poId ? 'Deleting...' : 'Delete PO'}
                                                                 </button>
-                                                            ) : (
+                                                            ) : row.Status === 'Rework' ? (
+                                                                <button
+                                                                    onClick={() => openEditPO(row._poId)}
+                                                                    disabled={loadingEditPO}
+                                                                    className="text-orange-600 hover:text-orange-800 font-medium text-xs px-2 py-1 bg-orange-50 rounded hover:bg-orange-100 disabled:opacity-50"
+                                                                >
+                                                                    {loadingEditPO ? 'Loading...' : 'Edit PO'}
+                                                                </button>
+                                                            ) : hasPermission('record_delivery') ? (
                                                                 <button
                                                                     onClick={() => fetchPOItems(row._poId)}
                                                                     disabled={loadingPOItems}
@@ -3329,7 +3580,7 @@ const Inventory = () => {
                                                                 >
                                                                     {loadingPOItems ? 'Loading...' : 'Record Delivery'}
                                                                 </button>
-                                                            )
+                                                            ) : null
                                                         )}
                                                     </td>
                                                 </tr>
@@ -3431,13 +3682,15 @@ const Inventory = () => {
                                 <h3 className="font-semibold text-slate-800">Recent Products Tracking</h3>
                                 <p className="text-sm text-slate-500 mt-1">Track product sales performance with automatic metrics</p>
                             </div>
-                            <button
-                                onClick={() => setShowAddRecentProductModal(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
-                            >
-                                <Plus size={16} />
-                                Add Product
-                            </button>
+                            {hasPermission('add_product') && (
+                                <button
+                                    onClick={() => setShowAddRecentProductModal(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
+                                >
+                                    <Plus size={16} />
+                                    Add Product
+                                </button>
+                            )}
                         </div>
                         <RecentProductsTable
                             products={filteredRecentProducts}
@@ -3840,16 +4093,18 @@ const Inventory = () => {
                 />
             </Modal>
 
-            {/* Create Multi-Product PO Modal */}
-            <Modal isOpen={showMultiPOModal} onClose={() => setShowMultiPOModal(false)} title="Create Purchase Order (Multi-Product)" size="lg">
+            {/* Create / Edit Multi-Product PO Modal (reuse for Edit by prefilling initialVendor/initialItems) */}
+            <Modal isOpen={showMultiPOModal} onClose={() => { setShowMultiPOModal(false); setEditPOId(''); setEditPOVendorId(''); setEditPOItems([]); }} title="Create Purchase Order (Multi-Product)" size="lg">
                 <MultiPOForm
                     products={allProducts}
                     recentProducts={recentProducts}
                     vendors={vendors}
                     warehouse={warehouse}
-                    onSave={handleCreateMultiPO}
-                    onCancel={() => setShowMultiPOModal(false)}
+                    onSave={editPOId ? handleUpdatePOItems : handleCreateMultiPO}
+                    onCancel={() => { setShowMultiPOModal(false); setEditPOId(''); setEditPOVendorId(''); setEditPOItems([]); }}
                     saving={saving}
+                    initialVendor={editPOVendorId}
+                    initialItems={editPOItems}
                 />
             </Modal>
 
@@ -3899,6 +4154,8 @@ const Inventory = () => {
                     />
                 )}
             </Modal>
+
+            {/* Edit PO now reuses the Create Multi-Product PO modal (no separate Edit modal) */}
 
             {/* ✅ Add Recent Product Modal */}
             <Modal isOpen={showAddRecentProductModal} onClose={() => setShowAddRecentProductModal(false)} title="Add Recent Product" size="lg">

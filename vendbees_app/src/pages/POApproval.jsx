@@ -23,19 +23,21 @@ const POApproval = () => {
           Created_By: item.Created_By || '',
           Total_Amount: item.Total_Amount,
           lineCount: 0,
+          totalCases: 0,
           products: []
         };
       }
       groups[item.PO_ID].lineCount += 1;
+      groups[item.PO_ID].totalCases += parseInt(item.No_of_Cases || 0) || 0;
       groups[item.PO_ID].products.push(item);
     });
     return Object.values(groups).sort((a, b) => new Date(b.Created_Date || 0) - new Date(a.Created_Date || 0));
   }, [ourPOs]);
 
-  const waitingPOs = useMemo(() => groupedPOs.filter(po => po.Status === 'Waiting for Approval' || po.Status === 'Rejected'), [groupedPOs]);
+  const waitingPOs = useMemo(() => groupedPOs.filter(po => po.Status === 'Waiting for Approval' || po.Status === 'Rejected' || po.Status === 'Rework'), [groupedPOs]);
 
   const apiBase = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
+    ? 'http://localhost:3002/api'
     : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
   const handleAction = async (poId, action, reason = '') => {
@@ -45,8 +47,9 @@ const POApproval = () => {
     }
 
     const isReject = action === 'reject';
-    const endpoint = isReject ? 'reject-po' : 'approve-po';
-    const body = isReject ? JSON.stringify({ reason }) : null;
+    const isRework = action === 'rework';
+    const endpoint = isReject ? 'reject-po' : isRework ? 'rework-po' : 'approve-po';
+    const body = isReject || isRework ? JSON.stringify({ reason }) : null;
 
     setActionLoading(prev => ({ ...prev, [poId]: true }));
     try {
@@ -97,6 +100,19 @@ const POApproval = () => {
     handleAction(poId, 'reject', reason.trim());
   };
 
+  const handleRework = (poId, createdBy) => {
+    if (createdBy === user?.userId) {
+      alert('You cannot send your own PO for rework.');
+      return;
+    }
+
+    const reason = window.prompt(`Enter rework reason for PO ${poId}:`);
+    if (!reason || !reason.trim()) {
+      return;
+    }
+    handleAction(poId, 'rework', reason.trim());
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-slate-50">
       <Header title="PO Verification" subtitle="Manager review and approval for pending purchase orders" />
@@ -130,6 +146,7 @@ const POApproval = () => {
                   <th className="px-4 py-3">Created Date</th>
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Products</th>
+                  <th className="px-4 py-3">Cases</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Created By</th>
                   <th className="px-4 py-3">Lines</th>
@@ -152,8 +169,8 @@ const POApproval = () => {
                     <td className="px-4 py-4 text-slate-600 max-w-md">
                       {po.products && po.products.length > 0 ? (
                         po.products.map((prod, idx) => {
-                          const pid = prod.Product_ID || prod.productId || prod.product_id || prod.ProductId || prod.product_id || '';
-                          const pname = prod.Product_Name || prod.productName || prod.Name || prod.Product_Name || '';
+                          const pid = prod.Product_ID || prod.productId || prod.product_id || prod.ProductId || '';
+                          const pname = prod.Product_Name || prod.productName || prod.Name || '';
                           return (
                             <div key={pid || idx} className="text-xs text-slate-700 truncate">
                               <span className="font-medium">{pid || 'N/A'}</span>
@@ -165,10 +182,32 @@ const POApproval = () => {
                         <span className="text-xs text-slate-500">No products</span>
                       )}
                     </td>
+                    <td className="px-4 py-4 text-slate-600">
+                      {po.products && po.products.length > 0 ? (
+                        po.products.map((prod, idx) => {
+                          const cases = prod.No_of_Cases || prod.no_of_cases || prod.cases || 0;
+                          return (
+                            <div key={idx} className="text-xs text-slate-700">
+                              {cases} case{cases === 1 ? '' : 's'}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <span className="text-xs text-slate-500">-</span>
+                      )}
+                    </td>
                     <td className="px-4 py-4">
-                      <span className={po.Status === 'Waiting for Approval' ? 'bg-yellow-100 text-yellow-700' : po.Status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700' + ' px-2 py-1 rounded text-xs font-semibold'}>{po.Status}</span>
-                      {po.Status === 'Rejected' && po.Rejection_Reason && (
-                        <div className="text-xs text-red-600 mt-1 max-w-sm truncate" title={po.Rejection_Reason}>{po.Rejection_Reason}</div>
+                      <span className={
+                        (po.Status === 'Waiting for Approval'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : po.Status === 'Rejected'
+                          ? 'bg-red-100 text-red-700'
+                          : po.Status === 'Rework'
+                          ? 'bg-orange-100 text-orange-700'
+                          : 'bg-blue-100 text-blue-700') + ' px-2 py-1 rounded text-xs font-semibold'
+                      }>{po.Status}</span>
+                      {(po.Status === 'Rejected' || po.Status === 'Rework') && po.Rejection_Reason && (
+                        <div className={po.Status === 'Rejected' ? 'text-xs text-red-600 mt-1 max-w-sm truncate' : 'text-xs text-orange-600 mt-1 max-w-sm truncate'} title={po.Rejection_Reason}>{po.Rejection_Reason}</div>
                       )}
                     </td>
                     <td className="px-4 py-4 text-slate-600">{po.Created_By || '-'}</td>
@@ -184,6 +223,13 @@ const POApproval = () => {
                             {actionLoading[po.PO_ID] ? 'Approving...' : 'Approve'}
                           </button>
                           <button
+                            className="text-orange-600 hover:text-orange-800 text-xs font-semibold px-3 py-1 rounded bg-orange-50"
+                            disabled={actionLoading[po.PO_ID]}
+                            onClick={() => handleRework(po.PO_ID, po.Created_By)}
+                          >
+                            {actionLoading[po.PO_ID] ? 'Sending...' : 'Rework'}
+                          </button>
+                          <button
                             className="text-red-600 hover:text-red-800 text-xs font-semibold px-3 py-1 rounded bg-red-50"
                             disabled={actionLoading[po.PO_ID]}
                             onClick={() => handleReject(po.PO_ID, po.Created_By)}
@@ -195,6 +241,11 @@ const POApproval = () => {
                       {po.Status === 'Rejected' && (
                         <span className="inline-flex items-center gap-1 text-red-700 text-xs font-semibold">
                           <X size={14} /> Rejected
+                        </span>
+                      )}
+                      {po.Status === 'Rework' && (
+                        <span className="inline-flex items-center gap-1 text-orange-700 text-xs font-semibold">
+                          <AlertTriangle size={14} /> Rework
                         </span>
                       )}
                     </td>

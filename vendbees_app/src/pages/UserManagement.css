@@ -204,6 +204,80 @@ tr.editing select {
   flex-wrap: wrap;
 }
 
+.permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.permission-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #444;
+}
+
+.permissions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.permission-toggle {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #ffffff;
+  color: #111827;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+/* Grant button: green */
+.permission-toggle.grant {
+  background: #ecfdf5;
+  border-color: #34d399;
+  color: #065f46;
+  box-shadow: 0 1px 0 rgba(16,24,40,0.03);
+}
+
+/* Revoke button: red */
+.permission-toggle.revoke {
+  background: #fff1f2;
+  border-color: #fb7185;
+  color: #7f1d1d;
+  box-shadow: 0 1px 0 rgba(16,24,40,0.03);
+}
+
+.permission-group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.permission-group-title.small {
+  font-size: 12px;
+  min-width: 120px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.permission-group-items.small {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .btn-edit,
 .btn-delete,
 .btn-save,

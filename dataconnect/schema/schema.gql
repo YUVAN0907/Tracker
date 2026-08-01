@@ -269,6 +269,7 @@ type User @table(key: "userId") {
   passwordHash: String!  # bcrypt hashed password
   role: String!          # "admin" or "user"
   status: String!        # "active" or "inactive"
+  permissions: String    # JSON array of granted feature permissions
   createdAt: Timestamp!
   createdBy: String      # Admin who created this user (userId)
   lastLogin: Timestamp

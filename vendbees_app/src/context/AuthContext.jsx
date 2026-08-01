@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
-const AuthContext = createContext();
+export const AuthContext = createContext();
+const API_BASE_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+  ? 'http://localhost:3002/api'
+  : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -8,16 +11,60 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const normalizePermissions = (permissions) => {
+    if (Array.isArray(permissions)) {
+      return permissions.filter((p) => typeof p === 'string' && p.trim());
+    }
+
+    if (typeof permissions === 'string') {
+      const trimmed = permissions.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((p) => typeof p === 'string' && p.trim());
+        }
+      } catch (error) {
+        // fall back to comma-separated values
+      }
+      return trimmed.split(',').map((p) => p.trim()).filter((p) => p);
+    }
+
+    return [];
+  };
+
+  const normalizeUser = (rawUser) => {
+    if (!rawUser) return null;
+    return {
+      ...rawUser,
+      permissions: normalizePermissions(rawUser.permissions)
+    };
+  };
+
+  const setNormalizedUser = (rawUser) => {
+    const normalizedUser = normalizeUser(rawUser);
+    setUser(normalizedUser);
+    if (normalizedUser) {
+      localStorage.setItem('authUser', JSON.stringify(normalizedUser));
+    } else {
+      localStorage.removeItem('authUser');
+    }
+  };
+
   // Initialize auth state from localStorage
   useEffect(() => {
     const storedToken = localStorage.getItem('authToken');
     const storedUser = localStorage.getItem('authUser');
 
-    if (storedToken && storedUser) {
+    if (storedToken) {
       setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-      
-      // Verify token with backend
+      if (storedUser) {
+        try {
+          setUser(normalizeUser(JSON.parse(storedUser)));
+        } catch (error) {
+          console.error('Stored authUser parse error:', error);
+        }
+      }
       verifyToken(storedToken);
     } else {
       setIsLoading(false);
@@ -26,7 +73,7 @@ export function AuthProvider({ children }) {
 
   const verifyToken = async (tokenToVerify) => {
     try {
-      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/verify-token', {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-token`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${tokenToVerify}`,
@@ -35,7 +82,12 @@ export function AuthProvider({ children }) {
       });
 
       if (response.ok) {
+        const payload = await response.json();
+        const normalizedUser = normalizeUser(payload?.user || null);
         setIsAuthenticated(true);
+        if (normalizedUser) {
+          setNormalizedUser(normalizedUser);
+        }
       } else {
         // Token invalid, clear storage
         localStorage.removeItem('authToken');
@@ -58,7 +110,7 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,14 +123,15 @@ export function AuthProvider({ children }) {
 
       if (data.success) {
         const { token: newToken, user: userData } = data;
+        const normalizedUser = normalizeUser(userData);
         
         // Store in localStorage
         localStorage.setItem('authToken', newToken);
-        localStorage.setItem('authUser', JSON.stringify(userData));
+        localStorage.setItem('authUser', JSON.stringify(normalizedUser));
         
         // Update state
         setToken(newToken);
-        setUser(userData);
+        setUser(normalizedUser);
         setIsAuthenticated(true);
         
         return { success: true, message: 'Login successful' };
@@ -100,7 +153,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       if (token) {
-        await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/logout', {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -121,8 +174,14 @@ export function AuthProvider({ children }) {
   };
 
   const updateUserInfo = (updatedUser) => {
-    setUser(updatedUser);
-    localStorage.setItem('authUser', JSON.stringify(updatedUser));
+    setNormalizedUser(updatedUser);
+  };
+
+  const hasPermission = (permission) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    if (!Array.isArray(user.permissions)) return false;
+    return user.permissions.includes(permission);
   };
 
   return (
@@ -134,7 +193,8 @@ export function AuthProvider({ children }) {
         isLoading,
         login,
         logout,
-        updateUserInfo
+        updateUserInfo,
+        hasPermission
       }}
     >
       {children}

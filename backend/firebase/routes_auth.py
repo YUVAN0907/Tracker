@@ -92,6 +92,7 @@ def register():
         password = data.get('password', '')
         full_name = data.get('fullName', '').strip()
         role = data.get('role', 'user').strip()
+        permissions = data.get('permissions', [])
         
         if not email or not password or not full_name:
             return jsonify({'message': 'Email, password, and fullName are required'}), 400
@@ -100,7 +101,7 @@ def register():
             return jsonify({'message': 'Invalid role'}), 400
         
         # Register user
-        result = AuthService.register(email, password, full_name, request.user_id, role)
+        result = AuthService.register(email, password, full_name, request.user_id, role, permissions=permissions)
         
         return jsonify(result), result.get('status', 500)
     
@@ -129,12 +130,19 @@ def get_users():
             status
             createdAt
             lastLogin
+            permissions
           }
         }
         """
         
         response = session.execute_graphql(query)
-        users = response.get('data', {}).get('users', [])
+        raw_users = response.get('data', {}).get('users', [])
+        
+        users = []
+        for user in raw_users:
+            normalized_user = dict(user)
+            normalized_user['permissions'] = AuthService.normalize_permissions(user.get('permissions'))
+            users.append(normalized_user)
         
         return jsonify({
             'message': 'Users retrieved successfully',
@@ -170,6 +178,7 @@ def get_user(user_id):
             status
             createdAt
             lastLogin
+            permissions
           }
         }
         """
@@ -183,9 +192,12 @@ def get_user(user_id):
         if not users:
             return jsonify({'message': 'User not found'}), 404
         
+        user_data = dict(users[0])
+        user_data['permissions'] = AuthService.normalize_permissions(user_data.get('permissions'))
+
         return jsonify({
             'message': 'User retrieved successfully',
-            'user': users[0]
+            'user': user_data
         }), 200
     
     except Exception as e:
@@ -239,17 +251,30 @@ def update_user(user_id):
             if data['status'] not in ['active', 'inactive']:
                 return jsonify({'message': 'Invalid status'}), 400
             update_data['status'] = data['status']
+
+        if 'permissions' in data:
+            permissions = AuthService.normalize_permissions(data.get('permissions'))
+            update_data['permissions'] = AuthService.serialize_permissions(permissions)
         
-        # Build dynamic mutation
-        fields = ', '.join([f"{k}: ${k}" for k in update_data.keys()])
-        mutation = f"""
-        mutation updateUser($userId: String!, {', '.join([f"${k}: String!" for k in update_data.keys()])}) {{
-          user_update(key: {{userId: $userId}}, data: {{{fields}}})
-        }}
+        mutation = """
+        mutation updateUser($userId: String!, $data: User_Data!) {
+          user_update(key: {userId: $userId}, data: $data)
+        }
         """
         
-        variables = {"userId": user_id, **update_data}
-        session.execute_graphql(mutation, variables)
+        variables = {
+            "userId": user_id,
+            "data": update_data
+        }
+        response = session.execute_graphql(mutation, variables)
+
+        if 'errors' in response:
+            print(f"GraphQL error updating user: {response['errors']}")
+            return jsonify({'message': 'Failed to update user permissions', 'errors': response['errors']}), 500
+
+        if not response.get('data', {}).get('user_update'):
+            print(f"GraphQL update returned no user_update data: {response}")
+            return jsonify({'message': 'Failed to update user permissions'}), 500
         
         # Log the update
         AuthService.log_audit(
@@ -478,11 +503,40 @@ def verify_token():
     Verify JWT token validity
     Returns: {user}
     """
-    return jsonify({
-        'message': 'Token is valid',
-        'user': {
-            'userId': request.user_id,
-            'email': request.user_email,
-            'role': request.user_role
+    try:
+        session = dataconnect_config.get_session()
+        query = """
+        query {
+          users {
+            userId
+            email
+            fullName
+            role
+            status
+            permissions
+          }
         }
-    }), 200
+        """
+        response = session.execute_graphql(query)
+        all_users = response.get('data', {}).get('users', [])
+        current_user = next((u for u in all_users if u.get('userId') == request.user_id), None)
+
+        if not current_user:
+            return jsonify({'message': 'User not found'}), 404
+
+        user_data = {
+            'userId': current_user.get('userId'),
+            'email': current_user.get('email'),
+            'fullName': current_user.get('fullName'),
+            'role': current_user.get('role'),
+            'status': current_user.get('status'),
+            'permissions': AuthService.normalize_permissions(current_user.get('permissions'))
+        }
+
+        return jsonify({
+            'message': 'Token is valid',
+            'user': user_data
+        }), 200
+    except Exception as e:
+        print(f"Verify token error: {str(e)}")
+        return jsonify({'message': f'Failed to verify token: {str(e)}'}), 500

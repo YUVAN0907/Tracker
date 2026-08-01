@@ -16,6 +16,7 @@ const Restock = () => {
     const navigate = useNavigate();
     const { products, machines, stock, vendors, warehouseStocks = [], stocks = [], stock_assignments = [], loading, refreshData } = useData();
     const { user } = useAuth();
+    const hasPermission = (permission) => user?.role === 'admin' || (Array.isArray(user?.permissions) && user.permissions.includes(permission));
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('alerts');
@@ -664,12 +665,14 @@ const Restock = () => {
                                 >
                                     🔄 Refresh
                                 </button>
-                                <button
-                                    onClick={() => navigate('/restock/create-batch')}
-                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-                            >
-                                <Plus size={16} /> Create Batch
-                            </button>
+                                {hasPermission('create_batch') && (
+                                    <button
+                                        onClick={() => navigate('/restock/create-batch')}
+                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                                    >
+                                        <Plus size={16} /> Create Batch
+                                    </button>
+                                )}
                             </div>
                         </div>
 

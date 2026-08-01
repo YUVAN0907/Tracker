@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { Plus, Pencil, Trash2, X, TrendingUp, ArrowRight } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -319,6 +320,7 @@ export const RecentProductForm = ({ product, categories, vendors, onSave, onCanc
 
 // Recent Products Table Component
 export const RecentProductsTable = ({ products, onEdit, onDelete, onMove, loading, monthFilter, onMonthFilterChange }) => {
+    const { hasPermission } = useAuth();
     if (loading) {
         return <div className="px-6 py-12 text-center text-slate-400">Loading recent products...</div>;
     }
@@ -414,7 +416,7 @@ export const RecentProductsTable = ({ products, onEdit, onDelete, onMove, loadin
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex justify-center gap-2">
-                                        {onMove && (
+                                        {onMove && hasPermission('create_product') && (
                                             <button
                                                 onClick={() => onMove(product)}
                                                 className="text-green-600 hover:text-green-800 text-sm font-medium flex items-center gap-1 whitespace-nowrap"
@@ -424,20 +426,24 @@ export const RecentProductsTable = ({ products, onEdit, onDelete, onMove, loadin
                                                 Move to Master
                                             </button>
                                         )}
-                                        <button
-                                            onClick={() => onEdit(product)}
-                                            className="text-blue-500 hover:text-blue-700 text-sm font-medium"
-                                            title="Edit"
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            onClick={() => onDelete(product)}
-                                            className="text-red-500 hover:text-red-700 text-sm font-medium"
-                                            title="Delete"
-                                        >
-                                            Delete
-                                        </button>
+                                        {hasPermission('edit_product') && (
+                                            <button
+                                                onClick={() => onEdit(product)}
+                                                className="text-blue-500 hover:text-blue-700 text-sm font-medium"
+                                                title="Edit"
+                                            >
+                                                Edit
+                                            </button>
+                                        )}
+                                        {hasPermission('delete_product') && (
+                                            <button
+                                                onClick={() => onDelete(product)}
+                                                className="text-red-500 hover:text-red-700 text-sm font-medium"
+                                                title="Delete"
+                                            >
+                                                Delete
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>

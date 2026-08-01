@@ -4,7 +4,7 @@ import ResetPasswordModal from '../components/ResetPasswordModal';
 import './UserManagement.css';
 
 export default function UserManagement() {
-  const { token } = useAuth();
+  const { token, user: currentUser, updateUserInfo } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,7 +20,8 @@ export default function UserManagement() {
     password: '',
     fullName: '',
     role: 'user',
-    status: 'active'
+    status: 'active',
+    permissions: []
   });
 
   // Fetch users on mount
@@ -28,10 +29,33 @@ export default function UserManagement() {
     fetchUsers();
   }, []);
 
+  const normalizePermissions = (permissions) => {
+    if (Array.isArray(permissions)) {
+      return permissions.filter((p) => typeof p === 'string' && p.trim());
+    }
+
+    if (typeof permissions === 'string') {
+      const trimmed = permissions.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((p) => typeof p === 'string' && p.trim());
+        }
+      } catch (e) {
+        // Not JSON, fall back to comma-separated values
+      }
+      return trimmed.split(',').map((p) => p.trim()).filter((p) => p);
+    }
+
+    return [];
+  };
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/users', {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const response = await fetch(`${API_URL}/auth/users`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -43,7 +67,13 @@ export default function UserManagement() {
       console.log('Fetch response data:', data);
 
       if (response.ok) {
-        setUsers(data.users || []);
+        const serverUsers = data.users || [];
+        const merged = serverUsers.map((u) => {
+          const normalized = normalizePermissions(u.permissions);
+          return { ...u, permissions: normalized };
+        });
+        
+        setUsers(merged);
         setError('');
       } else {
         setError('Failed to load users: ' + (data.message || 'Unknown error'));
@@ -67,7 +97,8 @@ export default function UserManagement() {
     }
 
     try {
-      const response = await fetch('https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/register', {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -77,7 +108,8 @@ export default function UserManagement() {
           email: formData.email,
           password: formData.password,
           fullName: formData.fullName,
-          role: formData.role
+          role: formData.role,
+          permissions: formData.permissions
         })
       });
 
@@ -85,7 +117,7 @@ export default function UserManagement() {
 
       if (data.success) {
         setSuccess('User added successfully');
-        setFormData({ email: '', password: '', fullName: '', role: 'user', status: 'active' });
+        setFormData({ email: '', password: '', fullName: '', role: 'user', status: 'active', permissions: [] });
         setShowAddForm(false);
         fetchUsers();
       } else {
@@ -101,7 +133,8 @@ export default function UserManagement() {
     setSuccess('');
 
     try {
-      const response = await fetch(`https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/users/${userId}`, {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const response = await fetch(`${API_URL}/auth/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -110,11 +143,13 @@ export default function UserManagement() {
         body: JSON.stringify({
           fullName: formData.fullName,
           role: formData.role,
-          status: formData.status
+          status: formData.status,
+          permissions: formData.permissions
         })
       });
 
       if (response.ok) {
+        setUsers((prevUsers) => prevUsers.map((item) => item.userId === userId ? { ...item, permissions: Array.isArray(formData.permissions) ? formData.permissions : [] } : item));
         setSuccess('User updated successfully');
         setEditingId(null);
         fetchUsers();
@@ -123,6 +158,67 @@ export default function UserManagement() {
       }
     } catch (err) {
       setError(err.message || 'An error occurred');
+    }
+  };
+
+  const togglePermission = (userId, permission) => {
+    const targetUser = users.find((item) => item.userId === userId);
+    if (!targetUser) return;
+
+    const currentPermissions = editingId === userId
+      ? (Array.isArray(formData.permissions) ? formData.permissions : [])
+      : (Array.isArray(targetUser.permissions) ? targetUser.permissions : []);
+    const hasPermission = currentPermissions.includes(permission);
+    const updatedPermissions = hasPermission
+      ? currentPermissions.filter((item) => item !== permission)
+      : [...currentPermissions, permission];
+
+    setUsers((prevUsers) => prevUsers.map((item) => item.userId === userId ? { ...item, permissions: updatedPermissions } : item));
+
+    if (editingId === userId) {
+      setFormData((prevFormData) => ({ ...prevFormData, permissions: updatedPermissions }));
+      return;
+    }
+
+    updateUserPermissions(userId, updatedPermissions);
+  };
+
+  const updateUserPermissions = async (userId, permissions) => {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const response = await fetch(`${API_URL}/auth/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ permissions })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Permissions update failed:', data);
+        setError('Failed to persist permissions: ' + (data.message || response.statusText));
+        fetchUsers();
+        return;
+      }
+
+      if (data.errors) {
+        console.error('GraphQL permissions update errors:', data.errors);
+        setError('Failed to persist permissions: ' + (data.message || 'GraphQL update error'));
+        fetchUsers();
+        return;
+      }
+
+      if (currentUser?.userId === userId) {
+        updateUserInfo({ ...currentUser, permissions });
+      }
+
+      setSuccess('Permissions updated successfully');
+    } catch (err) {
+      console.error('Permissions update error:', err);
+      setError(err.message || 'Failed to update permissions');
+      fetchUsers();
     }
   };
 
@@ -135,7 +231,8 @@ export default function UserManagement() {
     setSuccess('');
 
     try {
-      const response = await fetch(`https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api/auth/users/${userId}`, {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const response = await fetch(`${API_URL}/auth/users/${userId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -220,6 +317,64 @@ export default function UserManagement() {
                 <option value="admin">Admin</option>
               </select>
             </div>
+            <div className="form-group">
+              <label>FEATURE ACCESS</label>
+              <div className="permissions-grid">
+                {/** Hierarchical permission groups for better UX **/}
+                {[
+                  { key: 'create_po', label: 'Create PO' },
+                  { key: 'record_delivery', label: 'Record Delivery' },
+                  { key: 'create_batch', label: 'Create Batch' },
+                  { key: 'product_master', label: 'Product Master', children: [
+                    { key: 'add_product', label: 'Add' },
+                    { key: 'edit_product', label: 'Edit' },
+                    { key: 'delete_product', label: 'Delete' }
+                  ]},
+                  { key: 'vendor', label: 'Vendor', children: [
+                    { key: 'add_vendor', label: 'Add' },
+                    { key: 'edit_vendor', label: 'Edit' },
+                    { key: 'delete_vendor', label: 'Delete' }
+                  ]}
+                ].map((group) => (
+                  <div key={group.key} className="permission-group">
+                    <div className="permission-group-title">{group.label}</div>
+                    <div className="permission-group-items">
+                      {group.children ? (
+                        group.children.map((p) => (
+                          <label key={p.key} className="permission-pill small">
+                            <input
+                              type="checkbox"
+                              checked={formData.permissions.includes(p.key)}
+                              onChange={() => {
+                                const nextPermissions = formData.permissions.includes(p.key)
+                                  ? formData.permissions.filter((item) => item !== p.key)
+                                  : [...formData.permissions, p.key];
+                                setFormData({ ...formData, permissions: nextPermissions });
+                              }}
+                            />
+                            <span>{p.label}</span>
+                          </label>
+                        ))
+                      ) : (
+                        <label className="permission-pill">
+                          <input
+                            type="checkbox"
+                            checked={formData.permissions.includes(group.key)}
+                            onChange={() => {
+                              const nextPermissions = formData.permissions.includes(group.key)
+                                ? formData.permissions.filter((item) => item !== group.key)
+                                : [...formData.permissions, group.key];
+                              setFormData({ ...formData, permissions: nextPermissions });
+                            }}
+                          />
+                          <span>{group.label}</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             <button type="submit" className="btn-submit">Add User</button>
           </form>
         </div>
@@ -234,6 +389,7 @@ export default function UserManagement() {
               <th>Role</th>
               <th>Status</th>
               <th>Last Login</th>
+              <th>FEATURE ACCESS</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -280,6 +436,66 @@ export default function UserManagement() {
                   )}
                 </td>
                 <td>{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</td>
+                <td>
+                      <div className="permissions-list hierarchical">
+                        {[
+                          { key: 'create_po', label: 'Create PO' },
+                          { key: 'record_delivery', label: 'Record Delivery' },
+                          { key: 'create_batch', label: 'Create Batch' },
+                          { key: 'product_master', label: 'Product Master', children: [
+                            { key: 'add_product', label: 'Add' },
+                            { key: 'edit_product', label: 'Edit' },
+                            { key: 'delete_product', label: 'Delete' }
+                          ]},
+                          { key: 'vendor', label: 'Vendor', children: [
+                            { key: 'add_vendor', label: 'Add' },
+                            { key: 'edit_vendor', label: 'Edit' },
+                            { key: 'delete_vendor', label: 'Delete' }
+                          ]}
+                        ].map((group) => (
+                          <div key={`${user.userId}-${group.key}`} className="permission-group-row">
+                            <div className="permission-group-title small">{group.label}</div>
+                            <div className="permission-group-items small">
+                              {group.children ? (
+                                group.children.map((p) => {
+                                  const activePermissions = editingId === user.userId && Array.isArray(formData.permissions)
+                                    ? formData.permissions
+                                    : user.permissions;
+                                  const granted = Array.isArray(activePermissions) ? activePermissions.includes(p.key) : false;
+                                  return (
+                                    <button
+                                      key={`${user.userId}-${p.key}`}
+                                      type="button"
+                                      className={`permission-toggle ${granted ? 'revoke' : 'grant'}`}
+                                      onClick={() => togglePermission(user.userId, p.key)}
+                                    >
+                                      {granted ? `Revoke ${p.label.toUpperCase()}` : `Grant ${p.label.toUpperCase()}`}
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                (() => {
+                                  const activePermissions = editingId === user.userId && Array.isArray(formData.permissions)
+                                    ? formData.permissions
+                                    : user.permissions;
+                                  const granted = Array.isArray(activePermissions) ? activePermissions.includes(group.key) : false;
+                                  return (
+                                    <button
+                                      key={`${user.userId}-${group.key}`}
+                                      type="button"
+                                      className={`permission-toggle ${granted ? 'revoke' : 'grant'}`}
+                                      onClick={() => togglePermission(user.userId, group.key)}
+                                    >
+                                      {granted ? `Revoke ${group.label.toUpperCase()}` : `Grant ${group.label.toUpperCase()}`}
+                                    </button>
+                                  );
+                                })()
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                </td>
                 <td className="actions">
                   {editingId === user.userId ? (
                     <>
@@ -307,7 +523,8 @@ export default function UserManagement() {
                             role: user.role,
                             status: user.status,
                             email: '',
-                            password: ''
+                            password: '',
+                            permissions: Array.isArray(user.permissions) ? user.permissions : []
                           });
                         }}
                       >

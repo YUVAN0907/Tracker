@@ -15,7 +15,7 @@ PORT = int(os.environ.get('PORT', 3002))
 # ── CORS origins ──────────────────────────────────────────────────────────────
 # Set CORS_ORIGINS in .env for production (comma-separated list of allowed origins).
 # For local dev, falls back to the Vite dev server.
-_cors_env = os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000')
+_cors_env = os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000')
 _ALLOWED_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()]
 
 # --------------------------------------------------

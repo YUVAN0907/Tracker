@@ -12,6 +12,9 @@ def token_required(f):
     """Decorator to verify JWT token in request header"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return jsonify({}), 200
+
         token = None
         
         # Check for token in Authorization header
@@ -46,6 +49,9 @@ def admin_required(f):
     """Decorator to verify JWT token AND admin role"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return jsonify({}), 200
+
         token = None
         
         # Check for token in Authorization header
@@ -84,6 +90,9 @@ def manager_required(f):
     """Decorator to verify JWT token for manager or admin roles"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return jsonify({}), 200
+
         token = None
         
         if 'Authorization' in request.headers:

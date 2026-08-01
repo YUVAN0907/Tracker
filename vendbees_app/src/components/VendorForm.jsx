@@ -248,7 +248,10 @@ export const VendorForm = ({ vendor, onSave, onCancel, existingVendors = [], sav
 };
 
 // Vendor Table Component
+import { useAuth } from '../context/AuthContext';
+
 export const VendorTable = ({ vendors, onEdit, onDelete, loading }) => {
+    const { hasPermission } = useAuth();
     if (loading) {
         return <div className="px-6 py-12 text-center text-slate-400">Loading vendors...</div>;
     }
@@ -282,20 +285,24 @@ export const VendorTable = ({ vendors, onEdit, onDelete, loading }) => {
                             <td className="px-6 py-4 text-slate-600 text-sm max-w-xs truncate">{vendor.address || '-'}</td>
                             <td className="px-6 py-4">
                                 <div className="flex justify-center gap-3">
-                                    <button
-                                        onClick={() => onEdit(vendor)}
-                                        className="text-blue-500 hover:text-blue-700 text-sm font-medium"
-                                        title="Edit"
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        onClick={() => onDelete(vendor)}
-                                        className="text-red-500 hover:text-red-700 text-sm font-medium"
-                                        title="Delete"
-                                    >
-                                        Delete
-                                    </button>
+                                    {hasPermission('edit_vendor') && (
+                                        <button
+                                            onClick={() => onEdit(vendor)}
+                                            className="text-blue-500 hover:text-blue-700 text-sm font-medium"
+                                            title="Edit"
+                                        >
+                                            Edit
+                                        </button>
+                                    )}
+                                    {hasPermission('delete_vendor') && (
+                                        <button
+                                            onClick={() => onDelete(vendor)}
+                                            className="text-red-500 hover:text-red-700 text-sm font-medium"
+                                            title="Delete"
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
                                 </div>
                             </td>
                         </tr>
