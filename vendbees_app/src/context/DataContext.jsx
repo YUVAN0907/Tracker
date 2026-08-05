@@ -507,9 +507,10 @@ export const DataProvider = ({ children }) => {
     };
 
     useEffect(() => {
+        // Fetch data only once when the app loads, or when an action triggers a refresh.
+        // Removed all background polling (setInterval) to ensure the website runs
+        // smoothly without any background lag or unnecessary backend costs.
         fetchData();
-        const interval = setInterval(fetchData, 5000);
-        return () => clearInterval(interval);
     }, [refreshTrigger]);
 
     const sellProduct = async (machineId, productId, qty, price) => {

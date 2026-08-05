@@ -1,9 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
 export const AuthContext = createContext();
-const API_BASE_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-  ? 'http://localhost:3002/api'
-  : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
