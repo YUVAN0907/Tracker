@@ -3,6 +3,54 @@ import { useAuth } from '../context/AuthContext';
 import ResetPasswordModal from '../components/ResetPasswordModal';
 import './UserManagement.css';
 
+const permissionModules = [
+  {
+    key: 'inventory',
+    label: 'Inventory',
+    groups: [
+      {
+        key: 'purchase-order',
+        label: 'Purchase Order',
+        features: [
+          { key: 'create_po', label: 'Create PO' },
+          { key: 'record_delivery', label: 'Record Delivery' }
+        ]
+      },
+      {
+        key: 'product-master',
+        label: 'Product Master',
+        features: [
+          { key: 'add_product', label: 'Add Product' },
+          { key: 'edit_product', label: 'Edit Product' },
+          { key: 'delete_product', label: 'Delete Product' }
+        ]
+      },
+      {
+        key: 'vendor-master',
+        label: 'Vendor Master',
+        features: [
+          { key: 'add_vendor', label: 'Add Vendor' },
+          { key: 'edit_vendor', label: 'Edit Vendor' },
+          { key: 'delete_vendor', label: 'Delete Vendor' }
+        ]
+      }
+    ]
+  },
+  {
+    key: 'restock',
+    label: 'Restock',
+    groups: [
+      {
+        key: 'batch',
+        label: 'Batch',
+        features: [
+          { key: 'create_batch', label: 'Create Batch' }
+        ]
+      }
+    ]
+  }
+];
+
 export default function UserManagement() {
   const { token, user: currentUser, updateUserInfo } = useAuth();
   const [users, setUsers] = useState([]);
@@ -15,6 +63,8 @@ export default function UserManagement() {
   const [editingId, setEditingId] = useState(null);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [selectedUserForReset, setSelectedUserForReset] = useState(null);
+  const [expandedFormModules, setExpandedFormModules] = useState({ inventory: true, restock: false });
+  const [expandedUserModules, setExpandedUserModules] = useState({});
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -160,6 +210,77 @@ export default function UserManagement() {
       setError(err.message || 'An error occurred');
     }
   };
+
+  const toggleFormModule = (moduleKey) => {
+    setExpandedFormModules((prev) => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
+  };
+
+  const toggleUserModule = (userId, moduleKey) => {
+    setExpandedUserModules((prev) => ({
+      ...prev,
+      [userId]: {
+        ...(prev[userId] || { inventory: true, restock: false }),
+        [moduleKey]: !(prev[userId]?.[moduleKey] ?? true)
+      }
+    }));
+  };
+
+  const getActivePermissions = (user) => {
+    if (editingId === user.userId && Array.isArray(formData.permissions)) {
+      return formData.permissions;
+    }
+
+    return Array.isArray(user.permissions) ? user.permissions : [];
+  };
+
+  const renderPermissionModuleList = (permissions, onToggle, expandedState, onToggleModule) => (
+    <div className="permission-module-list custom-scrollbar">
+      {permissionModules.map((module) => {
+        const isExpanded = expandedState[module.key] ?? true;
+
+        return (
+          <div key={module.key} className="permission-module-card">
+            <button
+              type="button"
+              className="permission-module-header"
+              onClick={() => onToggleModule(module.key)}
+            >
+              <span>{module.label}</span>
+              <span className="permission-module-caret">{isExpanded ? '▾' : '▸'}</span>
+            </button>
+
+            {isExpanded && (
+              <div className="permission-module-body">
+                {module.groups.map((group) => (
+                  <div key={group.key} className="permission-group-card">
+                    <div className="permission-group-title">{group.label}</div>
+                    <div className="permission-group-items">
+                      {group.features.map((feature) => {
+                        const granted = Array.isArray(permissions) ? permissions.includes(feature.key) : false;
+
+                        return (
+                          <div key={feature.key} className="permission-feature-row">
+                            <span className="permission-feature-label">{feature.label}</span>
+                            <button
+                              type="button"
+                              className={`permission-toggle ${granted ? 'revoke' : 'grant'}`}
+                              onClick={() => onToggle(feature.key)}
+                            >
+                              {granted ? 'Revoke' : 'Grant'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   const togglePermission = (userId, permission) => {
     const targetUser = users.find((item) => item.userId === userId);
@@ -319,61 +440,18 @@ export default function UserManagement() {
             </div>
             <div className="form-group">
               <label>FEATURE ACCESS</label>
-              <div className="permissions-grid">
-                {/** Hierarchical permission groups for better UX **/}
-                {[
-                  { key: 'create_po', label: 'Create PO' },
-                  { key: 'record_delivery', label: 'Record Delivery' },
-                  { key: 'create_batch', label: 'Create Batch' },
-                  { key: 'product_master', label: 'Product Master', children: [
-                    { key: 'add_product', label: 'Add' },
-                    { key: 'edit_product', label: 'Edit' },
-                    { key: 'delete_product', label: 'Delete' }
-                  ]},
-                  { key: 'vendor', label: 'Vendor', children: [
-                    { key: 'add_vendor', label: 'Add' },
-                    { key: 'edit_vendor', label: 'Edit' },
-                    { key: 'delete_vendor', label: 'Delete' }
-                  ]}
-                ].map((group) => (
-                  <div key={group.key} className="permission-group">
-                    <div className="permission-group-title">{group.label}</div>
-                    <div className="permission-group-items">
-                      {group.children ? (
-                        group.children.map((p) => (
-                          <label key={p.key} className="permission-pill small">
-                            <input
-                              type="checkbox"
-                              checked={formData.permissions.includes(p.key)}
-                              onChange={() => {
-                                const nextPermissions = formData.permissions.includes(p.key)
-                                  ? formData.permissions.filter((item) => item !== p.key)
-                                  : [...formData.permissions, p.key];
-                                setFormData({ ...formData, permissions: nextPermissions });
-                              }}
-                            />
-                            <span>{p.label}</span>
-                          </label>
-                        ))
-                      ) : (
-                        <label className="permission-pill">
-                          <input
-                            type="checkbox"
-                            checked={formData.permissions.includes(group.key)}
-                            onChange={() => {
-                              const nextPermissions = formData.permissions.includes(group.key)
-                                ? formData.permissions.filter((item) => item !== group.key)
-                                : [...formData.permissions, group.key];
-                              setFormData({ ...formData, permissions: nextPermissions });
-                            }}
-                          />
-                          <span>{group.label}</span>
-                        </label>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderPermissionModuleList(
+                formData.permissions,
+                (permission) => {
+                  const nextPermissions = formData.permissions.includes(permission)
+                    ? formData.permissions.filter((item) => item !== permission)
+                    : [...formData.permissions, permission];
+
+                  setFormData((prevFormData) => ({ ...prevFormData, permissions: nextPermissions }));
+                },
+                expandedFormModules,
+                toggleFormModule
+              )}
             </div>
             <button type="submit" className="btn-submit">Add User</button>
           </form>
@@ -437,64 +515,14 @@ export default function UserManagement() {
                 </td>
                 <td>{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</td>
                 <td>
-                      <div className="permissions-list hierarchical">
-                        {[
-                          { key: 'create_po', label: 'Create PO' },
-                          { key: 'record_delivery', label: 'Record Delivery' },
-                          { key: 'create_batch', label: 'Create Batch' },
-                          { key: 'product_master', label: 'Product Master', children: [
-                            { key: 'add_product', label: 'Add' },
-                            { key: 'edit_product', label: 'Edit' },
-                            { key: 'delete_product', label: 'Delete' }
-                          ]},
-                          { key: 'vendor', label: 'Vendor', children: [
-                            { key: 'add_vendor', label: 'Add' },
-                            { key: 'edit_vendor', label: 'Edit' },
-                            { key: 'delete_vendor', label: 'Delete' }
-                          ]}
-                        ].map((group) => (
-                          <div key={`${user.userId}-${group.key}`} className="permission-group-row">
-                            <div className="permission-group-title small">{group.label}</div>
-                            <div className="permission-group-items small">
-                              {group.children ? (
-                                group.children.map((p) => {
-                                  const activePermissions = editingId === user.userId && Array.isArray(formData.permissions)
-                                    ? formData.permissions
-                                    : user.permissions;
-                                  const granted = Array.isArray(activePermissions) ? activePermissions.includes(p.key) : false;
-                                  return (
-                                    <button
-                                      key={`${user.userId}-${p.key}`}
-                                      type="button"
-                                      className={`permission-toggle ${granted ? 'revoke' : 'grant'}`}
-                                      onClick={() => togglePermission(user.userId, p.key)}
-                                    >
-                                      {granted ? `Revoke ${p.label.toUpperCase()}` : `Grant ${p.label.toUpperCase()}`}
-                                    </button>
-                                  );
-                                })
-                              ) : (
-                                (() => {
-                                  const activePermissions = editingId === user.userId && Array.isArray(formData.permissions)
-                                    ? formData.permissions
-                                    : user.permissions;
-                                  const granted = Array.isArray(activePermissions) ? activePermissions.includes(group.key) : false;
-                                  return (
-                                    <button
-                                      key={`${user.userId}-${group.key}`}
-                                      type="button"
-                                      className={`permission-toggle ${granted ? 'revoke' : 'grant'}`}
-                                      onClick={() => togglePermission(user.userId, group.key)}
-                                    >
-                                      {granted ? `Revoke ${group.label.toUpperCase()}` : `Grant ${group.label.toUpperCase()}`}
-                                    </button>
-                                  );
-                                })()
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                  <div className="permissions-list hierarchical">
+                    {renderPermissionModuleList(
+                      getActivePermissions(user),
+                      (permission) => togglePermission(user.userId, permission),
+                      expandedUserModules[user.userId] || { inventory: true, restock: false },
+                      (moduleKey) => toggleUserModule(user.userId, moduleKey)
+                    )}
+                  </div>
                 </td>
                 <td className="actions">
                   {editingId === user.userId ? (

@@ -34,8 +34,16 @@ const Sidebar = () => {
     };
 
     return (
-        <div className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0 z-10">
-            <div className="p-6 flex items-center gap-3">
+        <div
+            className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0 z-10 overflow-y-scroll overflow-x-hidden custom-scrollbar sidebar-scrollbar"
+            style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#64748b #f1f5f9',
+                msOverflowStyle: 'auto',
+                scrollbarGutter: 'stable'
+            }}
+        >
+            <div className="p-6 flex items-center gap-3 shrink-0">
                 <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white font-bold">V</div>
                 <div className="flex flex-col">
                     <span className="text-xl font-bold text-slate-800 leading-none">Vendbees</span>
@@ -43,7 +51,9 @@ const Sidebar = () => {
                 </div>
             </div>
 
-            <nav className="flex-1 px-4 space-y-1 mt-6">
+            <nav
+                className="flex-1 px-4 space-y-1 mt-6 overflow-y-scroll overflow-x-hidden pr-2 custom-scrollbar sidebar-scrollbar"
+            >
                 {navItems.map((item) => (
                     <NavLink
                         key={item.path}
@@ -110,7 +120,7 @@ const Sidebar = () => {
             </nav>
 
             {/* User Info & Logout */}
-            <div className="p-4 border-t border-slate-200">
+            <div className="p-4 border-t border-slate-200 shrink-0">
                 <div className="mb-4 p-3 bg-slate-50 rounded-lg">
                     <p className="text-xs text-slate-500 uppercase font-semibold">Logged in as</p>
                     <p className="text-sm font-semibold text-slate-800 mt-1">{user?.fullName || user?.email}</p>
