@@ -962,6 +962,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             setNewCustomProduct({
                 product_id: selectedProduct.Product_ID,
                 product_name: selectedProduct.Name || selectedProduct.Product_Name || '',
+                AliasName: selectedProduct.AliasName || selectedProduct.aliasName || '',
                 case_count: '',
                 units_per_case: selectedProduct.Units_Per_Case || 1,
                 po_price: selectedProduct.PO_Price || selectedProduct.MRP || '',
@@ -1039,6 +1040,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             return {
                 product_id: item.Product_ID || '',
                 product_name: item.Product_Name || '',
+                AliasName: productInfo?.AliasName || '',
                 ordered_cases: item.No_of_Cases || 0,
                 units_per_case: item.Units_Per_Case || 1,
                 po_price: item.PO_Price || '',
@@ -1643,7 +1645,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                         <div className="p-4 border-b border-slate-200">
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex-1">
-                                    <div className="font-medium text-slate-800">{product.product_name}</div>
+                                    <div className="font-medium text-slate-800">{product.product_name}{product.AliasName ? ` — ${product.AliasName}` : ''}</div>
                                     <div className="text-xs text-slate-500">{product.product_id} • Self Life: {getSelfLife(product.product_id)} days • Stock: {getProductQuantity(product.product_id)} units • Ordered: {product.ordered_cases} cases</div>
                                 </div>
                                 <button
@@ -2014,7 +2016,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                         {customProducts.map((product, index) => (
                             <div key={index} className="p-3 bg-orange-100 rounded-lg border border-orange-300 flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-slate-800">{product.product_name}</div>
+                                    <div className="font-medium text-slate-800">{product.product_name}{product.AliasName ? ` — ${product.AliasName}` : ''}</div>
                                     <div className="text-xs text-slate-600">ID: {product.product_id} | Cases: {product.case_count} | Units/Case: {product.units_per_case} | Batch: {product.batch || '-'}</div>
                                 </div>
                                 <button
@@ -3442,7 +3444,7 @@ const Inventory = () => {
                                     ) : filteredProducts.map((p, idx) => (
                                         <tr key={p.Product_ID || idx} className="border-b border-slate-50 hover:bg-slate-50/50">
                                             <td className="px-6 py-4 font-medium text-slate-700">
-                                                <div>{p.Name}</div>
+                                                <div>{p.Name}{p.AliasName ? ` — ${p.AliasName}` : ''}</div>
                                                 <div className="text-[10px] text-slate-400">{p.Product_ID}</div>
                                             </td>
                                             <td className="px-6 py-4 text-slate-600">

@@ -6,37 +6,38 @@
   --color-brand-light: #fdba74;
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
 :root {
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  
   color: #0f172a;
   background-color: #f8fafc;
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-}
-
 .custom-scrollbar::-webkit-scrollbar {
-  height: 6px;
-  width: 8px;
+  height: 8px;
+  width: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #e2e8f0;
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #64748b;
+  background: #94a3b8;
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #64748b;
 }
 
 .sidebar-scrollbar::-webkit-scrollbar {

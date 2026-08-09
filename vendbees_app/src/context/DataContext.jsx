@@ -85,6 +85,7 @@ export const DataProvider = ({ children }) => {
                     Product_ID: pid,
                     Name: name,
                     Category: category,
+                    AliasName: p.aliasName || p.ALIAS_NAME || p['ALIAS NAME'] || '',
                     Total_Stock: quantity,
                     Unit_Cost: unit_cost,
                     Landed_Cost: landed_cost,

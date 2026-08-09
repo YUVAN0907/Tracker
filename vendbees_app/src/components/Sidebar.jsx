@@ -35,7 +35,7 @@ const Sidebar = () => {
 
     return (
         <div
-            className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0 z-10 overflow-y-scroll overflow-x-hidden custom-scrollbar sidebar-scrollbar"
+            className="w-64 h-screen min-h-0 bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0 z-10 overflow-y-scroll overflow-x-hidden custom-scrollbar sidebar-scrollbar"
             style={{
                 scrollbarWidth: 'thin',
                 scrollbarColor: '#64748b #f1f5f9',
@@ -52,7 +52,7 @@ const Sidebar = () => {
             </div>
 
             <nav
-                className="flex-1 px-4 space-y-1 mt-6 overflow-y-scroll overflow-x-hidden pr-2 custom-scrollbar sidebar-scrollbar"
+                className="flex-1 min-h-0 px-4 space-y-1 mt-6 overflow-y-scroll overflow-x-hidden pr-2 custom-scrollbar sidebar-scrollbar"
             >
                 {navItems.map((item) => (
                     <NavLink

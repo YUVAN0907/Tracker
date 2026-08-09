@@ -6,7 +6,7 @@ import sys
 dashboard_bp = Blueprint('dashboard', __name__)
 
 # Firebase Data Connect requires individual queries for each root field
-PRODUCTS_QUERY = """query GetProducts { products(limit: 1000) { productId productName category vendorId mrp quantity units gst unitCost landedCost eanNo selfLife vendor { vendorId vendorName } } }"""
+PRODUCTS_QUERY = """query GetProducts { products(limit: 1000) { productId productName aliasName category vendorId mrp quantity units gst unitCost landedCost eanNo selfLife vendor { vendorId vendorName } } }"""
 
 MACHINES_QUERY = """query GetMachines { machines(limit: 100) { machineId location status latitude longitude } }"""
 
@@ -182,7 +182,8 @@ def dashboard():
                 "GST": p.get("gst", 0),
                 "unitCost": p.get("unitCost", 0),  # Use camelCase to match DataContext expectations
                 "Units_Per_Case": p.get("units", 1),  # unitsPerCase field
-                "selfLife": self_life  # Shelf life in MONTHS (raw from database)
+                "selfLife": self_life,  # Shelf life in MONTHS (raw from database)
+                "aliasName": p.get("aliasName") or p.get("AliasName") or p.get("ALIAS_NAME") or ''
             })
             
         machines_out = []

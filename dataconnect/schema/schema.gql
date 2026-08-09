@@ -15,6 +15,7 @@ type Vendor @table(key: "vendorId") {
 type Product @table(key: "productId") {
   productId: String!
   productName: String
+  aliasName: String
   category: String
 
   vendorId: String!

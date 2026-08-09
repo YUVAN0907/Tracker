@@ -31,6 +31,7 @@ UPSERT_PRODUCT_MUTATION = """
 mutation UpsertProduct(
   $productId: String!, 
   $productName: String, 
+    $aliasName: String,
   $category: String, 
   $vendorId: String!,
   $mrp: Float,
@@ -42,6 +43,7 @@ mutation UpsertProduct(
   product_upsert(data: {
     productId: $productId,
     productName: $productName,
+        aliasName: $aliasName,
     category: $category,
     vendorId: $vendorId,
     mrp: $mrp,
