@@ -7,6 +7,7 @@ import Restock from "./pages/Restock";
 import CreateBatchPage from "./pages/CreateBatchPage";
 import MachineOut from "./pages/MachineOut";
 import Inventory from "./pages/Inventory";
+import RecordDeliveryPage from "./pages/RecordDeliveryPage";
 import Warehouse from "./pages/Warehouse";
 import Notifications from "./pages/Notifications";
 import POApproval from "./pages/POApproval";
@@ -38,6 +39,7 @@ function App() {
                 <Route path="restock/create-batch" element={<CreateBatchPage />} />
                 <Route path="machine-out" element={<MachineOut />} />
                 <Route path="inventory" element={<Inventory />} />
+                <Route path="inventory/record-delivery" element={<RecordDeliveryPage />} />
                 <Route path="warehouse" element={<Warehouse />} />
                 <Route path="complaints" element={<Complaints />} />
                 <Route path="generate-bill" element={<GenerateBill />} />

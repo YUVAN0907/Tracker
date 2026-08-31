@@ -16,6 +16,7 @@ type Product @table(key: "productId") {
   productId: String!
   productName: String
   aliasName: String
+  secondAliasName: String
   category: String
 
   vendorId: String!
@@ -67,6 +68,23 @@ type PurchaseOrderLine @table(key: "lineId") {
 
   purchaseOrderHeader: PurchaseOrderHeader! @ref(fields: "poId")
   product: Product! @ref(fields: "productId")
+}
+
+type POSummary @table(key: "summaryId") {
+  summaryId: UUID! @default(expr: "uuidV4()")
+  poId: String!
+  vendorId: String
+  summaryDate: Timestamp!
+  orderedItems: String!
+  receivedItems: String!
+  missingItems: String!
+  extraItems: String!
+  matchedItems: String!
+  totalOrderedCases: Int!
+  totalReceivedCases: Int!
+  totalOrderedAmount: Float!
+  totalReceivedAmount: Float!
+  createdBy: String
 }
 
 # ==============================

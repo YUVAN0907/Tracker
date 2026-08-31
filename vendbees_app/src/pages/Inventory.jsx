@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -6,6 +7,7 @@ import { Package, Truck, IndianRupee, Filter, Plus, Pencil, Trash2, Eye, X, Sear
 import clsx from 'clsx';
 import { VendorForm, VendorTable } from '../components/VendorForm';
 import { RecentProductsTable, RecentProductForm } from '../components/RecentProductsForm';
+import * as XLSX from 'xlsx';
 
 const KPI = ({ title, value, subtext }) => (
     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
@@ -897,7 +899,8 @@ const MultiPOForm = ({ products, recentProducts = [], vendors, warehouse, onSave
 };
 
 // Comprehensive Delivery Recording Form (for recording stock-in from vendor) - All products in PO + Custom products
-const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [], warehouses = [] }) => {
+export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [], warehouses = [] }) => {
+    const { token } = useAuth();
     const today = new Date().toISOString().split('T')[0];
     const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
         ? 'http://localhost:3002/api'
@@ -931,6 +934,236 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         cases: [] // Array of case objects for custom products
     });
     const [selectedItems, setSelectedItems] = useState({});
+    const [billFile, setBillFile] = useState(null);
+    const [billParsing, setBillParsing] = useState(false);
+    const [billParseMessage, setBillParseMessage] = useState('');
+    const [actualBillItems, setActualBillItems] = useState([]);
+    const [productDetails, setProductDetails] = useState([]);
+    const [expandedProducts, setExpandedProducts] = useState({});
+    const [billReviewItems, setBillReviewItems] = useState([]);
+    const [productsSaved, setProductsSaved] = useState(false);
+
+    const normalizeText = (text) => {
+        if (!text) return '';
+        return text.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    };
+
+    const buildAutoCase = (productId, productName, unitsPerCase, caseNumber) => {
+        const caseLabel = `${poData.po_id || 'ACT'}_${productId || normalizeText(productName).slice(0, 10)}_c${caseNumber}`;
+        const mfd = purchaseDate;
+        const expd = calculateExpiry(mfd, getSelfLife(productId));
+        return {
+            caseNumber,
+            unitsPerCase: unitsPerCase || 1,
+            mfd,
+            expd,
+            caseLabel
+        };
+    };
+
+    const findMatchedProduct = (productName) => {
+        const normalizedName = normalizeText(productName);
+
+        // Helper: token set similarity (intersection / avg length)
+        const tokens = (s) => new Set((s || '').split(/\s+/).filter(Boolean));
+        const similarity = (a, b) => {
+            if (!a || !b) return 0;
+            const ta = tokens(normalizeText(a));
+            const tb = tokens(normalizeText(b));
+            if (ta.size === 0 || tb.size === 0) return 0;
+            let inter = 0;
+            ta.forEach(t => { if (tb.has(t)) inter++; });
+            return inter / ((ta.size + tb.size) / 2);
+        };
+
+        // 1) Exact match against PO product names/aliases
+        let exact = productDetails.find(p => normalizeText(p.product_name) === normalizedName || normalizeText(p.AliasName) === normalizedName);
+        if (exact) return exact;
+
+        // 2) Exact match against vendor product names/aliases
+        exact = vendorProducts.find(p => normalizeText(p.Name) === normalizedName || normalizeText(p.AliasName) === normalizedName);
+        if (exact) return exact;
+
+        // 3) Token-similarity match: prefer PO products first
+        let best = { score: 0, product: null };
+        productDetails.forEach(p => {
+            const name = p.product_name || '';
+            const alias = p.AliasName || '';
+            const s1 = similarity(normalizedName, name);
+            const s2 = similarity(normalizedName, alias);
+            const s = Math.max(s1, s2);
+            if (s > best.score) best = { score: s, product: p };
+        });
+        if (best.score >= 0.5) return best.product;
+
+        // 4) Try vendorProducts with similarity threshold
+        best = { score: 0, product: null };
+        vendorProducts.forEach(p => {
+            const name = p.Name || '';
+            const alias = p.AliasName || '';
+            const s1 = similarity(normalizedName, name);
+            const s2 = similarity(normalizeText(normalizedName), alias);
+            const s = Math.max(s1, s2);
+            if (s > best.score) best = { score: s, product: p };
+        });
+        if (best.score >= 0.5) return best.product;
+
+        return null;
+    };
+
+    const mapParsedItemToDeliveryProduct = (parsedItem) => {
+        const matched = products.find(product => product.Product_ID === parsedItem.productId);
+        const productId = parsedItem.productId || '';
+        const productName = matched?.Name || parsedItem.productName || parsedItem.particulars || 'Unknown Product';
+
+        // Determine units per case from product master if available
+        const unitsPerCase = matched?.Units_Per_Case || parsedItem.unitsPerCase || 1;
+        const caseCount = Math.max(0, parseInt(parsedItem.caseNo, 10) || 0);
+
+        const cases = [];
+        for (let i = 0; i < caseCount; i++) {
+            cases.push(buildAutoCase(productId, productName, unitsPerCase, i + 1));
+        }
+
+        return {
+            product_id: productId,
+            product_name: productName,
+            AliasName: matched?.AliasName || '',
+            case_count: caseCount,
+            units_per_case: unitsPerCase || 1,
+            po_price: parsedItem.amount ?? '',
+            mrp: matched?.MRP || '',
+            batch: '',
+            cases,
+            parsedMatchesPO: Boolean(productId)
+        };
+    };
+
+    const mergeParsedActualBillItems = (parsedItems) => {
+        setBillReviewItems(parsedItems.map((item, index) => ({
+            id: `${item.productId || 'unmatched'}-${index}`,
+            productId: item.productId || '',
+            productName: item.productName || item.particulars || '',
+            caseNo: item.caseNo ?? '',
+            amount: item.amount ?? ''
+        })));
+        setProductDetails([]);
+        setProductsSaved(false);
+        setActualBillItems(parsedItems);
+    };
+
+    const updateBillReviewItem = (index, field, value) => {
+        setBillReviewItems(prev => prev.map((item, itemIndex) => {
+            if (itemIndex !== index) return item;
+            if (field !== 'productId') return { ...item, [field]: value };
+            const product = products.find(candidate => candidate.Product_ID === value.trim());
+            return {
+                ...item,
+                productId: value,
+                productName: product?.Name || '',
+            };
+        }));
+    };
+
+    const deleteBillReviewItem = (index) => {
+        const itemToDelete = billReviewItems[index];
+        setBillReviewItems(prev => prev.filter((_, itemIndex) => itemIndex !== index));
+        if (productsSaved && itemToDelete?.productId) {
+            setProductDetails(prev => prev.filter(product => product.product_id !== itemToDelete.productId));
+        }
+    };
+
+    const saveReviewedProducts = () => {
+        const invalidItem = billReviewItems.find(item => !item.productId.trim() || !item.caseNo || Number(item.caseNo) <= 0);
+        if (invalidItem) {
+            alert('Please enter a valid Product ID and case count for every bill row.');
+            return;
+        }
+        const savedProducts = billReviewItems.map(item => mapParsedItemToDeliveryProduct({
+            productId: item.productId.trim(),
+            productName: item.productName,
+            caseNo: item.caseNo,
+            amount: item.amount
+        })).map(product => ({ ...product, ordered_cases: 0 }));
+        setProductDetails(savedProducts);
+        setProductsSaved(true);
+    };
+
+    const compareOrderedAndActual = useMemo(() => {
+        const poMap = new Map();
+        (poData?.items || []).forEach(item => {
+            const key = item.Product_ID;
+            poMap.set(key, { product_id: key, product_name: item.Product_Name, cases: parseInt(item.No_of_Cases || 0), units_per_case: parseInt(item.Units_Per_Case || 1), amount: parseFloat(item.Line_Total || 0) });
+        });
+
+        const actualMap = new Map();
+        [...productDetails, ...customProducts].forEach(item => {
+            if (!item.product_id) return;
+            const key = item.product_id;
+            actualMap.set(key, { product_id: key, product_name: item.product_name, cases: parseInt(item.case_count) || 0, units_per_case: parseInt(item.units_per_case) || 1, amount: parseFloat(item.po_price || 0) });
+        });
+
+        const matched = [];
+        const missing = [];
+        const extra = [];
+
+        poMap.forEach((poItem, key) => {
+            const actualItem = actualMap.get(key);
+            if (actualItem) {
+                matched.push({ po: poItem, actual: actualItem, caseDifference: actualItem.cases - poItem.cases, amountDifference: actualItem.amount - poItem.amount });
+            } else {
+                missing.push(poItem);
+            }
+        });
+
+        actualMap.forEach((actualItem, key) => {
+            if (!poMap.has(key)) {
+                extra.push(actualItem);
+            }
+        });
+
+        return { matched, missing, extra };
+    }, [productDetails, customProducts, poData]);
+
+    const uploadBill = async () => {
+        if (!billFile) {
+            setBillParseMessage('Please choose a bill PDF before fetching Actual PO.');
+            return;
+        }
+
+        setBillParsing(true);
+        setBillParseMessage('Parsing bill...');
+
+        try {
+            const formData = new FormData();
+            formData.append('bill', billFile);
+            const response = await fetch(`${API_URL}/bills/parse`, {
+                method: 'POST',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                body: formData
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to parse bill');
+            }
+            const parsedItems = result.parsedItems || [];
+            if (parsedItems.length === 0) {
+                setBillParseMessage('Bill parsed, but no line items were identified. Please verify the uploaded bill PDF.');
+            } else {
+                setBillParseMessage(`Parsed ${parsedItems.length} bill item(s). Populating delivery form...`);
+                const worksheet = XLSX.utils.json_to_sheet(parsedItems);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Matched Products');
+                XLSX.writeFile(workbook, `${billFile.name.replace(/\.[^/.]+$/, '')}_matched.xlsx`);
+            }
+            mergeParsedActualBillItems(parsedItems);
+        } catch (err) {
+            console.error('[DeliveryForm] Bill parse error:', err);
+            setBillParseMessage(err.message || 'Error parsing bill file');
+        } finally {
+            setBillParsing(false);
+        }
+    };
 
     // Extract vendor ID from PO data
     const vendorId = poData?.vendor_id;
@@ -1031,26 +1264,6 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             cases: updatedCases
         });
     };
-
-    // Initialize product structure with cases array
-    const [productDetails, setProductDetails] = useState(() => {
-        return (poData?.items || []).map(item => {
-            // Find product in products array to get MRP
-            const productInfo = products.find(p => p.Product_ID === item.Product_ID);
-            return {
-                product_id: item.Product_ID || '',
-                product_name: item.Product_Name || '',
-                AliasName: productInfo?.AliasName || '',
-                ordered_cases: item.No_of_Cases || 0,
-                units_per_case: item.Units_Per_Case || 1,
-                po_price: item.PO_Price || '',
-                mrp: productInfo?.MRP || '',
-                batch: 1, // Default batch number
-                case_count: '', // Track how many cases to generate (for quantity calculation)
-                cases: [] // Array of case objects: {caseNumber, unitsPerCase, mfd, expd, caseLabel}
-            };
-        });
-    });
 
     // Convert shelf life from months to days if needed
     // If value < 50, treat as months and convert to days (multiply by 30)
@@ -1233,6 +1446,23 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         setProductDetails(prev => {
             const updated = [...prev];
             const product = updated[productIndex];
+
+            if (field === 'product_id') {
+                const productInfo = products.find(item => item.Product_ID === value);
+                product.product_id = value;
+                if (productInfo) {
+                    product.product_name = productInfo.Name || product.product_name;
+                    product.AliasName = productInfo.AliasName || '';
+                    product.units_per_case = productInfo.Units_Per_Case || 1;
+                    product.mrp = productInfo.MRP || product.mrp;
+                    product.cases = product.cases.map(caseData => ({
+                        ...caseData,
+                        unitsPerCase: productInfo.Units_Per_Case || 1,
+                        caseLabel: `${poData.po_id}_${value}_c${caseData.caseNumber}`
+                    }));
+                }
+                return updated;
+            }
             
             if (field === 'case_count') {
                 // When case count changes, auto-generate case blocks
@@ -1413,13 +1643,37 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         }));
 
         const allItems = [...items, ...customItems];
+        const orderedItems = (poData?.items || []).map(item => ({
+            productId: item.Product_ID,
+            productName: item.Product_Name,
+            cases: parseInt(item.No_of_Cases || 0),
+            amount: parseFloat(item.Line_Total || 0)
+        }));
+        const receivedItems = [...productDetails, ...customProducts].map(item => ({
+            productId: item.product_id,
+            productName: item.product_name,
+            cases: parseInt(item.case_count || 0),
+            amount: parseFloat(item.po_price || 0)
+        }));
+        const summary = {
+            orderedItems,
+            receivedItems,
+            missingItems: compareOrderedAndActual.missing,
+            extraItems: compareOrderedAndActual.extra,
+            matchedItems: compareOrderedAndActual.matched,
+            totalOrderedCases: orderedItems.reduce((total, item) => total + item.cases, 0),
+            totalReceivedCases: receivedItems.reduce((total, item) => total + item.cases, 0),
+            totalOrderedAmount: orderedItems.reduce((total, item) => total + item.amount, 0),
+            totalReceivedAmount: receivedItems.reduce((total, item) => total + item.amount, 0)
+        };
         console.log('[DeliveryForm] Final data to submit:', JSON.stringify({
             po_id: poData.po_id,
             vendor_id: poData.vendor_id,
             payment_mode: paymentMode,
             payment_status: paymentStatus,
             gst_filed: gstFiled,
-            items: allItems
+            items: allItems,
+            summary
         }, null, 2));
         
         onSave({
@@ -1429,7 +1683,8 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
             payment_mode: paymentMode,
             payment_status: paymentStatus,
             gst_filed: gstFiled,
-            items: allItems
+            items: allItems,
+            summary
         });
     };
 
@@ -1506,6 +1761,48 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         return '';
     };
 
+    const downloadSummaryExcel = () => {
+        const rows = [
+            ...compareOrderedAndActual.matched.map(item => ({
+                Status: item.caseDifference === 0 && item.amountDifference === 0 ? 'Matched' : 'Difference',
+                'Product ID': item.po.product_id,
+                'Product Name': item.po.product_name,
+                'Ordered Cases': item.po.cases,
+                'Received Cases': item.actual.cases,
+                'Ordered Amount': item.po.amount,
+                'Received Amount': item.actual.amount,
+                'Case Difference': item.caseDifference,
+                'Amount Difference': item.amountDifference
+            })),
+            ...compareOrderedAndActual.missing.map(item => ({
+                Status: 'Missing',
+                'Product ID': item.product_id,
+                'Product Name': item.product_name,
+                'Ordered Cases': item.cases,
+                'Received Cases': 0,
+                'Ordered Amount': item.amount,
+                'Received Amount': 0,
+                'Case Difference': -item.cases,
+                'Amount Difference': -item.amount
+            })),
+            ...compareOrderedAndActual.extra.map(item => ({
+                Status: 'Extra',
+                'Product ID': item.product_id,
+                'Product Name': item.product_name,
+                'Ordered Cases': 0,
+                'Received Cases': item.cases,
+                'Ordered Amount': 0,
+                'Received Amount': item.amount,
+                'Case Difference': item.cases,
+                'Amount Difference': item.amount
+            }))
+        ];
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'PO Summary');
+        XLSX.writeFile(workbook, `${poData.po_id}_summary.xlsx`);
+    };
+
     const handleAddCustomProduct = (e) => {
         e.preventDefault();
         if (!newCustomProduct.product_id || !newCustomProduct.product_name || !newCustomProduct.case_count || parseInt(newCustomProduct.case_count, 10) <= 0) {
@@ -1530,7 +1827,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         setCustomProducts(customProducts.filter(cp => cp.id !== id));
     };
 
-    const productsToDeliver = (poData?.items || []).filter(item => !selectedItems[item.product_id]);
+    const productsToDeliver = (poData?.items || []).filter(item => !selectedItems[item.Product_ID]);
 
     const totalCustomUnits = customProducts.reduce((sum, product) => sum + ((parseInt(product.case_count) || 0) * (parseInt(product.units_per_case) || 1)), 0);
 
@@ -1540,8 +1837,13 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
         return sum + product.cases.reduce((caseSum, c) => caseSum + (parseInt(c.unitsPerCase) || 0), 0);
     }, 0);
 
+    const toggleProductDetails = (productId, index) => {
+        const key = `${productId || 'product'}-${index}`;
+        setExpandedProducts(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="space-y-5">
             {/* PO Info Header */}
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 sticky top-0 z-10">
                 <div className="flex justify-between items-start">
@@ -1631,14 +1933,120 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                 </div>
             </div>
 
+            {/* Bill Review */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 md:p-5 space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                    <div>
+                        <div className="text-base font-semibold text-slate-800">Upload Bill</div>
+                        <div className="text-xs text-slate-500 mt-1">Review and correct extracted products before opening case details.</div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                            type="file"
+                            accept="application/pdf"
+                            onChange={e => setBillFile(e.target.files?.[0] || null)}
+                            className="text-xs text-slate-600 file:mr-2 file:py-2 file:px-3 file:border file:border-slate-300 file:rounded file:bg-white file:text-slate-700"
+                        />
+                        <button
+                            type="button"
+                            onClick={uploadBill}
+                            disabled={billParsing || !billFile}
+                            className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                        >
+                            {billParsing ? 'Extracting...' : 'Upload Bill'}
+                        </button>
+                    </div>
+                </div>
+                {billParseMessage && <div className="text-sm text-slate-600">{billParseMessage}</div>}
+
+                {billReviewItems.length > 0 && (
+                    <>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        Automatic extraction can make mistakes. Please verify the bill Product ID, case count, and amount manually before saving.
+                    </div>
+                    <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                        <table className="w-full min-w-[720px] text-sm">
+                            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                                <tr>
+                                    <th className="px-3 py-3 text-left">S.No</th>
+                                    <th className="px-3 py-3 text-left">Product ID</th>
+                                    <th className="px-3 py-3 text-left">Product Name</th>
+                                    <th className="px-3 py-3 text-left">No. of Cases</th>
+                                    <th className="px-3 py-3 text-left">Amount (₹)</th>
+                                    <th className="px-3 py-3 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {billReviewItems.map((item, index) => (
+                                    <tr key={item.id}>
+                                        <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                        <td className="px-3 py-2">
+                                            <input
+                                                type="text"
+                                                value={item.productId}
+                                                onChange={e => updateBillReviewItem(index, 'productId', e.target.value)}
+                                                className="w-full min-w-32 px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <input
+                                                type="text"
+                                                value={item.productName}
+                                                readOnly
+                                                className="w-full min-w-48 px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-700"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={item.caseNo}
+                                                onChange={e => updateBillReviewItem(index, 'caseNo', e.target.value)}
+                                                className="w-full min-w-28 px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={item.amount}
+                                                onChange={e => updateBillReviewItem(index, 'amount', e.target.value)}
+                                                className="w-full min-w-32 px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => deleteBillReviewItem(index)}
+                                                className="inline-flex items-center justify-center p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                                title="Delete row"
+                                                aria-label={`Delete product row ${index + 1}`}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        <div className="flex justify-end p-3 bg-slate-50 border-t border-slate-200">
+                            <button type="button" onClick={saveReviewedProducts} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">
+                                Save Products
+                            </button>
+                        </div>
+                    </div>
+                    </>
+                )}
+            </div>
+
             {/* Products with Cases */}
             <div className="space-y-4">
                 <div className="text-sm font-medium text-slate-700">Products ({productDetails.length})</div>
-                <div className="text-xs text-slate-500">Enter case count for each product to automatically generate case details below.</div>
+                <div className="text-xs text-slate-500">Saved products are ready for case details below.</div>
             </div>
 
             {/* PO Products with Inline Case Details */}
-            <div className="space-y-6">
+            {productsSaved && <div className="space-y-6">
                 {productDetails.map((product, index) => (
                     <div key={index} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
                         {/* Product Input Row */}
@@ -1658,25 +2066,30 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-5 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                 <div>
-                                    <label className="block text-xs text-slate-500 mb-1">Batch</label>
+                                    <label className="block text-xs text-slate-500 mb-1">Product ID *</label>
                                     <input
                                         type="text"
-                                        value={product.batch}
-                                        onChange={e => updateProduct(index, 'batch', e.target.value)}
+                                        value={product.product_id}
+                                        onChange={e => updateProduct(index, 'product_id', e.target.value.trim())}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                        placeholder="Batch"
+                                        required
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">Product Name</label>
+                                    <div className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-700 truncate" title={product.product_name}>
+                                        {product.product_name || 'Unknown Product'}
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs text-slate-500 mb-1">Unit/Case *</label>
                                     <input
                                         type="number"
                                         value={product.units_per_case}
-                                        onChange={e => updateProduct(index, 'units_per_case', e.target.value)}
-                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                        min="1"
+                                        readOnly
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 text-slate-700"
                                     />
                                 </div>
                                 <div>
@@ -1693,18 +2106,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-slate-500 mb-1">MRP (₹)</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={product.mrp}
-                                        onChange={e => updateProduct(index, 'mrp', e.target.value)}
-                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-slate-500 mb-1">PO Price (₹) *</label>
+                                    <label className="block text-xs text-slate-500 mb-1">Amount (₹) *</label>
                                     <input
                                         type="number"
                                         step="0.01"
@@ -1719,8 +2121,17 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
 
                         {/* Case Details - Shows directly below product if cases exist */}
                         {product.cases.length > 0 && (
-                            <div className="p-4 bg-orange-50">
-                                <div className="text-xs font-semibold text-orange-800 mb-3">Case Details - Enter Manufacture & Expiry Date</div>
+                            <div className="border-t border-orange-100 bg-orange-50">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleProductDetails(product.product_id, index)}
+                                    className="w-full px-4 py-3 flex items-center gap-2 text-left text-xs font-semibold text-orange-800 hover:bg-orange-100"
+                                >
+                                    {expandedProducts[`${product.product_id || 'product'}-${index}`] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                    Case Details ({product.cases.length})
+                                </button>
+                                {expandedProducts[`${product.product_id || 'product'}-${index}`] && (
+                                <div className="p-4 pt-1">
                                 <div className="space-y-3">
                                     {product.cases.map((caseData, caseIndex) => (
                                         <div key={caseIndex} className="p-3 bg-white rounded-lg border border-slate-200">
@@ -1796,13 +2207,76 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                         </div>
                                     ))}
                                 </div>
+                                </div>
+                                )}
                             </div>
                         )}
                     </div>
                 ))}
-            </div>
+            </div>}
 
             {/* Custom Products Section */}
+            <div className="space-y-3">
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                        <div>
+                            <div className="text-sm font-medium text-slate-700">PO Comparison Summary</div>
+                            <div className="text-xs text-slate-500">Shows which ordered products were missed and which extra products were supplied.</div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-right text-xs text-slate-500">
+                                Missing: {compareOrderedAndActual.missing.length} | Extra: {compareOrderedAndActual.extra.length} | Matched: {compareOrderedAndActual.matched.length}
+                            </div>
+                            <button type="button" onClick={downloadSummaryExcel} className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium">
+                                Download Excel
+                            </button>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-xs text-slate-700">
+                        <div className="rounded-lg border border-red-100 bg-red-50 p-3">
+                            <div className="font-semibold text-red-700">Missed Products</div>
+                            {compareOrderedAndActual.missing.length === 0 ? (
+                                <div className="mt-2 text-slate-500">None</div>
+                            ) : (
+                                <ul className="list-disc list-inside mt-2 space-y-1">
+                                    {compareOrderedAndActual.missing.map(item => (
+                                        <li key={item.product_id || item.product_name}>{item.product_id} - {item.product_name} ({item.cases} cases ordered)</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
+                            <div className="font-semibold text-orange-700">Extra Supplied</div>
+                            {compareOrderedAndActual.extra.length === 0 ? (
+                                <div className="mt-2 text-slate-500">None</div>
+                            ) : (
+                                <ul className="list-disc list-inside mt-2 space-y-1">
+                                    {compareOrderedAndActual.extra.map(item => (
+                                        <li key={item.product_id || item.product_name}>{item.product_id} - {item.product_name} ({item.cases} cases)</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="rounded-lg border border-green-100 bg-green-50 p-3">
+                            <div className="font-semibold text-green-700">Matched Products</div>
+                            {compareOrderedAndActual.matched.length === 0 ? (
+                                <div className="mt-2 text-slate-500">None</div>
+                            ) : (
+                                <ul className="list-disc list-inside mt-2 space-y-1">
+                                    {compareOrderedAndActual.matched.map(item => (
+                                        <li key={item.po.product_id || item.po.product_name}>
+                                            {item.po.product_id} - {item.po.product_name}: {item.actual.cases}/{item.po.cases} cases
+                                            {item.caseDifference !== 0 && <span className="text-orange-700"> ({item.caseDifference > 0 ? '+' : ''}{item.caseDifference})</span>}
+                                            {item.amountDifference !== 0 && <span className="text-slate-500">, amount diff ₹{item.amountDifference.toFixed(2)}</span>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div className="space-y-3">
                 <div className="flex justify-between items-center">
                     <div>
@@ -1844,7 +2318,7 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                 </select>
                                 {!vendorId && <p className="text-xs text-orange-600 mt-1">No vendor selected in PO</p>}
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div>
                                     <label className="block text-xs font-medium text-slate-600 mb-1">Case Count *</label>
                                     <input
@@ -1868,29 +2342,8 @@ const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = []
                                         min="1"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch</label>
-                                    <input
-                                        type="text"
-                                        value={newCustomProduct.batch}
-                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, batch: e.target.value })}
-                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500"
-                                        placeholder="Batch"
-                                    />
-                                </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">MRP (₹) - Auto-filled</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={newCustomProduct.mrp}
-                                        onChange={(e) => setNewCustomProduct({ ...newCustomProduct, mrp: e.target.value })}
-                                        className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-orange-500 bg-slate-50"
-                                        placeholder="0.00"
-                                    />
-                                </div>
+                            <div className="grid grid-cols-1 gap-3">
                                 <div>
                                     <label className="block text-xs font-medium text-slate-600 mb-1">Price (₹) - Auto-filled</label>
                                     <input
@@ -2357,6 +2810,7 @@ const NewVendorPurchaseForm = ({ products, vendors, onSave, onCancel, saving }) 
 
 const Inventory = () => {
     const { user, token } = useAuth();
+    const navigate = useNavigate();
     const { products, purchases, vendors, recentProducts, warehouse, warehouses, ourPOs, vendorDeliveries, vendorPurchasesList, loading, refreshData, addToWarehouse, createMultiPO, recordDelivery, fetchVendorPurchases } = useData();
     const hasPermission = (permission) => user?.role === 'admin' || (Array.isArray(user?.permissions) && user.permissions.includes(permission));
     const [activeTab, setActiveTab] = useState('Product Master');
@@ -2375,7 +2829,6 @@ const Inventory = () => {
     const [showAddVendorModal, setShowAddVendorModal] = useState(false);  // ✅ NEW: Vendor modal
     const [showPOModal, setShowPOModal] = useState(false);
     const [showMultiPOModal, setShowMultiPOModal] = useState(false);
-    const [showDeliveryModal, setShowDeliveryModal] = useState(false);
     const [selectedPOItem, setSelectedPOItem] = useState(null);
     const [editVendor, setEditVendor] = useState(null);  // ✅ NEW: Edit vendor state
     const [deleteVendor, setDeleteVendor] = useState(null);  // ✅ NEW: Delete vendor state
@@ -2396,7 +2849,6 @@ const Inventory = () => {
     const [deletingPOId, setDeletingPOId] = useState(null);
     const [rejectReason, setRejectReason] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
-    const [poDataForDelivery, setPoDataForDelivery] = useState(null);
     const [loadingPOItems, setLoadingPOItems] = useState(false);
     const [loadingEditPO, setLoadingEditPO] = useState(false);
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
@@ -2434,13 +2886,14 @@ const Inventory = () => {
 
             // Accept responses that either include a success flag OR directly return an items array
             if (response.ok && data && (data.success === true || Array.isArray(data.items))) {
-                setPoDataForDelivery({
+                navigate('/inventory/record-delivery', {
+                    state: {
                     po_id: poId,
                     vendor_id: data.vendor_id,
                     po_date: data.po_date,
                     items: data.items
+                    }
                 });
-                setShowDeliveryModal(true);
             } else {
                 const errMsg = data && data.error ? data.error : (text ? text : `${response.status} ${response.statusText}`);
                 console.error('Failed to fetch PO items', { status: response.status, statusText: response.statusText, body: text, parsed: data });
@@ -4108,53 +4561,6 @@ const Inventory = () => {
                     initialVendor={editPOVendorId}
                     initialItems={editPOItems}
                 />
-            </Modal>
-
-            {/* Record Delivery Modal */}
-            <Modal isOpen={showDeliveryModal} onClose={() => { setShowDeliveryModal(false); setPoDataForDelivery(null); }} title="Record Vendor Delivery" size="xl">
-                {poDataForDelivery && (
-                    <DeliveryRecordingForm
-                        poData={poDataForDelivery}
-                        products={products}
-                        vendors={vendors}
-                        warehouses={warehouses}
-                        onSave={async (deliveryData) => {
-                            setSaving(true);
-                            try {
-                                // Use normalized route through DataContext recordDelivery proxy
-                                const result = await recordDelivery(deliveryData);
-                                if (!result.success) {
-                                    throw new Error(result.error || 'Failed to record delivery');
-                                }
-
-                                // For normalized route, we have message/details, not sheet counters.
-                                let successMessage = '✅ Delivery Recorded Successfully!\n\n';
-                                if (result.message) {
-                                    successMessage += result.message + '\n';
-                                }
-                                if (result.details) {
-                                    successMessage += result.details;
-                                }
-
-                                alert(successMessage);
-
-                                // Track successful delivery for tick indicator
-                                setRecentlyDeliveredPOs(prev => new Set([...prev, poDataForDelivery.po_id]));
-                                setShowDeliveryModal(false);
-                                setPoDataForDelivery(null);
-                                // Refresh data to get updated status
-                                if (refreshData) refreshData();
-                                fetchVendorPurchases();
-                            } catch (err) {
-                                alert(`Error: ${err.message}`);
-                            } finally {
-                                setSaving(false);
-                            }
-                        }}
-                        onCancel={() => { setShowDeliveryModal(false); setPoDataForDelivery(null); }}
-                        saving={saving}
-                    />
-                )}
             </Modal>
 
             {/* Edit PO now reuses the Create Multi-Product PO modal (no separate Edit modal) */}

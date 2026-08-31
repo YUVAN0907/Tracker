@@ -29,6 +29,12 @@ const Restock = () => {
     const [batchFilter, setBatchFilter] = useState('');
     const [dateFilter, setDateFilter] = useState('');
     const [productFilter, setProductFilter] = useState('');
+    const [stockAnalyzeProductCount, setStockAnalyzeProductCount] = useState('');
+    const [stockAnalyzePiecesPerCover, setStockAnalyzePiecesPerCover] = useState(5);
+    const [stockAnalyzeCategoryInput, setStockAnalyzeCategoryInput] = useState('');
+    const [stockAnalyzeSuggestedProducts, setStockAnalyzeSuggestedProducts] = useState([]);
+    const [showStockAnalyzeForm, setShowStockAnalyzeForm] = useState(false);
+    const [stockAnalyzePatterns, setStockAnalyzePatterns] = useState([]);
     
     // Build batch status summary for Restock counts
     const batchStatusMap = stocks.reduce((map, s) => {
@@ -243,6 +249,134 @@ const Restock = () => {
             a.Product.Product_ID.toLowerCase().includes(query)
         );
     }
+
+    const stockAnalyzeList = Object.values(
+        warehouseStocks.reduce((acc, item) => {
+            const productId = String(item?.productId ?? item?.Product_ID ?? '').trim();
+            if (!productId) return acc;
+
+            const productLookup = products.reduce((map, product) => {
+                const id = String(product?.Product_ID ?? product?.productId ?? '').trim();
+                if (id) map[id] = product;
+                return map;
+            }, {});
+
+            const existing = acc[productId] || {
+                productId,
+                productName: productLookup[productId]?.Name || productLookup[productId]?.Product_Name || item?.productName || item?.Product_Name || 'Unknown Product',
+                totalUnits: 0,
+            };
+
+            const availableUnits = Number(item?.availableUnits ?? item?.Available_Units ?? item?.units ?? item?.Units ?? 0);
+            existing.totalUnits += Number.isFinite(availableUnits) ? availableUnits : 0;
+            acc[productId] = existing;
+            return acc;
+        }, {})
+    )
+        .map((row) => ({
+            ...row,
+            fivePiecesCover: Math.floor(row.totalUnits / 5),
+            sixPiecesCover: Math.floor(row.totalUnits / 6),
+        }))
+        .sort((a, b) => b.totalUnits - a.totalUnits);
+
+    const stockAnalyzeTotalUnits = stockAnalyzeList.reduce((sum, row) => sum + Number(row.totalUnits || 0), 0);
+    const normalizedProductCount = Number(stockAnalyzeProductCount) || 0;
+    const normalizedCoverSize = Number(stockAnalyzePiecesPerCover) || 0;
+    const stockAnalyzeIsValidInput = stockAnalyzeProductCount !== '' && normalizedProductCount > 0 && (normalizedCoverSize === 5 || normalizedCoverSize === 6);
+    const stockAnalyzeProductAvailabilityMessage = stockAnalyzeIsValidInput && stockAnalyzeList.length < normalizedProductCount
+        ? `Not enough products in warehouse stock. Available products: ${stockAnalyzeList.length}. Required: ${normalizedProductCount}.`
+        : null;
+    const stockAnalyzeMaxCover = stockAnalyzeIsValidInput && stockAnalyzeList.length >= normalizedProductCount
+        ? Math.floor(stockAnalyzeTotalUnits / (normalizedProductCount * normalizedCoverSize))
+        : 0;
+
+    const getPatternRemainingUnits = (patternIndex) => stockAnalyzeTotalUnits - stockAnalyzePatterns
+        .slice(0, patternIndex)
+        .reduce((total, pattern) => {
+            const flavours = Number(pattern.flavours) || 0;
+            const piecesPerCover = Number(pattern.piecesPerCover) || 0;
+            const coversToUse = Number(pattern.coversToUse) || 0;
+            return total + (flavours * piecesPerCover * coversToUse);
+        }, 0);
+
+    const getPatternMaxCovers = (pattern, patternIndex) => {
+        const flavours = Number(pattern.flavours) || 0;
+        const piecesPerCover = Number(pattern.piecesPerCover) || 0;
+        if (flavours <= 0 || ![5, 6].includes(piecesPerCover)) return 0;
+        return Math.floor(Math.max(0, getPatternRemainingUnits(patternIndex)) / (flavours * piecesPerCover));
+    };
+
+    const addStockAnalyzePattern = () => {
+        setStockAnalyzePatterns((patterns) => [
+            ...patterns,
+            { flavours: '', piecesPerCover: 5, maxCovers: null, coversToUse: '', reserved: false },
+        ]);
+    };
+
+    const updateStockAnalyzePattern = (patternIndex, field, value) => {
+        setStockAnalyzePatterns((patterns) => patterns.map((pattern, index) => (
+            index === patternIndex
+                ? { ...pattern, [field]: value, ...(field !== 'coversToUse' ? { maxCovers: null } : {}) }
+                : pattern
+        )));
+    };
+
+    const reserveStockAnalyzePattern = (patternIndex) => {
+        setStockAnalyzePatterns((patterns) => patterns.map((pattern, index) => (
+            index === patternIndex
+                ? { ...pattern, reserved: true }
+                : pattern
+        )));
+    };
+
+    const calculateStockAnalyzePatternMax = (patternIndex) => {
+        setStockAnalyzePatterns((patterns) => patterns.map((pattern, index) => (
+            index === patternIndex
+                ? { ...pattern, maxCovers: getPatternMaxCovers(pattern, patternIndex) }
+                : pattern
+        )));
+    };
+
+    const canAddStockAnalyzePattern = stockAnalyzePatterns.length > 0 && stockAnalyzePatterns.every((pattern, index) => {
+        if (!pattern.reserved) return false;
+        const maxCovers = pattern.maxCovers ?? getPatternMaxCovers(pattern, index);
+        const coversToUse = Number(pattern.coversToUse);
+        return maxCovers > 0 && Number.isInteger(coversToUse) && coversToUse > 0 && coversToUse <= maxCovers;
+    });
+
+    const getProductCategory = (productId) => {
+        const product = products.find(item => String(item?.Product_ID ?? item?.productId ?? '').trim() === String(productId).trim());
+        return product?.Category || product?.category || product?.Product_Category || 'Uncategorized';
+    };
+
+    const generateStockAnalyzeSuggestions = () => {
+        if (!stockAnalyzeIsValidInput) return;
+
+        const selectedCategories = stockAnalyzeCategoryInput
+            .split(',')
+            .map(value => value.trim().toLowerCase())
+            .filter(Boolean);
+
+        const matchingProducts = stockAnalyzeList.filter((item) => {
+            if (selectedCategories.length === 0) return true;
+            const productCategory = String(getProductCategory(item.productId) || '').trim().toLowerCase();
+            return selectedCategories.includes(productCategory);
+        });
+
+        const suggested = matchingProducts
+            .slice(0, normalizedProductCount)
+            .map((item) => ({
+                ...item,
+                category: getProductCategory(item.productId),
+            }));
+
+        setStockAnalyzeSuggestedProducts(suggested);
+    };
+
+    const removeSuggestedProduct = (productId) => {
+        setStockAnalyzeSuggestedProducts(prev => prev.filter(item => item.productId !== productId));
+    };
 
     const handleCreateBatch = async (data) => {
         // Batch creation is now handled in CreateBatchPage
@@ -560,6 +694,13 @@ const Restock = () => {
                     </button>
 
                     <button
+                        onClick={() => setActiveTab('stock-analyze')}
+                        className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'stock-analyze' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
+                    >
+                        Stock Analyze ({stockAnalyzeList.length})
+                    </button>
+
+                    <button
                         onClick={() => setActiveTab('batches')}
                         className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'batches' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
                     >
@@ -649,6 +790,243 @@ const Restock = () => {
                 )}
 
 
+
+                {/* Stock Analyze Tab */}
+                {activeTab === 'stock-analyze' && (
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-lg font-semibold text-slate-800">Warehouse Stock Analyze</h3>
+                            <button
+                                onClick={() => setShowStockAnalyzeForm(true)}
+                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
+                            >
+                                Stock Pattern Suggestor
+                            </button>
+                        </div>
+
+                        {showStockAnalyzeForm && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
+                                    <div className="flex justify-between items-center border-b border-slate-200 px-5 py-4 shrink-0">
+                                        <h4 className="text-lg font-semibold text-slate-800">Stock Pattern Suggestor</h4>
+                                        <button
+                                            onClick={() => setShowStockAnalyzeForm(false)}
+                                            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100"
+                                            aria-label="Close form"
+                                        >
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+
+                                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                                        <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-3">
+                                            <div className="text-[10px] uppercase tracking-wide text-orange-600 font-semibold">Total Warehouse Units</div>
+                                            <div className="text-xl font-bold text-slate-800 mt-1">{stockAnalyzeTotalUnits}</div>
+                                        </div>
+
+                                        {/* Pattern Builder */}
+                                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+                                                <div className="flex justify-between items-center">
+                                                    <label className="text-sm font-semibold text-slate-700">Add Pattern</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={addStockAnalyzePattern}
+                                                        className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                                                    >
+                                                        + Add Pattern
+                                                    </button>
+                                                </div>
+
+                                                {stockAnalyzePatterns.length === 0 ? (
+                                                    <p className="text-xs text-slate-600">Click "Add Pattern" to create a pattern with specific flavours and pieces per cover.</p>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {stockAnalyzePatterns.map((pattern, idx) => {
+                                                            const maxCovers = pattern.maxCovers ?? getPatternMaxCovers(pattern, idx);
+                                                            const remainingUnits = getPatternRemainingUnits(idx);
+                                                            return (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="rounded-lg border border-slate-200 bg-white p-4 space-y-3"
+                                                                >
+                                                                    <div className="text-sm font-semibold text-slate-700">Pattern {idx + 1}</div>
+
+                                                                    <div className="grid grid-cols-2 gap-3">
+                                                                        <div>
+                                                                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                                                                                No of Flavours
+                                                                            </label>
+                                                                            <input
+                                                                                type="number"
+                                                                                min="1"
+                                                                                value={pattern.flavours}
+                                                                                onChange={(e) =>
+                                                                                    updateStockAnalyzePattern(idx, 'flavours', e.target.value)
+                                                                                }
+                                                                                placeholder="Enter flavours"
+                                                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                                                            />
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                                                                                Pieces per Cover
+                                                                            </label>
+                                                                            <select
+                                                                                value={pattern.piecesPerCover}
+                                                                                onChange={(e) =>
+                                                                                    updateStockAnalyzePattern(idx, 'piecesPerCover', Number(e.target.value))
+                                                                                }
+                                                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                                                            >
+                                                                                <option value={5}>5</option>
+                                                                                <option value={6}>6</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {maxCovers > 0 && (
+                                                                        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm">
+                                                                            <div className="text-[10px] uppercase tracking-wide text-green-600 font-semibold">
+                                                                                Max Covers Possible
+                                                                            </div>
+                                                                            <div className="text-lg font-bold text-green-700 mt-1">{maxCovers}</div>
+                                                                            <div className="text-[10px] text-green-600 mt-2">
+                                                                                Available Units: {remainingUnits}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {maxCovers > 0 && (
+                                                                        <div>
+                                                                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                                                                                No of Covers to Use (max {maxCovers})
+                                                                            </label>
+                                                                            <input
+                                                                                type="number"
+                                                                                min="1"
+                                                                                max={maxCovers}
+                                                                                value={pattern.coversToUse}
+                                                                                onChange={(e) =>
+                                                                                    updateStockAnalyzePattern(idx, 'coversToUse', e.target.value)
+                                                                                }
+                                                                                placeholder={`Enter covers (1-${maxCovers})`}
+                                                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                                                            />
+                                                                        </div>
+                                                                    )}
+
+                                                                    {maxCovers > 0 && pattern.coversToUse && (
+                                                                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                                                                            <div className="text-[10px] uppercase tracking-wide text-blue-600 font-semibold">
+                                                                                Units Reserved
+                                                                            </div>
+                                                                            <div className="text-lg font-bold text-blue-700 mt-1">
+                                                                                {Number(pattern.coversToUse) * Number(pattern.flavours) * Number(pattern.piecesPerCover)} units
+                                                                            </div>
+                                                                            <div className="text-[10px] text-blue-600 mt-2">
+                                                                                Remaining for next pattern: {remainingUnits - (Number(pattern.coversToUse) * Number(pattern.flavours) * Number(pattern.piecesPerCover))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {!pattern.reserved && maxCovers > 0 && pattern.coversToUse && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => reserveStockAnalyzePattern(idx)}
+                                                                            className="w-full px-3 py-2 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                                                                        >
+                                                                            Reserve Pattern
+                                                                        </button>
+                                                                    )}
+
+                                                                    {pattern.reserved && (
+                                                                        <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-center">
+                                                                            <div className="text-xs font-semibold text-green-700">✓ Pattern Reserved</div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            setStockAnalyzePatterns((patterns) =>
+                                                                                patterns.filter((_, i) => i !== idx)
+                                                                            )
+                                                                        }
+                                                                        className="w-full px-3 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-600 rounded-lg font-medium"
+                                                                    >
+                                                                        Remove Pattern
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+
+                                                        {canAddStockAnalyzePattern && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={addStockAnalyzePattern}
+                                                                className="w-full px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                                                            >
+                                                                + Add Another Pattern
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                        <div className="flex justify-end gap-2 pt-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowStockAnalyzeForm(false);
+                                                    setStockAnalyzeSuggestedProducts([]);
+                                                    setStockAnalyzeCategoryInput('');
+                                                }}
+                                                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50"
+                                            >
+                                                Close
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+                                        <tr>
+                                            <th className="px-6 py-4 font-medium">Product ID</th>
+                                            <th className="px-6 py-4 font-medium">Product Name</th>
+                                            <th className="px-6 py-4 font-medium">Total Units</th>
+                                            <th className="px-6 py-4 font-medium">5 Pieces Cover</th>
+                                            <th className="px-6 py-4 font-medium">6 Pieces Cover</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {stockAnalyzeList.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
+                                                    No products available in warehouse stock.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            stockAnalyzeList.map((row) => (
+                                                <tr key={row.productId} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                                    <td className="px-6 py-4 font-mono text-xs text-slate-700">{row.productId}</td>
+                                                    <td className="px-6 py-4 font-medium text-slate-700">{row.productName}</td>
+                                                    <td className="px-6 py-4 font-bold text-slate-800">{row.totalUnits}</td>
+                                                    <td className="px-6 py-4 font-bold text-blue-700">{row.fivePiecesCover}</td>
+                                                    <td className="px-6 py-4 font-bold text-purple-700">{row.sixPiecesCover}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Stock Batches Tab */}
                 {activeTab === 'batches' && (

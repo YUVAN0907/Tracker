@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from dataconnect_db import execute_graphql, format_timestamp
 from uuid import uuid4
+import json
 
 purchases_bp = Blueprint('purchases', __name__)
 
@@ -81,6 +82,42 @@ mutation InsertVendorPurchaseItem(
     totalUnits: $totalUnits,
     mrp: $mrp,
     poPrice: $poPrice
+  })
+}
+"""
+
+INSERT_PO_SUMMARY_MUTATION = """
+mutation InsertPOSummary(
+  $summaryId: UUID!,
+  $poId: String!,
+  $vendorId: String,
+  $summaryDate: Timestamp!,
+  $orderedItems: String!,
+  $receivedItems: String!,
+  $missingItems: String!,
+  $extraItems: String!,
+  $matchedItems: String!,
+  $totalOrderedCases: Int!,
+  $totalReceivedCases: Int!,
+  $totalOrderedAmount: Float!,
+  $totalReceivedAmount: Float!,
+  $createdBy: String
+) {
+  pOSummary_insert(data: {
+    summaryId: $summaryId,
+    poId: $poId,
+    vendorId: $vendorId,
+    summaryDate: $summaryDate,
+    orderedItems: $orderedItems,
+    receivedItems: $receivedItems,
+    missingItems: $missingItems,
+    extraItems: $extraItems,
+    matchedItems: $matchedItems,
+    totalOrderedCases: $totalOrderedCases,
+    totalReceivedCases: $totalReceivedCases,
+    totalOrderedAmount: $totalOrderedAmount,
+    totalReceivedAmount: $totalReceivedAmount,
+    createdBy: $createdBy
   })
 }
 """
@@ -271,6 +308,75 @@ def get_vendor_purchases():
     except Exception as e:
         return jsonify({'error': str(e), 'purchases': []}), 500
 
+def normalize_delivery_payload(data):
+    """Normalize vendor-delivery payloads and enforce the selected warehouse consistently."""
+    if data is None:
+        raise ValueError('Request body must be valid JSON')
+
+    po_id = str(data.get('po_id', data.get('PO_ID', ''))).strip()
+    vendor_id_parent = str(data.get('vendor_id', data.get('Vendor_ID', ''))).strip()
+    warehouse_id = str(
+        data.get('warehouse_id', data.get('warehouseId', data.get('Warehouse_ID', '')))
+    ).strip()
+    items = data.get('items', []) or []
+
+    return {
+        'po_id': po_id,
+        'vendor_id': vendor_id_parent,
+        'warehouse_id': warehouse_id,
+        'items': items,
+        'payment_mode': str(data.get('payment_mode', data.get('paymentMode', 'Cash')) or 'Cash').strip(),
+        'payment_status': str(data.get('payment_status', data.get('paymentStatus', 'Pending')) or 'Pending').strip(),
+        'gst_filed_raw': data.get('gst_filed', data.get('gstFiled', False)),
+        'notes': data.get('notes', ''),
+        'summary': data.get('summary') or {},
+        'created_by': data.get('created_by', data.get('createdBy', ''))
+    }
+
+
+def build_warehouse_stock_payload(warehouse_id, po_id, product_id, batch, case_data, received_date, product_notes, mfd_dt=None, expd_dt=None):
+    """Build the case-level warehouse stock row for the selected warehouse only."""
+    units_per_case = int(case_data.get('units_per_case', case_data.get('unitsPerCase', 1)))
+    units_received = int(case_data.get('units_received', case_data.get('unitsReceived', units_per_case)))
+    case_label = case_data.get('case_label', case_data.get('caseLabel', f"{po_id}_{product_id}_c{case_data.get('case_number', '1')}"))
+
+    if mfd_dt is None:
+        mfd_str = case_data.get('mfd', case_data.get('ManufactureDate', ''))
+        if mfd_str:
+            try:
+                mfd_dt = datetime.strptime(mfd_str, '%Y-%m-%d')
+            except Exception:
+                try:
+                    mfd_dt = datetime.fromisoformat(mfd_str)
+                except Exception:
+                    mfd_dt = None
+
+    if expd_dt is None:
+        expd_str = case_data.get('expd', case_data.get('ExpiryDate', ''))
+        if expd_str:
+            try:
+                expd_dt = datetime.strptime(expd_str, '%Y-%m-%d')
+            except Exception:
+                try:
+                    expd_dt = datetime.fromisoformat(expd_str)
+                except Exception:
+                    expd_dt = None
+
+    return {
+        'warehouseId': warehouse_id,
+        'poId': po_id,
+        'productId': product_id,
+        'batch': batch,
+        'unitsPerCase': units_per_case,
+        'caseLabel': case_label,
+        'availableUnits': units_received,
+        'mfd': format_timestamp(mfd_dt) if mfd_dt else None,
+        'expd': format_timestamp(expd_dt) if expd_dt else None,
+        'receivedDate': received_date,
+        'notes': product_notes or f"Delivered via PO {po_id}"
+    }
+
+
 @purchases_bp.route('/api/record-delivery-normalized', methods=['POST'])
 def record_delivery_normalized():
     # Route alias for normalized flow (preferred)
@@ -289,20 +395,15 @@ def record_delivery():
         data = request.json
         print(f"[record_delivery] Content-Type: {request.content_type}", file=sys.stderr, flush=True)
         print(f"[record_delivery] Payload received: {data}", file=sys.stderr, flush=True)
-        
-        if data is None:
-            print(f"[record_delivery] ERROR: request.json is None", file=sys.stderr, flush=True)
-            return jsonify({'error': 'Request body must be valid JSON'}), 400
-        
-        po_id = str(data.get('po_id', data.get('PO_ID', ''))).strip()
-        vendor_id_parent = str(data.get('vendor_id', data.get('Vendor_ID', ''))).strip()
-        warehouse_id = str(data.get('warehouse_id', data.get('warehouseId', data.get('Warehouse_ID', '')))).strip()
-        items = data.get('items', [])
 
-        payment_mode = str(data.get('payment_mode', data.get('paymentMode', 'Cash')) or 'Cash').strip()
-        payment_status = str(data.get('payment_status', data.get('paymentStatus', 'Pending')) or 'Pending').strip()
-        gst_filed_raw = data.get('gst_filed', data.get('gstFiled', False))
-        gst_filed = True if str(gst_filed_raw).strip().lower() in ['yes', 'true', '1', 'y'] else False
+        normalized = normalize_delivery_payload(data)
+        po_id = normalized['po_id']
+        vendor_id_parent = normalized['vendor_id']
+        warehouse_id = normalized['warehouse_id']
+        items = normalized['items']
+        payment_mode = normalized['payment_mode']
+        payment_status = normalized['payment_status']
+        gst_filed = True if str(normalized['gst_filed_raw']).strip().lower() in ['yes', 'true', '1', 'y'] else False
 
         print(f"[record_delivery] Extracted: po_id={po_id}, vendor_id={vendor_id_parent}, items_count={len(items)}, payment_mode={payment_mode}, payment_status={payment_status}, gst_filed={gst_filed}", file=sys.stderr, flush=True)
 
@@ -558,19 +659,17 @@ def record_delivery():
                     
                     # Step 2a: Insert corresponding warehouse stock record for this delivered case
                     try:
-                        warehouse_stock_vars = {
-                            "warehouseId": warehouse_id,
-                            "poId": po_id,
-                            "productId": product_id,
-                            "batch": batch,
-                            "unitsPerCase": units_per_case,
-                            "caseLabel": case_label,
-                            "availableUnits": units_received,
-                            "mfd": format_timestamp(mfd_dt),
-                            "expd": format_timestamp(expd_dt),
-                            "receivedDate": received_date,
-                            "notes": product_notes or f"Delivered via PO {po_id}"
-                        }
+                        warehouse_stock_vars = build_warehouse_stock_payload(
+                            warehouse_id=warehouse_id,
+                            po_id=po_id,
+                            product_id=product_id,
+                            batch=batch,
+                            case_data=case_data,
+                            received_date=received_date,
+                            product_notes=product_notes,
+                            mfd_dt=mfd_dt,
+                            expd_dt=expd_dt
+                        )
                         existing_stock = execute_graphql(GET_WAREHOUSE_STOCK_BY_CASELABEL_QUERY, {"caseLabel": case_label})
                         if existing_stock and existing_stock.get('warehouseStocks'):
                             existing = existing_stock['warehouseStocks'][0]
@@ -598,6 +697,31 @@ def record_delivery():
             print(f"[record_delivery] ⚠ Warning updating PO status: {str(status_err)}", file=sys.stderr, flush=True)
             # Don't fail the whole operation if status update fails
 
+        summary_saved = False
+        summary = data.get('summary') or {}
+        try:
+            summary_vars = {
+                "summaryId": str(uuid4()),
+                "poId": po_id,
+                "vendorId": vendor_id_parent or None,
+                "summaryDate": received_date,
+                "orderedItems": json.dumps(summary.get('orderedItems', [])),
+                "receivedItems": json.dumps(summary.get('receivedItems', [])),
+                "missingItems": json.dumps(summary.get('missingItems', [])),
+                "extraItems": json.dumps(summary.get('extraItems', [])),
+                "matchedItems": json.dumps(summary.get('matchedItems', [])),
+                "totalOrderedCases": int(summary.get('totalOrderedCases', 0) or 0),
+                "totalReceivedCases": int(summary.get('totalReceivedCases', 0) or 0),
+                "totalOrderedAmount": float(summary.get('totalOrderedAmount', 0) or 0),
+                "totalReceivedAmount": float(summary.get('totalReceivedAmount', 0) or 0),
+                "createdBy": str(data.get('created_by', data.get('createdBy', '')) or '') or None
+            }
+            execute_graphql(INSERT_PO_SUMMARY_MUTATION, summary_vars)
+            summary_saved = True
+            print(f"[record_delivery] ✓ PO summary saved for {po_id}", file=sys.stderr, flush=True)
+        except Exception as summary_err:
+            print(f"[record_delivery] ⚠ Warning saving PO summary: {summary_err}", file=sys.stderr, flush=True)
+
         success_message = f'Delivery recorded for PO {po_id}'
         success_details = f'Inserted {insertion_count} cases. PO status changed to Completed.'
         print(f"[record_delivery] ✓✓✓ SUCCESS: {success_message}", file=sys.stderr, flush=True)
@@ -607,7 +731,8 @@ def record_delivery():
         return jsonify({
             'success': True,
             'message': success_message,
-            'details': success_details
+            'details': success_details,
+            'summarySaved': summary_saved
         })
 
     except Exception as e:
