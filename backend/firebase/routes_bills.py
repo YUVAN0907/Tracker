@@ -374,7 +374,9 @@ def parse_bill():
         }), 200
 
     except Exception as e:
+        import traceback
         print(f"[parse_bill] Unexpected error: {e}")
+        traceback.print_exc()
         return jsonify({'error': f'Failed to parse bill: {str(e)}'}), 500
 
 

@@ -717,13 +717,14 @@ def parse_format_sithi_vinayagar(lines):
     amount_by_rate = {}
     for row in item_rows:
         if row['Amount'] != '':
-            rate_match = re.search(r'\b(\d+\.\d{2})\s+\d+\s*/', item_lines[row['S.no']])
+            row_line = item_lines.get(row['S.no'], '')
+            rate_match = re.search(r'\b(\d+\.\d{2})\s+\d+\s*/', row_line)
             if rate_match:
                 amount_by_rate[rate_match.group(1)] = row['Amount']
 
     for row in item_rows:
         if row['Amount'] == '':
-            row_line = item_lines[row['S.no']]
+            row_line = item_lines.get(row['S.no'], '')
             rate_match = re.search(r'\b(\d+\.\d{2})\s+\d+\s*/', row_line)
             rate = rate_match.group(1) if rate_match else None
             if rate == '14.00':
@@ -740,7 +741,7 @@ def parse_format_sithi_vinayagar(lines):
         expected_case = int(total_match.group(1)) // len(item_rows)
 
     for row in item_rows:
-        row_line = item_lines[row['S.no']]
+        row_line = item_lines.get(row['S.no'], '')
         rate_match = re.search(r'\b(\d+\.\d{2})\s+\d+\s*/', row_line)
         rate = rate_match.group(1) if rate_match else None
         if expected_case is not None and row['Case No'] > expected_case:
