@@ -697,7 +697,7 @@ const Restock = () => {
                         onClick={() => setActiveTab('stock-analyze')}
                         className={clsx("px-4 py-3 font-medium border-b-2 transition-colors", activeTab === 'stock-analyze' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-600 hover:text-slate-800")}
                     >
-                        Stock Analyze ({stockAnalyzeList.length})
+                        Cover Pattern Analysis ({stockAnalyzeList.length})
                     </button>
 
                     <button
@@ -791,16 +791,16 @@ const Restock = () => {
 
 
 
-                {/* Stock Analyze Tab */}
+                {/* Cover Pattern Analysis Tab */}
                 {activeTab === 'stock-analyze' && (
                     <div className="space-y-4">
                         <div className="flex justify-between items-center">
-                            <h3 className="text-lg font-semibold text-slate-800">Warehouse Stock Analyze</h3>
+                            <h3 className="text-lg font-semibold text-slate-800">Cover Pattern Analysis</h3>
                             <button
                                 onClick={() => setShowStockAnalyzeForm(true)}
                                 className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
                             >
-                                Stock Pattern Suggestor
+                                Cover Pattern Calculator
                             </button>
                         </div>
 
@@ -808,7 +808,7 @@ const Restock = () => {
                             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
                                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
                                     <div className="flex justify-between items-center border-b border-slate-200 px-5 py-4 shrink-0">
-                                        <h4 className="text-lg font-semibold text-slate-800">Stock Pattern Suggestor</h4>
+                                        <h4 className="text-lg font-semibold text-slate-800">Cover Pattern Calculator</h4>
                                         <button
                                             onClick={() => setShowStockAnalyzeForm(false)}
                                             className="p-2 rounded-lg text-slate-500 hover:bg-slate-100"
