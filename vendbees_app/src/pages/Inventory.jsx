@@ -902,9 +902,7 @@ const MultiPOForm = ({ products, recentProducts = [], vendors, warehouse, onSave
 export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [], warehouses = [] }) => {
     const { token } = useAuth();
     const today = new Date().toISOString().split('T')[0];
-    const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
-        ? 'http://localhost:3002/api'
-        : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // poData contains: { po_id, vendor_id, po_date, items: [{Product_ID, Product_Name, No_of_Cases, Units_Per_Case, PO_Price}] }
     const [purchaseDate, setPurchaseDate] = useState(today);
@@ -2856,9 +2854,7 @@ const Inventory = () => {
     const [loadingEditPO, setLoadingEditPO] = useState(false);
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
 
-    const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
-        ? 'http://localhost:3002/api'
-        : 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
 
     // Fetch vendor purchases when tab changes
     useEffect(() => {
