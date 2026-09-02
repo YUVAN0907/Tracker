@@ -34,7 +34,8 @@ from routes_bills import extract_text_from_pdf_bytes, parse_bill_text_to_items
 from dataconnect_db import execute_graphql
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+MODULE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = MODULE_DIR.parents[1] if len(MODULE_DIR.parents) > 1 else MODULE_DIR
 DEFAULT_PDF_SUBPATH = Path('APRIL BILLS') / 'APRIL BILLS'
 
 # ─────────────────────────────────────────────
