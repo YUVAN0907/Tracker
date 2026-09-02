@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import { VendorForm, VendorTable } from '../components/VendorForm';
 import { RecentProductsTable, RecentProductForm } from '../components/RecentProductsForm';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 const KPI = ({ title, value, subtext }) => (
     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
@@ -902,7 +903,7 @@ const MultiPOForm = ({ products, recentProducts = [], vendors, warehouse, onSave
 export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, products = [], vendors = [], warehouses = [] }) => {
     const { token } = useAuth();
     const today = new Date().toISOString().split('T')[0];
-    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+    const API_URL = API_BASE_URL;
 
     // poData contains: { po_id, vendor_id, po_date, items: [{Product_ID, Product_Name, No_of_Cases, Units_Per_Case, PO_Price}] }
     const [purchaseDate, setPurchaseDate] = useState(today);
@@ -2854,7 +2855,7 @@ const Inventory = () => {
     const [loadingEditPO, setLoadingEditPO] = useState(false);
     const [recentlyDeliveredPOs, setRecentlyDeliveredPOs] = useState(new Set());
 
-    const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+    const API_URL = API_BASE_URL;
 
     // Fetch vendor purchases when tab changes
     useEffect(() => {

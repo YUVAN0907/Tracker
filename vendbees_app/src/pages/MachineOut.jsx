@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import { useData } from '../context/DataContext';
 import { AlertTriangle, Package, CheckCircle, Search, Plus, X, Box, Trash2, Save } from 'lucide-react';
 import clsx from 'clsx';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 const KPI = ({ title, value, icon: Icon, colorClass }) => (
     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
@@ -30,15 +31,7 @@ const MachineOut = () => {
     const [dateFilterMO, setDateFilterMO] = useState('');
     const [productFilterMO, setProductFilterMO] = useState('');
     
-    // Use same API URL logic as DataContext for consistency
-    const isLocalhost = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' || 
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname.startsWith('192.168')
-    );
-    const API_URL = isLocalhost 
-        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
-        : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
+    const API_URL = API_BASE_URL;
 
     if (loading) return null;
 

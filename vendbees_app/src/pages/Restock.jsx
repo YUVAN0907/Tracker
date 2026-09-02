@@ -11,6 +11,7 @@ import html2pdf from 'html2pdf.js';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import KPI from '../components/KPI';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 const Restock = () => {
     const navigate = useNavigate();
@@ -50,15 +51,7 @@ const Restock = () => {
     const activeBatchCount = Object.values(batchStatusMap).filter(status => status === 'Active').length;
     const inactiveBatchCount = Object.values(batchStatusMap).filter(status => status === 'Inactive').length;
 
-    // Use same API URL logic as DataContext for consistency
-    const isLocalhost = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' || 
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname.startsWith('192.168')
-    );
-    const API_URL = isLocalhost 
-        ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
-        : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
+    const API_URL = API_BASE_URL;
 
     const parseQrHistoryPayload = (item) => {
         if (!item) return { batch: null, createdAt: null, machines: [] };

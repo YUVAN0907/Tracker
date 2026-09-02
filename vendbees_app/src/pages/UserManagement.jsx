@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ResetPasswordModal from '../components/ResetPasswordModal';
 import './UserManagement.css';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 const permissionModules = [
   {
@@ -104,7 +105,7 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/auth/users`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -147,7 +148,7 @@ export default function UserManagement() {
     }
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: {
@@ -183,7 +184,7 @@ export default function UserManagement() {
     setSuccess('');
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/auth/users/${userId}`, {
         method: 'PUT',
         headers: {
@@ -306,7 +307,7 @@ export default function UserManagement() {
 
   const updateUserPermissions = async (userId, permissions) => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/auth/users/${userId}`, {
         method: 'PUT',
         headers: {
@@ -352,7 +353,7 @@ export default function UserManagement() {
     setSuccess('');
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api';
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/auth/users/${userId}`, {
         method: 'DELETE',
         headers: {

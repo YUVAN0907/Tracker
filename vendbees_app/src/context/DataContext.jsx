@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 const DataContext = createContext();
 
@@ -36,18 +37,7 @@ export const DataProvider = ({ children }) => {
     const [error, setError] = useState(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    // Use the local Firebase backend running on port 3002 for development
-    // Production uses the VITE_API_URL from environment, defaults to Cloud Run backend
-    const isLocalhost = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname.startsWith('192.168')
-    );
-    // const API_URL = isLocalhost 
-    //     ? 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api'
-    //     : (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
-
-    const API_URL = (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
+    const API_URL = API_BASE_URL;
     const fetchData = async () => {
         try {
             console.log('DataContext: Starting fetch from', API_URL);

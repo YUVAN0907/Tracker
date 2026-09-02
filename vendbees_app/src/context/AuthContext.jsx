@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 export const AuthContext = createContext();
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);

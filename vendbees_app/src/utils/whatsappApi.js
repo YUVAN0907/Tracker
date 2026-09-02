@@ -11,9 +11,10 @@
  */
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 function getApiUrl() {
-    return (import.meta.env.VITE_API_URL || 'https://vendbees-inventory-backend-333114755202.asia-south1.run.app/api');
+    return API_BASE_URL;
 }
 
 async function resolveWhatsAppNumber(phone) {
