@@ -336,8 +336,8 @@ def normalize_delivery_payload(data):
 
 def build_warehouse_stock_payload(warehouse_id, po_id, product_id, batch, case_data, received_date, product_notes, mfd_dt=None, expd_dt=None):
     """Build the case-level warehouse stock row for the selected warehouse only."""
-    units_per_case = int(case_data.get('units_per_case', case_data.get('unitsPerCase', 1)))
-    units_received = int(case_data.get('units_received', case_data.get('unitsReceived', units_per_case)))
+    units_per_case = int(case_data.get('units_per_case', case_data.get('unitsPerCase', 1)) or 1)
+    units_received = int(case_data.get('units_received', case_data.get('unitsReceived', units_per_case)) or units_per_case)
     case_label = case_data.get('case_label', case_data.get('caseLabel', f"{po_id}_{product_id}_c{case_data.get('case_number', '1')}"))
 
     if mfd_dt is None:
@@ -492,7 +492,12 @@ def record_delivery():
         for item_idx, item in enumerate(items):
             product_id = str(item.get('product_id', item.get('Product_ID', ''))).strip()
             vendor_id = str(item.get('vendor_id', item.get('Vendor_ID', vendor_id_parent))).strip()
-            batch = int(item.get('batch', item.get('Batch', 1)))
+            try:
+                batch = int(item.get('batch', item.get('Batch', 1)) or 1)
+            except (TypeError, ValueError):
+                error_msg = f"Invalid batch for delivered product {product_id or '<unknown>'}: {item.get('batch', item.get('Batch'))!r}"
+                print(f"[record_delivery] Validation error: {error_msg}", file=sys.stderr, flush=True)
+                return jsonify({'error': error_msg}), 400
             cases = item.get('cases', [])
             product_notes = str(item.get('notes', '')).strip()
             
@@ -535,8 +540,8 @@ def record_delivery():
                 print(f"[record_delivery] Product {product_id} selfLife: {self_life_days} days", file=sys.stderr, flush=True)
             
             # Step 1: Calculate total units received (sum of all case units)
-            units_per_case = int(cases[0].get('units_per_case', cases[0].get('unitsPerCase', 1)))
-            total_units_received = sum(int(c.get('units_received', c.get('unitsReceived', units_per_case))) for c in cases)
+            units_per_case = int(cases[0].get('units_per_case', cases[0].get('unitsPerCase', 1)) or 1)
+            total_units_received = sum(int(c.get('units_received', c.get('unitsReceived', units_per_case)) or units_per_case) for c in cases)
             
             print(f"[record_delivery] Units per case: {units_per_case}, total received: {total_units_received}", file=sys.stderr, flush=True)
             
@@ -651,8 +656,8 @@ def record_delivery():
                     print(f"[record_delivery]   Dates: mfd={mfd_str}, expd={expd_dt.strftime('%Y-%m-%d')}", file=sys.stderr, flush=True)
                     
                     # Parse other case data
-                    units_per_case = int(case_data.get('units_per_case', case_data.get('unitsPerCase', 1)))
-                    units_received = int(case_data.get('units_received', case_data.get('unitsReceived', units_per_case)))
+                    units_per_case = int(case_data.get('units_per_case', case_data.get('unitsPerCase', 1)) or 1)
+                    units_received = int(case_data.get('units_received', case_data.get('unitsReceived', units_per_case)) or units_per_case)
                     
                     # Auto-generate case label: poId_productId_c{n}
                     case_label = case_data.get('case_label', case_data.get('caseLabel', f"{po_id}_{product_id}_c{case_idx}"))

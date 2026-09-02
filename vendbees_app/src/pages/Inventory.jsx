@@ -1565,7 +1565,10 @@ export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, produc
         }
 
         // Find products that have at least one case
-        const productsWithCases = productDetails.filter(p => p.cases.length > 0);
+        // productDetails is the saved bill review; PO rows are used only for comparison.
+        const productsWithCases = productsSaved
+            ? productDetails.filter(p => p.cases.length > 0)
+            : [];
 
         if (productsWithCases.length === 0 && customProducts.length === 0) {
             alert('Please add at least one case for at least one product or add custom products');
@@ -1604,7 +1607,7 @@ export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, produc
         const items = productsWithCases.map(product => ({
             product_id: product.product_id,
             product_name: product.product_name,
-            batch: product.batch,
+            batch: Number(product.batch) || 1,
             units_per_case: product.units_per_case,
             po_price: parseFloat(product.po_price) || 0,
             mrp: parseFloat(product.mrp) || parseFloat(product.MRP) || 0,
@@ -1625,7 +1628,7 @@ export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, produc
         const customItems = customProducts.map(product => ({
             product_id: product.product_id,
             product_name: product.product_name,
-            batch: product.batch,
+            batch: Number(product.batch) || 1,
             units_per_case: product.units_per_case,
             po_price: parseFloat(product.po_price) || 0,
             mrp: parseFloat(product.mrp) || parseFloat(product.MRP) || 0,
@@ -1642,7 +1645,7 @@ export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, produc
             })
         }));
 
-        const allItems = [...items, ...customItems];
+        const allItems = [...items, ...customItems].filter(item => item.product_id && item.cases.length > 0);
         const orderedItems = (poData?.items || []).map(item => ({
             productId: item.Product_ID,
             productName: item.Product_Name,
@@ -1827,7 +1830,7 @@ export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, produc
         setCustomProducts(customProducts.filter(cp => cp.id !== id));
     };
 
-    const productsToDeliver = (poData?.items || []).filter(item => !selectedItems[item.Product_ID]);
+    const deliveryProductCount = productDetails.length + customProducts.length;
 
     const totalCustomUnits = customProducts.reduce((sum, product) => sum + ((parseInt(product.case_count) || 0) * (parseInt(product.units_per_case) || 1)), 0);
 
@@ -2486,14 +2489,14 @@ export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, produc
             </div>
 
             {/* Summary */}
-            {(productsToDeliver.length > 0 || customProducts.length > 0) && (
+            {deliveryProductCount > 0 && (
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200 sticky bottom-0">
                     <div className="text-sm font-medium text-green-800">
-                        Delivery Summary: <strong>{productsToDeliver.length + customProducts.length}</strong> products
+                        Delivery Summary: <strong>{deliveryProductCount}</strong> products
                     </div>
-                    {productsToDeliver.length > 0 && (
+                    {productDetails.length > 0 && (
                         <div className="text-xs text-green-600 mt-1">
-                            From PO: {productsToDeliver.length} products, {totalCases} cases ({totalUnits} units)
+                            From PO: {productDetails.length} products, {totalCases} cases ({totalUnits} units)
                         </div>
                     )}
                     {customProducts.length > 0 && (
@@ -2508,8 +2511,8 @@ export const DeliveryRecordingForm = ({ poData, onSave, onCancel, saving, produc
                 <button type="button" onClick={onCancel} className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium" disabled={saving}>
                     Cancel
                 </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50" disabled={saving || (productsToDeliver.length === 0 && customProducts.length === 0)}>
-                    {saving ? 'Recording...' : `Record Delivery (${productsToDeliver.length + customProducts.length} products)`}
+                <button type="submit" className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50" disabled={saving || deliveryProductCount === 0}>
+                    {saving ? 'Recording...' : `Record Delivery (${deliveryProductCount} products)`}
                 </button>
             </div>
         </form>
