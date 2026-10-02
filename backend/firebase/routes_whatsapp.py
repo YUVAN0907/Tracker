@@ -502,15 +502,16 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
     Common flow that:
     1. Checks if customer service window is open.
     2. Sends normal message if open.
-    3. Sends utility template if closed.
-    4. Automatically retries with template if normal send fails with 24h window error.
+    3. Sends UTILITY template (complaint_update) if window closed -- MARKETING templates
+       require the 24h window or opt-in, so they must NOT be sent outside the window.
+    4. Automatically retries with complaint_update UTILITY template if any template send fails.
     5. Returns (result_dict, was_template_sent, actual_text_sent)
     """
     import os
     phone_short = normalized_phone[-10:] if len(normalized_phone) > 10 else normalized_phone
-    
+
     window_open, conv_doc, conv_id = _is_customer_service_window_open(phone_short)
-    
+
     student_name = 'Student'
     ticket_display_id = ticket_id
     tdata = {}
@@ -524,7 +525,8 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
     except Exception as exc:
         print(f"[WA] Error fetching ticket in flow: {exc}", file=sys.stderr)
 
-    # Dynamic Category + Status Template lookup if override wasn't explicitly supplied
+    # Build the category-specific template payload
+    template_text = text_body
     if not override_template_name and tdata:
         try:
             from notification_builder import NotificationBuilder
@@ -535,38 +537,50 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
             template_text = meta_payload['full_text']
         except Exception as exc:
             print(f"[WA] Error generating category template in flow: {exc}", file=sys.stderr)
-            template_text = text_body
-    else:
-        template_text = text_body
-        
-    template_name = override_template_name or os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
 
-    def send_template():
-        if override_template_name and override_components is not None:
-            comps = override_components
-        elif template_name == 'hello_world':
-            comps = None
-        else:
-            comps = [
-                {
-                    "type": "body",
-                    "parameters": [
-                        {"type": "text", "text": student_name},
-                        {"type": "text", "text": ticket_display_id}
-                    ]
-                }
+    # UTILITY template = complaint_update (approved UTILITY, no opt-in required)
+    utility_template_name = os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
+    utility_components = [
+        {
+            "type": "body",
+            "parameters": [
+                {"type": "text", "text": student_name},
+                {"type": "text", "text": ticket_display_id}
             ]
-        res = send_template_message(normalized_phone, template_name, components=comps)
+        }
+    ]
+
+    def send_utility_template():
+        """Send guaranteed UTILITY template -- no 24h window or opt-in required."""
+        print(f"[WA] Sending UTILITY template '{utility_template_name}' to {phone_short}", file=sys.stderr)
+        return send_template_message(normalized_phone, utility_template_name, components=utility_components)
+
+    def send_primary_template():
+        """Send category-specific template; fall back to UTILITY if it fails."""
+        tpl_name = override_template_name or utility_template_name
+        comps = override_components if (override_template_name and override_components is not None) else utility_components
+        print(f"[WA] Sending template '{tpl_name}' to {phone_short}", file=sys.stderr)
+        res = send_template_message(normalized_phone, tpl_name, components=comps)
+        if not res.get('success'):
+            err_code = res.get('error_code') or 0
+            err_msg = str(res.get('error', '')).lower()
+            print(
+                f"[WA] Template '{tpl_name}' failed (code={err_code}): {err_msg}. "
+                f"Retrying with UTILITY template '{utility_template_name}'...",
+                file=sys.stderr
+            )
+            res = send_utility_template()
         return res
 
     if window_open:
+        # Inside 24h window: send free-form text
         if msg_type == 'image' and media_url:
             result = send_image_message(normalized_phone, media_url, caption or '')
         elif msg_type == 'document' and media_url:
             result = send_document_message(normalized_phone, media_url, filename or 'document', caption or '')
         else:
             result = send_text_message(normalized_phone, text_body)
-            
+
         is_window_closed_error = False
         if not result['success']:
             err_code = result.get('error_code') or 0
@@ -574,16 +588,20 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
             err_msg = str(result.get('error', '')).lower()
             if err_code == 131047 or err_sub == 131047 or '24 hour' in err_msg or 'window' in err_msg or 'template' in err_msg:
                 is_window_closed_error = True
-                
+
         if is_window_closed_error:
-            print(f"[WA] Meta rejected free-form (window closed). Retrying with template...", file=sys.stderr)
-            result = send_template()
+            # Window closed unexpectedly -- use UTILITY template (safe, no opt-in needed)
+            print(f"[WA] Meta rejected free-form (window closed). Using UTILITY template...", file=sys.stderr)
+            result = send_utility_template()
             return result, True, template_text
-            
+
         return result, False, text_body
     else:
-        print(f"[WA] Customer service window closed for {phone_short}. Sending template instead...", file=sys.stderr)
-        result = send_template()
+        # Window is CLOSED: always send UTILITY template
+        # MARKETING templates require user opt-in or open 24h window.
+        # Using complaint_update UTILITY is the only safe path outside the window.
+        print(f"[WA] Window closed for {phone_short}. Sending UTILITY template (not MARKETING).", file=sys.stderr)
+        result = send_primary_template()
         return result, True, template_text
 
 
