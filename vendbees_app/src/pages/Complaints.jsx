@@ -429,13 +429,13 @@ const Complaints = () => {
         };
     }, []);
 
-    // ── Auto-open complaint + chat drawer from Notifications page click ──────
+    // ── Auto-open complaint + chat drawer from WhatsApp notification click ────
     // Reads React Router location.state: { openTicket: <firestoreDocId>, openChat: true }
-    // Waits until tickets are loaded before trying to find and select the complaint.
+    // Fires whenever location changes (notification click) OR when tickets finish loading.
     useEffect(() => {
-        if (loading) return;
         const state = location.state;
         if (!state?.openTicket) return;
+        if (loading) return;
 
         const allLoaded = [...tickets, ...feedbacks];
         const target = allLoaded.find((c) => c.id === state.openTicket);
@@ -444,13 +444,13 @@ const Complaints = () => {
             if (state.openChat) {
                 setShowWhatsAppChat(true);
             }
-            // Mark all WhatsApp notifications for this ticket as read
+            // Mark WhatsApp notifications for this ticket as read
             markTicketRead(state.openTicket);
-            // Clear state so refreshing the page does not re-trigger
+            // Clear navigation state so refreshing the page does not re-trigger
             window.history.replaceState({}, '');
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, tickets, feedbacks]);
+    }, [location, loading, tickets, feedbacks]);
 
     const allComplaints = useMemo(() => {
         const combined = [...tickets, ...feedbacks];

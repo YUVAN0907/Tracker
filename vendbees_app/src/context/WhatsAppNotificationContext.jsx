@@ -65,11 +65,15 @@ export const WhatsAppNotificationProvider = ({ children }) => {
                 const convs = snapshot.docs.map((d) => {
                     const data = d.data();
                     
-                    // Unread logic: explicit unreadForAdmin (boolean or string), OR lastSender is student with unreadCount > 0, OR lastSender is student and unreadForAdmin is not explicitly false
-                    const isUnread = data.unreadForAdmin === true ||
+                    // Unread logic: strictly require lastSender to be 'student' for a notification to be active.
+                    // Outgoing admin messages or system template status updates are never shown as unread.
+                    const isUnread = data.lastSender === 'student' && (
+                        data.unreadForAdmin === true ||
                         data.unreadForAdmin === 'true' ||
                         data.unreadForAdmin === 'True' ||
-                        (data.lastSender === 'student' && (data.unreadCount > 0 || data.unreadForAdmin !== false));
+                        data.unreadCount > 0 ||
+                        data.unreadForAdmin !== false
+                    );
 
                     // Date parsing
                     let jsDate = new Date();
