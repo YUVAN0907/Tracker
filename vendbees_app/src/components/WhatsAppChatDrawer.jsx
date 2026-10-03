@@ -6,7 +6,6 @@ import {
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { sendWhatsAppMessage } from '../utils/whatsappApi';
-import { useWhatsAppNotifications } from '../context/WhatsAppNotificationContext';
 import clsx from 'clsx';
 import WhatsAppConversationCenter from './WhatsAppConversationCenter';
 
@@ -31,12 +30,8 @@ const WhatsAppChatDrawer = ({ complaint, onClose }) => {
     const studentName = complaint?.student?.name || complaint?.fullName || 'Student';
     const ticketDisplayId = complaint?.ticket_id || complaint?.ticketId || 'N/A';
 
-    // ── Clear WhatsApp unread notification when this drawer opens ──────────────
-    const { markTicketRead } = useWhatsAppNotifications();
-    useEffect(() => {
-        if (ticketId) markTicketRead(ticketId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ticketId]);
+    // NOTE: Opening this chat drawer does NOT clear or delete WhatsApp notifications.
+    // Notifications persist in the header popup until the admin explicitly clicks 'x' or 'Clear all'.
 
     useEffect(() => {
         if (!rawPhone || rawPhone === 'N/A') {

@@ -15,7 +15,6 @@ import html2pdf from 'html2pdf.js';
 import { normalizeTicket, normalizeFeedback, toSafeDate, buildExportData, generateCSV, generatePDFHtml, filterByDateRange } from '../utils/complaintHelpers';
 import WhatsAppChatDrawer from '../components/WhatsAppChatDrawer';
 import { sendStatusNotification } from '../utils/whatsappApi';
-import { useWhatsAppNotifications } from '../context/WhatsAppNotificationContext';
 
 
 const STATUS_COLORS = {
@@ -292,7 +291,6 @@ const Timeline = ({ complaint }) => {
 // --- MAIN PAGE ---
 const Complaints = () => {
     const location = useLocation();
-    const { markTicketRead } = useWhatsAppNotifications();
     const [tickets, setTickets] = useState([]);
     const [feedbacks, setFeedbacks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -444,8 +442,9 @@ const Complaints = () => {
             if (state.openChat) {
                 setShowWhatsAppChat(true);
             }
-            // Mark WhatsApp notifications for this ticket as read
-            markTicketRead(state.openTicket);
+            // NOTE: Do NOT call markTicketRead here.
+            // Opening/clicking a notification must NOT automatically clear it.
+            // The notification persists until the admin explicitly presses × or Clear All.
             // Clear navigation state so refreshing the page does not re-trigger
             window.history.replaceState({}, '');
         }
@@ -844,8 +843,11 @@ const Complaints = () => {
 
             {/* --- COMPLAINT DETAIL MODAL --- */}
             {selectedComplaint && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-slate-50 w-full max-w-6xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-300 border border-slate-200">
+                <div
+                    className="fixed top-0 bottom-0 right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+                    style={{ left: '256px' }}
+                >
+                    <div className="bg-slate-50 w-full max-w-5xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-300 border border-slate-200">
                         
                         {/* Header */}
                         <div className="px-8 py-6 border-b border-slate-200 flex justify-between items-center bg-white sticky top-0 z-20 shadow-sm">
@@ -1150,7 +1152,10 @@ const Complaints = () => {
 
             {/* --- STATUS CONFIRMATION MODAL --- */}
             {confirmationModal.show && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div
+                    className="fixed top-0 bottom-0 right-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+                    style={{ left: '256px' }}
+                >
                     <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-200">
                         <div className="px-8 pt-8 pb-4">
                             <h3 className="text-xl font-black text-slate-800 mb-3">{confirmationModal.title}</h3>
@@ -1182,7 +1187,8 @@ const Complaints = () => {
             {/* --- FULLSCREEN IMAGE PREVIEW --- */}
             {previewImage && (
                 <div 
-                    className="fixed inset-0 z-[60] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-4 sm:p-10 cursor-zoom-out animate-in fade-in duration-200"
+                    className="fixed top-0 bottom-0 right-0 z-[60] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-4 sm:p-10 cursor-zoom-out animate-in fade-in duration-200"
+                    style={{ left: '256px' }}
                     onClick={() => setPreviewImage(null)}
                 >
                     <button 
@@ -1223,7 +1229,10 @@ const Complaints = () => {
 
             {/* --- EXPORT MODAL --- */}
             {showExportModal && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div
+                    className="fixed top-0 bottom-0 right-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+                    style={{ left: '256px' }}
+                >
                     <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-200">
                         <div className="px-8 pt-8 pb-4 flex justify-between items-center border-b border-slate-100">
                             <h3 className="text-xl font-black text-slate-800">Export Complaints Data</h3>

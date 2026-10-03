@@ -597,10 +597,10 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
 
         return result, False, text_body
     else:
-        # Window is CLOSED: always send UTILITY template
-        # MARKETING templates require user opt-in or open 24h window.
-        # Using complaint_update UTILITY is the only safe path outside the window.
-        print(f"[WA] Window closed for {phone_short}. Sending UTILITY template (not MARKETING).", file=sys.stderr)
+        # Window is CLOSED: send category-specific UTILITY template.
+        # All VendBees templates are UTILITY category (no 24h window or opt-in required).
+        # Falls back to complaint_update UTILITY template if category-specific send fails.
+        print(f"[WA] Window closed for {phone_short}. Sending category-specific UTILITY template.", file=sys.stderr)
         result = send_primary_template()
         return result, True, template_text
 
@@ -680,6 +680,7 @@ def _upsert_conversation(
         payload['conversationOpen'] = True
         payload['conversationType'] = 'free_form'
         payload['unreadForAdmin'] = True   # <- notification: new student message
+        payload['notificationCleared'] = False  # <- ensure notification appears in popup even if cleared previously
     elif last_sender == 'admin':
         if is_template:
             payload['lastTemplateSent'] = admin_firestore.SERVER_TIMESTAMP
