@@ -35,6 +35,7 @@ const Header = ({ title, subtitle }) => {
         clearWhatsAppNotification,
         clearAllWhatsAppNotifications,
         markTicketRead,
+        markWhatsAppRead,
     } = useWhatsAppNotifications();
 
     const [showUserMenu, setShowUserMenu]             = useState(false);
@@ -134,10 +135,13 @@ const Header = ({ title, subtitle }) => {
     const handleLogout = async () => { await logout(); navigate('/login'); };
 
     // ── WhatsApp notification click → navigate to complaints & open chat ─────
-    // NOTE: Do NOT mark as read or delete on click.
-    // Notifications persist until explicitly cleared via the 'x' button or 'Clear all'.
+    // Clicking marks the notification as read (updates unread count/badge),
+    // but the notification card STAYS in the list until explicitly cleared via 'x' or 'Clear all'.
     const handleWANotifClick = async (notif) => {
         setShowWANotifPanel(false);
+        if (notif?.id) {
+            markWhatsAppRead(notif.id);
+        }
         navigate('/complaints', { state: { openTicket: notif.ticketId, openChat: true } });
     };
 

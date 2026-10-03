@@ -2,30 +2,27 @@
  * WhatsAppNotificationContext
  *
  * Single real-time source of truth for WhatsApp notifications.
- * Listens to the existing `whatsappConversations` Firestore collection —
- * NO separate notification collection is created or used.
+ * Listens to the existing `whatsappConversations` Firestore collection.
  *
- * The Flask webhook updates whatsappConversations on every incoming
- * student message with:
- *   unreadForAdmin: true     ← new student message
- *   notificationCleared: false (reset so notification reappears)
- *   unreadCount: Increment(1)
- *   lastMessage, lastMessageAt, lastSender, ticketDisplayId, issueType, complaintStatus
+ * Incoming Student Message:
+ *   - The Flask webhook updates the student's conversation document with:
+ *       lastSender: 'student'
+ *       unreadForAdmin: true
+ *       notificationCleared: false
+ *       unreadCount: Increment(1)
+ *       lastMessage, lastMessageAt, ticketDisplayId, issueType, complaintStatus
  *
- * IMPORTANT — Read vs Clear are SEPARATE operations:
- *   READ:    Opening/viewing a notification does NOT remove it from the popup.
- *            Only the unread dot/badge may change.
- *   CLEARED: Only an explicit × (individual) or "Clear All" action hides the notification.
- *            Setting notificationCleared=true on the Firestore doc hides it from the popup.
- *            This does NOT delete any chat messages, conversations, or tickets.
- *
- * Exposed API:
- *   whatsappNotifications          — uncleared student-sent conversations, newest first
- *   unreadWhatsAppCount            — count where unreadForAdmin===true AND not cleared
- *   clearWhatsAppNotification(id)  — set notificationCleared=true (individual ×)
- *   clearAllWhatsAppNotifications()— set notificationCleared=true on all visible notifications
- *   markTicketRead(ticketId)       — DEPRECATED; kept for call-site compatibility but is now a no-op
- *                                    Opening/clicking a notification must NOT auto-clear it.
+ * Notification Lifecycle:
+ *   - Display in Popup: Every conversation where lastSender === 'student'
+ *     AND notificationCleared !== true.
+ *   - Click Notification: Navigates to /complaints, selects ticket & opens WhatsApp drawer.
+ *     Marks the notification as read (unreadForAdmin: false) so the unread badge clears,
+ *     but DOES NOT delete or clear the notification card from the popup.
+ *   - Individual Clear (×): Sets notificationCleared: true, removing it from the popup.
+ *   - Clear All: Batch-sets notificationCleared: true on all visible conversations.
+ *   - Next Message: When the student sends a new message, the webhook resets
+ *     notificationCleared: false and unreadForAdmin: true, so the notification immediately
+ *     reappears in real time.
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -41,7 +38,8 @@ import {
 const WhatsAppNotificationContext = createContext({
     whatsappNotifications: [],
     unreadWhatsAppCount: 0,
-    markTicketRead: () => {},          // no-op — kept for call-site compatibility
+    markTicketRead: () => {},
+    markWhatsAppRead: () => {},
     clearWhatsAppNotification: () => {},
     clearAllWhatsAppNotifications: () => {},
 });
@@ -52,7 +50,7 @@ export const WhatsAppNotificationProvider = ({ children }) => {
     const [whatsappNotifications, setWhatsappNotifications] = useState([]);
     const { isAuthenticated } = useAuth();
 
-    // Real-time listener on whatsappConversations (the existing collection).
+    // Real-time listener on whatsappConversations collection
     useEffect(() => {
         if (!isAuthenticated) {
             setWhatsappNotifications([]);
@@ -69,15 +67,14 @@ export const WhatsAppNotificationProvider = ({ children }) => {
                 snapshot.docs.forEach((d) => {
                     const data = d.data();
 
-                    // Skip conversations that have been explicitly cleared by the admin.
-                    // notificationCleared=true means the admin pressed × or Clear All.
-                    if (data.notificationCleared === true) return;
-
-                    // Only show conversations where a student sent the last message.
-                    // Admin-sent messages and system status updates never show as notifications.
+                    // Only show notifications for conversations where student was the last sender.
+                    // Outgoing admin replies or automated system status updates never show as notifications.
                     if (data.lastSender !== 'student') return;
 
-                    // Unread = student sent a message the admin hasn't seen yet.
+                    // Skip conversations that have been explicitly cleared by the admin.
+                    if (data.notificationCleared === true) return;
+
+                    // Unread logic:
                     const isUnread = (
                         data.unreadForAdmin === true ||
                         data.unreadForAdmin === 'true' ||
@@ -110,20 +107,20 @@ export const WhatsAppNotificationProvider = ({ children }) => {
                         mobileNumber: data.studentPhone || '',
                         whatsappNumber: data.studentPhoneFull || data.studentPhone || '',
 
-                        // Complaint info (denormalized by backend for display)
-                        issueType: data.issueType || 'WhatsApp Message',
-                        complaintStatus: data.complaintStatus || 'Active',
+                        // Complaint info
+                        issueType: data.issueType || 'General',
+                        complaintStatus: data.complaintStatus || 'Submitted',
 
-                        // Last message preview
+                        // Message preview
                         messagePreview: data.lastMessage || '',
-                        lastSender: data.lastSender || '',
+                        lastSender: data.lastSender || 'student',
                         lastMessageType: data.lastMessageType || 'text',
 
-                        // Notification state
+                        // Read status (true if admin has opened/seen it, false if unread)
                         read: !isUnread,
                         unreadCount: data.unreadCount || 0,
 
-                        // Timestamp — JS Date
+                        // Timestamp
                         timestamp: jsDate,
                     });
                 });
@@ -141,25 +138,50 @@ export const WhatsAppNotificationProvider = ({ children }) => {
         return () => unsubscribe();
     }, [isAuthenticated]);
 
-    // Unread = conversations where read === false (and not cleared, already filtered above)
+    // Unread count (number of conversations with unread student messages)
     const unreadWhatsAppCount = whatsappNotifications.filter((n) => !n.read).length;
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
     /**
+     * Mark a conversation as read (when clicked/opened).
+     * Does NOT clear or remove the notification from the popup.
+     */
+    const markWhatsAppRead = useCallback(async (convDocId) => {
+        if (!convDocId) return;
+        try {
+            await updateDoc(doc(db, 'whatsappConversations', convDocId), {
+                unreadForAdmin: false,
+                unreadCount: 0,
+            });
+        } catch (err) {
+            console.error('[WhatsAppNotificationContext] markWhatsAppRead error:', err);
+        }
+    }, []);
+
+    /**
+     * Mark ticket as read.
+     */
+    const markTicketRead = useCallback(async (ticketId) => {
+        if (!ticketId) return;
+        const targets = whatsappNotifications.filter(
+            (n) => n.ticketId === ticketId || n.ticketDisplayId === ticketId,
+        );
+        await Promise.all(targets.map((n) => markWhatsAppRead(n.id)));
+    }, [whatsappNotifications, markWhatsAppRead]);
+
+    /**
      * Clear individual WhatsApp notification (explicit × button only).
-     * Sets notificationCleared=true on the Firestore conversation document.
-     * Does NOT delete any chat messages, complaints, or conversations.
-     * Does NOT affect unreadForAdmin or unreadCount.
-     *
-     * When the student sends another message, the backend resets notificationCleared=false
-     * so the notification reappears automatically.
+     * Sets notificationCleared: true so it is hidden from the popup.
+     * Does NOT delete the conversation or chat history.
      */
     const clearWhatsAppNotification = useCallback(async (convDocId) => {
         if (!convDocId) return;
         try {
             await updateDoc(doc(db, 'whatsappConversations', convDocId), {
                 notificationCleared: true,
+                unreadForAdmin: false,
+                unreadCount: 0,
             });
         } catch (err) {
             console.error('[WhatsAppNotificationContext] clearWhatsAppNotification error:', err);
@@ -168,20 +190,21 @@ export const WhatsAppNotificationProvider = ({ children }) => {
 
     /**
      * Clear ALL WhatsApp notifications (explicit "Clear All" button only).
-     * Sets notificationCleared=true on all currently visible conversation documents.
-     * Does NOT delete any chat messages, complaints, or conversations.
+     * Batch-sets notificationCleared: true on all currently visible conversations.
+     * Future messages from any student will reset notificationCleared: false and reappear.
      */
     const clearAllWhatsAppNotifications = useCallback(async () => {
         try {
             if (whatsappNotifications.length === 0) return;
 
-            // Batch update (up to 499 per batch)
             const batchSize = 499;
             for (let i = 0; i < whatsappNotifications.length; i += batchSize) {
                 const batch = writeBatch(db);
                 whatsappNotifications.slice(i, i + batchSize).forEach((n) => {
                     batch.update(doc(db, 'whatsappConversations', n.id), {
                         notificationCleared: true,
+                        unreadForAdmin: false,
+                        unreadCount: 0,
                     });
                 });
                 await batch.commit();
@@ -191,19 +214,11 @@ export const WhatsAppNotificationProvider = ({ children }) => {
         }
     }, [whatsappNotifications]);
 
-    /**
-     * No-op. Kept for call-site compatibility.
-     * Opening/clicking a notification must NOT auto-clear or auto-read it.
-     * The notification remains until the admin explicitly presses × or Clear All.
-     */
-    const markTicketRead = useCallback(async (_ticketId) => {
-        // Intentionally no-op: read ≠ cleared. See module docstring.
-    }, []);
-
     const value = {
         whatsappNotifications,
         unreadWhatsAppCount,
         markTicketRead,
+        markWhatsAppRead,
         clearWhatsAppNotification,
         clearAllWhatsAppNotifications,
     };

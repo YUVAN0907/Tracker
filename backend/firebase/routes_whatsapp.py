@@ -431,8 +431,14 @@ def _find_ticket_by_phone(phone_raw):
                     .get()
                 )
                 if tickets:
-                    active = [t for t in tickets if not t.to_dict().get('statusLocked')]
-                    target = active[0] if active else tickets[0]
+                    def get_ticket_time(t):
+                        cd = t.to_dict().get('createdAt')
+                        if hasattr(cd, 'timestamp'):
+                            return cd.timestamp()
+                        return 0
+                    sorted_tickets = sorted(tickets, key=get_ticket_time, reverse=True)
+                    active = [t for t in sorted_tickets if not t.to_dict().get('statusLocked')]
+                    target = active[0] if active else sorted_tickets[0]
                     return target.id, target.to_dict()
             except Exception as exc:
                 print(f"[WA] tickets query error (field={field}, fmt={mob}): {exc}", file=sys.stderr)
@@ -1224,57 +1230,96 @@ def _process_incoming_message(msg, value):
     else:
         message_text = f'[{msg_type} message]'
 
-    #  Store if ticket found 
-    if ticket_id:
-        student_name = (
-            ticket_data.get('fullName') or
-            ticket_data.get('studentName') or
-            'Student'
-        ) if ticket_data else 'Student'
+    #  Store if ticket found, or auto-create ticket for new numbers 
+    if not ticket_id:
+        sender_digits = ''.join(c for c in str(sender_phone) if c.isdigit())
+        local_10 = sender_digits[-10:] if len(sender_digits) > 10 else sender_digits
 
-        conv_id = _upsert_conversation(
-            sender_phone, ticket_id, wa_msg_id, 'student',
-            last_message=message_text,
-            last_message_type=message_type,
-            ticket_data=ticket_data,
-            increment_unread=True,
-        )
+        student_name = 'Student'
+        reg_no = ''
+        try:
+            s_doc = vendbeesdb.collection('students').document(local_10).get()
+            if s_doc.exists:
+                s_data = s_doc.to_dict()
+                student_name = s_data.get('fullName') or s_data.get('name') or 'Student'
+                reg_no = s_data.get('registerNumber') or ''
+        except Exception as e:
+            print(f"[WA] Error checking student doc for {local_10}: {e}", file=sys.stderr)
 
-        chat_doc_id = _store_incoming_message(
-            ticket_id=ticket_id,
-            conversation_id=conv_id,
-            phone=sender_phone,
-            student_name=student_name,
-            message=message_text,
-            whatsapp_message_id=wa_msg_id,
-            message_type=message_type,
-            media_url=media_url,
-            mime_type=mime_type,
-            file_name=file_name,
-            file_size=file_size,
-            duration=duration,
-            caption=caption,
-            latitude=latitude,
-            longitude=longitude,
-            reply_to_message_id=reply_to_msg_id,
-            meta_media_id=meta_media_id,
-            storage_path=storage_path,
-        )
+        import time
+        ticket_display_id = f"VB-TICK-{int(time.time() * 1000)}"
+        ticket_ref = vendbeesdb.collection('tickets').document()
+        ticket_id = ticket_ref.id
+        ticket_data = {
+            'ticketId': ticket_display_id,
+            'type': 'ticket',
+            'status': 'Submitted',
+            'issueType': 'General',
+            'mobileNumber': local_10,
+            'fullName': student_name,
+            'registerNumber': reg_no,
+            'complaintText': message_text or f"[{msg_type} message from WhatsApp]",
+            'createdAt': admin_firestore.SERVER_TIMESTAMP,
+            'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+            'source': 'whatsapp',
+        }
+        ticket_ref.set(ticket_data)
+        print(f"[WA] Auto-created new ticket {ticket_id} ({ticket_display_id}) for incoming WhatsApp from {sender_phone}", file=sys.stderr)
 
-        if wa_msg_id and chat_doc_id:
-            _store_message_mapping(wa_msg_id, ticket_id, chat_doc_id, conv_id)
+    student_name = (
+        ticket_data.get('fullName') or
+        ticket_data.get('studentName') or
+        'Student'
+    ) if ticket_data else 'Student'
 
-        # NOTE: whatsappConversations is the single source of truth for notifications.
-        # _upsert_conversation (called above) already set unreadForAdmin=True and
-        # incremented unreadCount atomically. No separate notification collection needed.
+    conv_id = _upsert_conversation(
+        sender_phone, ticket_id, wa_msg_id, 'student',
+        last_message=message_text,
+        last_message_type=message_type,
+        ticket_data=ticket_data,
+        increment_unread=True,
+    )
 
-        print(
-            f"[WA] Incoming {msg_type} from {sender_phone}  ticket {ticket_id} "
-            f"(docId={chat_doc_id})",
-            file=sys.stderr,
-        )
-    else:
-        print(f"[WA] No ticket for phone {sender_phone}. Message not stored.", file=sys.stderr)
+    chat_doc_id = _store_incoming_message(
+        ticket_id=ticket_id,
+        conversation_id=conv_id,
+        phone=sender_phone,
+        student_name=student_name,
+        message=message_text,
+        whatsapp_message_id=wa_msg_id,
+        message_type=message_type,
+        media_url=media_url,
+        mime_type=mime_type,
+        file_name=file_name,
+        file_size=file_size,
+        duration=duration,
+        caption=caption,
+        latitude=latitude,
+        longitude=longitude,
+        reply_to_message_id=reply_to_msg_id,
+        meta_media_id=meta_media_id,
+        storage_path=storage_path,
+    )
+
+    if wa_msg_id and chat_doc_id:
+        _store_message_mapping(wa_msg_id, ticket_id, chat_doc_id, conv_id)
+
+    # Create individual notification document in whatsapp_notifications keyed by wa_msg_id
+    # Idempotent: same wa_msg_id will overwrite with same data, different wa_msg_id creates a new notification
+    _create_whatsapp_notification(
+        ticket_id=ticket_id,
+        ticket_data=ticket_data,
+        sender_phone=sender_phone,
+        message_text=message_text,
+        wa_msg_id=wa_msg_id,
+        message_type=message_type,
+    )
+
+    print(
+        f"[WA] Incoming {msg_type} from {sender_phone}  ticket {ticket_id} "
+        f"(docId={chat_doc_id})",
+        file=sys.stderr,
+    )
 
 
 # =============================================================================
