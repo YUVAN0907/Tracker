@@ -5,10 +5,10 @@ from dataconnect_db import execute_graphql
 machine_location_bp = Blueprint('machine_location', __name__)
 
 UPDATE_MACHINE_LOCATION_MUTATION = """
-mutation UpdateMachineLocation($machineId: String!, $location: String, $latitude: Float!, $longitude: Float!) {
+mutation UpdateMachineLocation($machineId: String!, $location: String, $latitude: Float!, $longitude: Float!, $keyNumber: String) {
   machine_update(
     key: {machineId: $machineId}, 
-    data: {location: $location, latitude: $latitude, longitude: $longitude}
+    data: {location: $location, latitude: $latitude, longitude: $longitude, keyNumber: $keyNumber}
   ) {
     machineId
   }
@@ -31,6 +31,8 @@ def update_machine_location():
     
     if address is not None:
         variables["location"] = address
+    if data.get("keyNumber") is not None:
+        variables["keyNumber"] = data.get("keyNumber")
     
     result = execute_graphql(UPDATE_MACHINE_LOCATION_MUTATION, variables)
     return jsonify(result)
