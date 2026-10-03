@@ -39,6 +39,7 @@ type Machine @table(key: "machineId") {
   status: String
   latitude: Float
   longitude: Float
+  keyNumber: String
 }
 
 # ==============================

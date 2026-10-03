@@ -4,11 +4,12 @@ from dataconnect_db import execute_graphql
 machine_ops_bp = Blueprint('machine_ops', __name__)
 
 ADD_MACHINE_MUTATION = """
-mutation AddMachine($machineId: String!, $location: String, $status: String) {
-  machine_insert(data: {
+mutation AddMachine($machineId: String!, $location: String, $status: String, $keyNumber: String) {
+  machine_upsert(data: {
     machineId: $machineId,
     location: $location,
-    status: $status
+    status: $status,
+    keyNumber: $keyNumber
   })
 }
 """
@@ -41,17 +42,22 @@ def add_machine():
         machine_id = data['machineId']
         location = data.get('location', '')
         status = data.get('status', 'active')
+        key_number = data.get('keyNumber')
         
+        variables = {
+            "machineId": machine_id,
+            "location": location,
+            "status": status
+        }
+        if key_number is not None:
+            variables["keyNumber"] = key_number
+            
         execute_graphql(
             ADD_MACHINE_MUTATION,
-            {
-                "machineId": machine_id,
-                "location": location,
-                "status": status
-            },
+            variables,
             "AddMachine"
         )
-        return jsonify({'message': 'Machine added successfully'})
+        return jsonify({'message': 'Machine added/updated successfully'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
