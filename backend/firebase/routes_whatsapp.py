@@ -431,8 +431,14 @@ def _find_ticket_by_phone(phone_raw):
                     .get()
                 )
                 if tickets:
-                    active = [t for t in tickets if not t.to_dict().get('statusLocked')]
-                    target = active[0] if active else tickets[0]
+                    def get_ticket_time(t):
+                        cd = t.to_dict().get('createdAt')
+                        if hasattr(cd, 'timestamp'):
+                            return cd.timestamp()
+                        return 0
+                    sorted_tickets = sorted(tickets, key=get_ticket_time, reverse=True)
+                    active = [t for t in sorted_tickets if not t.to_dict().get('statusLocked')]
+                    target = active[0] if active else sorted_tickets[0]
                     return target.id, target.to_dict()
             except Exception as exc:
                 print(f"[WA] tickets query error (field={field}, fmt={mob}): {exc}", file=sys.stderr)
@@ -502,15 +508,16 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
     Common flow that:
     1. Checks if customer service window is open.
     2. Sends normal message if open.
-    3. Sends utility template if closed.
-    4. Automatically retries with template if normal send fails with 24h window error.
+    3. Sends UTILITY template (complaint_update) if window closed -- MARKETING templates
+       require the 24h window or opt-in, so they must NOT be sent outside the window.
+    4. Automatically retries with complaint_update UTILITY template if any template send fails.
     5. Returns (result_dict, was_template_sent, actual_text_sent)
     """
     import os
     phone_short = normalized_phone[-10:] if len(normalized_phone) > 10 else normalized_phone
-    
+
     window_open, conv_doc, conv_id = _is_customer_service_window_open(phone_short)
-    
+
     student_name = 'Student'
     ticket_display_id = ticket_id
     tdata = {}
@@ -524,7 +531,8 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
     except Exception as exc:
         print(f"[WA] Error fetching ticket in flow: {exc}", file=sys.stderr)
 
-    # Dynamic Category + Status Template lookup if override wasn't explicitly supplied
+    # Build the category-specific template payload
+    template_text = text_body
     if not override_template_name and tdata:
         try:
             from notification_builder import NotificationBuilder
@@ -535,38 +543,50 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
             template_text = meta_payload['full_text']
         except Exception as exc:
             print(f"[WA] Error generating category template in flow: {exc}", file=sys.stderr)
-            template_text = text_body
-    else:
-        template_text = text_body
-        
-    template_name = override_template_name or os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
 
-    def send_template():
-        if override_template_name and override_components is not None:
-            comps = override_components
-        elif template_name == 'hello_world':
-            comps = None
-        else:
-            comps = [
-                {
-                    "type": "body",
-                    "parameters": [
-                        {"type": "text", "text": student_name},
-                        {"type": "text", "text": ticket_display_id}
-                    ]
-                }
+    # UTILITY template = complaint_update (approved UTILITY, no opt-in required)
+    utility_template_name = os.environ.get('WHATSAPP_UTILITY_TEMPLATE_NAME', 'complaint_update')
+    utility_components = [
+        {
+            "type": "body",
+            "parameters": [
+                {"type": "text", "text": student_name},
+                {"type": "text", "text": ticket_display_id}
             ]
-        res = send_template_message(normalized_phone, template_name, components=comps)
+        }
+    ]
+
+    def send_utility_template():
+        """Send guaranteed UTILITY template -- no 24h window or opt-in required."""
+        print(f"[WA] Sending UTILITY template '{utility_template_name}' to {phone_short}", file=sys.stderr)
+        return send_template_message(normalized_phone, utility_template_name, components=utility_components)
+
+    def send_primary_template():
+        """Send category-specific template; fall back to UTILITY if it fails."""
+        tpl_name = override_template_name or utility_template_name
+        comps = override_components if (override_template_name and override_components is not None) else utility_components
+        print(f"[WA] Sending template '{tpl_name}' to {phone_short}", file=sys.stderr)
+        res = send_template_message(normalized_phone, tpl_name, components=comps)
+        if not res.get('success'):
+            err_code = res.get('error_code') or 0
+            err_msg = str(res.get('error', '')).lower()
+            print(
+                f"[WA] Template '{tpl_name}' failed (code={err_code}): {err_msg}. "
+                f"Retrying with UTILITY template '{utility_template_name}'...",
+                file=sys.stderr
+            )
+            res = send_utility_template()
         return res
 
     if window_open:
+        # Inside 24h window: send free-form text
         if msg_type == 'image' and media_url:
             result = send_image_message(normalized_phone, media_url, caption or '')
         elif msg_type == 'document' and media_url:
             result = send_document_message(normalized_phone, media_url, filename or 'document', caption or '')
         else:
             result = send_text_message(normalized_phone, text_body)
-            
+
         is_window_closed_error = False
         if not result['success']:
             err_code = result.get('error_code') or 0
@@ -574,16 +594,20 @@ def _send_outgoing_flow(ticket_id, normalized_phone, text_body, msg_type='text',
             err_msg = str(result.get('error', '')).lower()
             if err_code == 131047 or err_sub == 131047 or '24 hour' in err_msg or 'window' in err_msg or 'template' in err_msg:
                 is_window_closed_error = True
-                
+
         if is_window_closed_error:
-            print(f"[WA] Meta rejected free-form (window closed). Retrying with template...", file=sys.stderr)
-            result = send_template()
+            # Window closed unexpectedly -- use UTILITY template (safe, no opt-in needed)
+            print(f"[WA] Meta rejected free-form (window closed). Using UTILITY template...", file=sys.stderr)
+            result = send_utility_template()
             return result, True, template_text
-            
+
         return result, False, text_body
     else:
-        print(f"[WA] Customer service window closed for {phone_short}. Sending template instead...", file=sys.stderr)
-        result = send_template()
+        # Window is CLOSED: send category-specific UTILITY template.
+        # All VendBees templates are UTILITY category (no 24h window or opt-in required).
+        # Falls back to complaint_update UTILITY template if category-specific send fails.
+        print(f"[WA] Window closed for {phone_short}. Sending category-specific UTILITY template.", file=sys.stderr)
+        result = send_primary_template()
         return result, True, template_text
 
 
@@ -662,6 +686,7 @@ def _upsert_conversation(
         payload['conversationOpen'] = True
         payload['conversationType'] = 'free_form'
         payload['unreadForAdmin'] = True   # <- notification: new student message
+        payload['notificationCleared'] = False  # <- ensure notification appears in popup even if cleared previously
     elif last_sender == 'admin':
         if is_template:
             payload['lastTemplateSent'] = admin_firestore.SERVER_TIMESTAMP
@@ -1205,57 +1230,96 @@ def _process_incoming_message(msg, value):
     else:
         message_text = f'[{msg_type} message]'
 
-    #  Store if ticket found 
-    if ticket_id:
-        student_name = (
-            ticket_data.get('fullName') or
-            ticket_data.get('studentName') or
-            'Student'
-        ) if ticket_data else 'Student'
+    #  Store if ticket found, or auto-create ticket for new numbers 
+    if not ticket_id:
+        sender_digits = ''.join(c for c in str(sender_phone) if c.isdigit())
+        local_10 = sender_digits[-10:] if len(sender_digits) > 10 else sender_digits
 
-        conv_id = _upsert_conversation(
-            sender_phone, ticket_id, wa_msg_id, 'student',
-            last_message=message_text,
-            last_message_type=message_type,
-            ticket_data=ticket_data,
-            increment_unread=True,
-        )
+        student_name = 'Student'
+        reg_no = ''
+        try:
+            s_doc = vendbeesdb.collection('students').document(local_10).get()
+            if s_doc.exists:
+                s_data = s_doc.to_dict()
+                student_name = s_data.get('fullName') or s_data.get('name') or 'Student'
+                reg_no = s_data.get('registerNumber') or ''
+        except Exception as e:
+            print(f"[WA] Error checking student doc for {local_10}: {e}", file=sys.stderr)
 
-        chat_doc_id = _store_incoming_message(
-            ticket_id=ticket_id,
-            conversation_id=conv_id,
-            phone=sender_phone,
-            student_name=student_name,
-            message=message_text,
-            whatsapp_message_id=wa_msg_id,
-            message_type=message_type,
-            media_url=media_url,
-            mime_type=mime_type,
-            file_name=file_name,
-            file_size=file_size,
-            duration=duration,
-            caption=caption,
-            latitude=latitude,
-            longitude=longitude,
-            reply_to_message_id=reply_to_msg_id,
-            meta_media_id=meta_media_id,
-            storage_path=storage_path,
-        )
+        import time
+        ticket_display_id = f"VB-TICK-{int(time.time() * 1000)}"
+        ticket_ref = vendbeesdb.collection('tickets').document()
+        ticket_id = ticket_ref.id
+        ticket_data = {
+            'ticketId': ticket_display_id,
+            'type': 'ticket',
+            'status': 'Submitted',
+            'issueType': 'General',
+            'mobileNumber': local_10,
+            'fullName': student_name,
+            'registerNumber': reg_no,
+            'complaintText': message_text or f"[{msg_type} message from WhatsApp]",
+            'createdAt': admin_firestore.SERVER_TIMESTAMP,
+            'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+            'source': 'whatsapp',
+        }
+        ticket_ref.set(ticket_data)
+        print(f"[WA] Auto-created new ticket {ticket_id} ({ticket_display_id}) for incoming WhatsApp from {sender_phone}", file=sys.stderr)
 
-        if wa_msg_id and chat_doc_id:
-            _store_message_mapping(wa_msg_id, ticket_id, chat_doc_id, conv_id)
+    student_name = (
+        ticket_data.get('fullName') or
+        ticket_data.get('studentName') or
+        'Student'
+    ) if ticket_data else 'Student'
 
-        # NOTE: whatsappConversations is the single source of truth for notifications.
-        # _upsert_conversation (called above) already set unreadForAdmin=True and
-        # incremented unreadCount atomically. No separate notification collection needed.
+    conv_id = _upsert_conversation(
+        sender_phone, ticket_id, wa_msg_id, 'student',
+        last_message=message_text,
+        last_message_type=message_type,
+        ticket_data=ticket_data,
+        increment_unread=True,
+    )
 
-        print(
-            f"[WA] Incoming {msg_type} from {sender_phone}  ticket {ticket_id} "
-            f"(docId={chat_doc_id})",
-            file=sys.stderr,
-        )
-    else:
-        print(f"[WA] No ticket for phone {sender_phone}. Message not stored.", file=sys.stderr)
+    chat_doc_id = _store_incoming_message(
+        ticket_id=ticket_id,
+        conversation_id=conv_id,
+        phone=sender_phone,
+        student_name=student_name,
+        message=message_text,
+        whatsapp_message_id=wa_msg_id,
+        message_type=message_type,
+        media_url=media_url,
+        mime_type=mime_type,
+        file_name=file_name,
+        file_size=file_size,
+        duration=duration,
+        caption=caption,
+        latitude=latitude,
+        longitude=longitude,
+        reply_to_message_id=reply_to_msg_id,
+        meta_media_id=meta_media_id,
+        storage_path=storage_path,
+    )
+
+    if wa_msg_id and chat_doc_id:
+        _store_message_mapping(wa_msg_id, ticket_id, chat_doc_id, conv_id)
+
+    # Create individual notification document in whatsapp_notifications keyed by wa_msg_id
+    # Idempotent: same wa_msg_id will overwrite with same data, different wa_msg_id creates a new notification
+    _create_whatsapp_notification(
+        ticket_id=ticket_id,
+        ticket_data=ticket_data,
+        sender_phone=sender_phone,
+        message_text=message_text,
+        wa_msg_id=wa_msg_id,
+        message_type=message_type,
+    )
+
+    print(
+        f"[WA] Incoming {msg_type} from {sender_phone}  ticket {ticket_id} "
+        f"(docId={chat_doc_id})",
+        file=sys.stderr,
+    )
 
 
 # =============================================================================

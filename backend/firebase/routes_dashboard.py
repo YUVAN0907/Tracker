@@ -8,7 +8,7 @@ dashboard_bp = Blueprint('dashboard', __name__)
 # Firebase Data Connect requires individual queries for each root field
 PRODUCTS_QUERY = """query GetProducts { products(limit: 1000) { productId productName aliasName category vendorId mrp quantity units gst unitCost landedCost eanNo selfLife vendor { vendorId vendorName } } }"""
 
-MACHINES_QUERY = """query GetMachines { machines(limit: 100) { machineId location status latitude longitude } }"""
+MACHINES_QUERY = """query GetMachines { machines(limit: 100) { machineId location status latitude longitude keyNumber } }"""
 
 MACHINE_INVENTORIES_QUERY = """query GetMachineInventories { machineInventories(limit: 1000) { machineId productId currentStock } }"""
 

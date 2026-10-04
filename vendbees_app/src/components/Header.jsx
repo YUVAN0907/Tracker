@@ -35,6 +35,7 @@ const Header = ({ title, subtitle }) => {
         clearWhatsAppNotification,
         clearAllWhatsAppNotifications,
         markTicketRead,
+        markWhatsAppRead,
     } = useWhatsAppNotifications();
 
     const [showUserMenu, setShowUserMenu]             = useState(false);
@@ -134,14 +135,18 @@ const Header = ({ title, subtitle }) => {
     const handleLogout = async () => { await logout(); navigate('/login'); };
 
     // ── WhatsApp notification click → navigate to complaints & open chat ─────
+    // Clicking marks the notification as read (updates unread count/badge),
+    // but the notification card STAYS in the list until explicitly cleared via 'x' or 'Clear all'.
     const handleWANotifClick = async (notif) => {
         setShowWANotifPanel(false);
-        await markTicketRead(notif.ticketId);
+        if (notif?.id) {
+            markWhatsAppRead(notif.id);
+        }
         navigate('/complaints', { state: { openTicket: notif.ticketId, openChat: true } });
     };
 
-    // Unread WhatsApp messages (newest first)
-    const unreadWA = whatsappNotifications.filter(n => !n.read);
+    // Active WhatsApp notifications (all uncleared notifications where last sender was student)
+    const activeWA = whatsappNotifications;
 
     return (
         <header className="h-20 bg-white border-b border-slate-100 px-8 flex items-center justify-between sticky top-0 z-10">
@@ -191,7 +196,7 @@ const Header = ({ title, subtitle }) => {
                                     )}
                                 </span>
                                 <div className="flex items-center gap-2">
-                                    {unreadWA.length > 0 && (
+                                    {activeWA.length > 0 && (
                                         <button
                                             onClick={async () => { await clearAllWhatsAppNotifications(); }}
                                             className="text-xs text-green-700 hover:text-red-600 transition-colors flex items-center gap-1 px-2 py-1 rounded hover:bg-white"
@@ -210,11 +215,11 @@ const Header = ({ title, subtitle }) => {
                                 </div>
                             </div>
 
-                            {/* Unread WhatsApp List */}
+                            {/* WhatsApp Notification List */}
                             <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 52px)' }}>
-                                {unreadWA.length > 0 ? (
+                                {activeWA.length > 0 ? (
                                     <div className="divide-y divide-slate-100">
-                                        {unreadWA.map(notif => (
+                                        {activeWA.map(notif => (
                                             <div
                                                 key={notif.id}
                                                 className="flex items-start gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer border-l-4 border-l-green-500"
