@@ -193,7 +193,8 @@ def dashboard():
                 "Location": m.get("location"),
                 "Status": m.get("status"),
                 "latitude": m.get("latitude"),
-                "longitude": m.get("longitude")
+                "longitude": m.get("longitude"),
+                "keyNumber": m.get("keyNumber")
             })
             
         # 3. Map Stock (MachineInventory)
@@ -291,7 +292,7 @@ def dashboard():
                 "productName": rp.get("productName"),
                 "category": rp.get("category"),
                 "vendorId": rp.get("vendorId"),
-                "vendorName": rp.get("vendor", {}).get("vendorName", ""),
+                "vendorName": (rp.get("vendor") or {}).get("vendorName", ""),
                 "unitCost": rp.get("unitCost"),
                 "mrp": rp.get("mrp"),
                 "quantity": rp.get("quantity"),
@@ -445,9 +446,9 @@ def dashboard():
         our_pos_out = []
         
         for line in data.get("purchaseOrderLines", []):
-            po_header = line.get("purchaseOrderHeader", {})
-            vendor = po_header.get("vendor", {}) if isinstance(po_header, dict) else {}
-            product = line.get("product", {})
+            po_header = line.get("purchaseOrderHeader") or {}
+            vendor = (po_header.get("vendor") or {}) if isinstance(po_header, dict) else {}
+            product = line.get("product") or {}
             
             our_pos_out.append({
                 "PO_ID": po_header.get("poId"),
